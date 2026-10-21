@@ -84,17 +84,11 @@ merge_settings() {
   log "Settings (merge global/settings.json into $CLAUDE_DIR/settings.json)"
   require python3 "settings merge" || return 0
 
-  local target="$CLAUDE_DIR/settings.json"
-  if [[ -f "$target" ]] && ! ((DRY_RUN)); then
-    mkdir -p "$BACKUP_DIR/.claude"
-    cp "$target" "$BACKUP_DIR/.claude/settings.json"
-  fi
-
-  python3 - "$REPO_DIR/global/settings.json" "$target" "$DRY_RUN" <<'PY'
-import json, sys
+  python3 - "$REPO_DIR/global/settings.json" "$CLAUDE_DIR/settings.json" "$BACKUP_DIR" "$DRY_RUN" <<'PY'
+import json, shutil, sys
 from pathlib import Path
 
-src, dst, dry_run = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3] == "1"
+src, dst, backup_dir, dry_run = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3]), sys.argv[4] == "1"
 
 def merge(base, extra):
     for key, value in extra.items():
@@ -114,6 +108,10 @@ if merged == current:
 elif dry_run:
     print("    [dry-run] would update keys:", ", ".join(k for k in merged if merged[k] != current.get(k)))
 else:
+    if dst.exists():
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(dst, backup_dir / "settings.json")
+        print("    backed up", dst)
     dst.parent.mkdir(parents=True, exist_ok=True)
     dst.write_text(json.dumps(merged, indent=2) + "\n")
     print("    updated", dst)
