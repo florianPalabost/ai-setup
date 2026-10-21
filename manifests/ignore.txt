@@ -1,0 +1,6 @@
+# Installed on the reference machine but left out by snapshot.sh.
+# Format: one plugin id (<plugin>@<marketplace>) or skill name per line.
+
+trading-agents-plugin@lucemia-trading-agents-plugin
+learning-output-style@claude-code-plugins
+synced                      # Orca skill sync bucket, not a skill

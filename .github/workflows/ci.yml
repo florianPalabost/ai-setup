@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: shellcheck install.sh lib.sh
+      - run: shellcheck install.sh lib.sh snapshot.sh
 
   plugins:
     runs-on: ubuntu-latest
