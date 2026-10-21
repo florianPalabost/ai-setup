@@ -4,13 +4,13 @@
 #   git     <clone url>   <path in repo>     -> cloned, then <path> is linked as a skill
 #                                               and <path>/commands/*.md as slash commands
 
-skills  stablyai/orca         orca-cli
-skills  stablyai/orca         orchestration
-skills  stablyai/orca         computer-use
-skills  vercel-labs/skills    find-skills
-skills  humanlayer/skills     show-me
-skills  cursor/plugins        unslop
+skills  cursor/plugins            unslop
+skills  humanlayer/skills         show-me
+skills  stablyai/orca             computer-use
+skills  stablyai/orca             orca-cli
+skills  stablyai/orca             orchestration
 skills  vercel-labs/agent-skills  vercel-react-best-practices
 skills  vercel-labs/agent-skills  web-design-guidelines
+skills  vercel-labs/skills        find-skills
 
-git     https://github.com/nicobailon/visual-explainer.git  plugins/visual-explainer
+git  https://github.com/nicobailon/visual-explainer.git  plugins/visual-explainer
