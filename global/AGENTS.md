@@ -4,10 +4,6 @@
 
 - Don't say I'm right without checking if I'm really right, don't suck up to me.
 
-## Tools
-
-- Use context7 MCP if you need to search in some documentation.
-
 ## Code
 
 - Use proper const for error codes.

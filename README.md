@@ -36,7 +36,6 @@ cd ~/dev/ai-setup
 3. Symlinks the skills/commands/agents from `plugins/*/` into `~/.claude/`
 4. Adds the marketplaces and installs the plugins listed in [`manifests/plugins.txt`](manifests/plugins.txt)
 5. Installs the third-party skills listed in [`manifests/skills.txt`](manifests/skills.txt)
-6. Creates `~/.config/ai-setup/.env` from [`templates/.env.example`](templates/.env.example) and registers MCP servers whose keys are set
 
 Requirements: `bash`, `git`, `python3`, `claude`, `npx`.
 
@@ -50,7 +49,7 @@ global/CLAUDE.md                  imports AGENTS.md
 global/settings.json              shared Claude Code settings
 manifests/plugins.txt             third-party plugins I use
 manifests/skills.txt              third-party skills I use
-templates/                        .env and project .mcp.json examples
+templates/                        project .mcp.json example
 install.sh                        setup script
 ```
 
@@ -79,10 +78,6 @@ install.sh                        setup script
 | `vercel-react-best-practices`, `web-design-guidelines` | [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills) |
 | `visual-explainer` (+ `/diff-review`, `/plan-review`, `/project-recap`…) | [nicobailon/visual-explainer](https://github.com/nicobailon/visual-explainer) |
 
-### MCP servers
-
-- [context7](https://context7.com): up-to-date library docs (key in `~/.config/ai-setup/.env`)
-
 ### Per-project tooling (not installed globally)
 
 - [Laravel Boost](https://github.com/laravel/boost): MCP server + skills (Pest, Spatie conventions…) installed per Laravel project with `php artisan boost:install`
@@ -93,7 +88,6 @@ install.sh                        setup script
 ## Security
 
 - Nothing outside the files in this repo is published: no credentials, history, sessions, or memory.
-- Secrets live only in `~/.config/ai-setup/.env` (created with `chmod 600`, outside the repo).
 - [gitleaks](https://github.com/gitleaks/gitleaks) runs as a pre-commit hook (`pre-commit install`) and in CI.
 
 ## License

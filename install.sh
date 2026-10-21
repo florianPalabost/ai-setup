@@ -10,7 +10,6 @@ set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/ai-setup"
 VENDOR_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/ai-setup/vendor"
 BACKUP_DIR="$CLAUDE_DIR/backups/ai-setup-$(date +%Y%m%d-%H%M%S)"
 DRY_RUN=0
@@ -203,32 +202,6 @@ install_skills() {
   done < <(manifest_lines "$REPO_DIR/manifests/skills.txt")
 }
 
-setup_env_and_mcp() {
-  log "Env file and MCP servers"
-  local env_file="$CONFIG_DIR/.env"
-  if [[ ! -f "$env_file" ]]; then
-    run mkdir -p "$CONFIG_DIR"
-    run cp "$REPO_DIR/templates/.env.example" "$env_file"
-    run chmod 600 "$env_file"
-    info "created $env_file, fill in your keys and re-run"
-    return 0
-  fi
-
-  local CONTEXT7_API_KEY=""
-  # shellcheck source=/dev/null
-  source "$env_file"
-  if [[ -z "$CONTEXT7_API_KEY" ]]; then
-    info "CONTEXT7_API_KEY empty in $env_file, skipping context7"
-  elif ! require claude "MCP servers"; then
-    return 0
-  elif claude mcp get context7 >/dev/null 2>&1; then
-    info "context7 already registered"
-  else
-    run claude mcp add --scope user --transport http context7 https://mcp.context7.com/mcp \
-      --header "CONTEXT7_API_KEY: $CONTEXT7_API_KEY"
-  fi
-}
-
 main() {
   ((DRY_RUN)) && log "Dry run: nothing will be changed"
   link_global
@@ -236,7 +209,6 @@ main() {
   link_own_plugins
   install_plugins
   install_skills
-  setup_env_and_mcp
   [[ -d "$BACKUP_DIR" ]] && log "Backups saved in $BACKUP_DIR"
   log "Done"
 }
