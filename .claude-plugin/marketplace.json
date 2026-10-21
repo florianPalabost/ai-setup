@@ -1,0 +1,18 @@
+{
+  "name": "ai-setup",
+  "owner": {
+    "name": "Florian Palabost",
+    "url": "https://github.com/florianPalabost"
+  },
+  "metadata": {
+    "description": "Florian Palabost's personal Claude Code skills, grouped by domain."
+  },
+  "plugins": [
+    {
+      "name": "laravel",
+      "source": "./plugins/laravel",
+      "description": "Laravel debugging workflow built on the Laravel Boost MCP tools.",
+      "category": "development"
+    }
+  ]
+}

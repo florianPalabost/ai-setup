@@ -1,0 +1,13 @@
+{
+  "name": "laravel",
+  "version": "0.1.0",
+  "description": "Laravel debugging workflow built on the Laravel Boost MCP tools.",
+  "author": {
+    "name": "Florian Palabost",
+    "url": "https://github.com/florianPalabost"
+  },
+  "homepage": "https://github.com/florianPalabost/ai-setup",
+  "repository": "https://github.com/florianPalabost/ai-setup",
+  "license": "MIT",
+  "keywords": ["laravel", "debugging", "laravel-boost"]
+}
