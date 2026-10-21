@@ -8,9 +8,9 @@
 
 set -euo pipefail
 
-REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
-VENDOR_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/ai-setup/vendor"
+# shellcheck source=lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+
 BACKUP_DIR="$CLAUDE_DIR/backups/ai-setup-$(date +%Y%m%d-%H%M%S)"
 DRY_RUN=0
 
@@ -26,28 +26,12 @@ for arg in "$@"; do
   esac
 done
 
-log() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
-info() { printf '    %s\n' "$*"; }
-warn() { printf '\033[1;33m!!\033[0m  %s\n' "$*" >&2; }
-
 run() {
   if ((DRY_RUN)); then
     printf '    [dry-run] %s\n' "$*"
   else
     "$@"
   fi
-}
-
-require() {
-  if ! command -v "$1" >/dev/null 2>&1; then
-    warn "'$1' not found, skipping: $2"
-    return 1
-  fi
-}
-
-# Strip comments and blank lines from a manifest.
-manifest_lines() {
-  sed -e 's/#.*//' -e '/^[[:space:]]*$/d' "$1"
 }
 
 # Move an existing file/dir/link out of the way, keeping its path under $HOME.
