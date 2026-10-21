@@ -1,0 +1,14 @@
+# Third-party skills installed by install.sh.
+# Format:
+#   skills  <owner/repo>  <skill name>       -> installed with `npx skills add` (lives in ~/.agents/skills)
+#   git     <clone url>   <path in repo>     -> cloned, then <path> is linked as a skill
+#                                               and <path>/commands/*.md as slash commands
+
+skills  stablyai/orca         orca-cli
+skills  stablyai/orca         orchestration
+skills  stablyai/orca         computer-use
+skills  vercel-labs/skills    find-skills
+skills  humanlayer/skills     show-me
+skills  cursor/plugins        unslop
+
+git     https://github.com/nicobailon/visual-explainer.git  plugins/visual-explainer
