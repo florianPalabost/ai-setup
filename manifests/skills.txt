@@ -10,5 +10,7 @@ skills  stablyai/orca         computer-use
 skills  vercel-labs/skills    find-skills
 skills  humanlayer/skills     show-me
 skills  cursor/plugins        unslop
+skills  vercel-labs/agent-skills  vercel-react-best-practices
+skills  vercel-labs/agent-skills  web-design-guidelines
 
 git     https://github.com/nicobailon/visual-explainer.git  plugins/visual-explainer

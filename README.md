@@ -76,6 +76,7 @@ install.sh                        setup script
 | `find-skills` | [vercel-labs/skills](https://github.com/vercel-labs/skills) |
 | `show-me` | [humanlayer/skills](https://github.com/humanlayer/skills) |
 | `unslop` | [cursor/plugins](https://github.com/cursor/plugins) |
+| `vercel-react-best-practices`, `web-design-guidelines` | [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills) |
 | `visual-explainer` (+ `/diff-review`, `/plan-review`, `/project-recap`…) | [nicobailon/visual-explainer](https://github.com/nicobailon/visual-explainer) |
 
 ### MCP servers
