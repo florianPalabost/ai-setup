@@ -1,0 +1,20 @@
+# Never publish secrets or private Claude state
+.env
+.env.*
+!.env.example
+.credentials.json
+settings.local.json
+projects/
+history.jsonl
+sessions/
+session-env/
+shell-snapshots/
+file-history/
+paste-cache/
+cache/
+debug/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
