@@ -114,7 +114,7 @@ GLOSSARY.md, docs/adr/            vocabulary and design decisions
 
 | Plugin | Why |
 | --- | --- |
-| [mattpocock-skills](https://github.com/mattpocock/skills) | My main workflow: `/grill-me`, `/grill-with-docs`, `/to-spec`, `/to-tickets`, `/implement`, `/tdd`, `/code-review`. Run `/ask-matt` to pick the right one. |
+| [mattpocock-skills](https://github.com/mattpocock/skills) | My main workflow: `/grill-me`, `/grill-with-docs`, `/to-spec`, `/to-tickets`, `/implement`, `/tdd`, `/code-review`, `/retro`. Run `/ask-matt` to pick the right one. |
 | [frontend-design](https://github.com/anthropics/claude-code/tree/main/plugins/frontend-design) | UI design guidance |
 | [commit-commands](https://github.com/anthropics/claude-code/tree/main/plugins/commit-commands) | `/commit`, `/commit-push-pr` |
 | [php-lsp](https://github.com/anthropics/claude-plugins-official), [typescript-lsp](https://github.com/anthropics/claude-plugins-official), [rust-analyzer-lsp](https://github.com/anthropics/claude-plugins-official) | Code intelligence for my stack (Laravel + React, plus Rust) |
