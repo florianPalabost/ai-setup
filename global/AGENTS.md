@@ -4,6 +4,10 @@
 
 - Don't say I'm right without checking if I'm really right, don't suck up to me.
 
+## Skills
+
+- When a task matches an installed skill I haven't invoked, name it in one line and offer it before doing the work by hand. Typical matches: next-session brief → `/handoff`; several tickets or stacked PRs → `/implement-spec`; filing issues → `/to-tickets`, `/triage`; wrong or empty data → `/diagnosing-bugs`; PR body → `/pr`.
+
 ## Code
 
 - Use proper const for error codes.
