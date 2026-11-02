@@ -9,7 +9,12 @@
     ],
     "deny": [
       "Read(./.env)",
-      "Read(./.env.*)",
+      "Read(./.env.local)",
+      "Read(./.env.*.local)",
+      "Read(./.env.production)",
+      "Read(./.env.staging)",
+      "Read(./.env.testing)",
+      "Read(./.env.backup)",
       "Read(~/.claude/.credentials.json)"
     ]
   }
