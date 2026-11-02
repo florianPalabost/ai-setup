@@ -36,6 +36,7 @@ cd ~/dev/ai-setup
 3. Symlinks the skills/commands/agents from `plugins/*/` into `~/.claude/`
 4. Adds the marketplaces and installs the plugins listed in [`manifests/plugins.txt`](manifests/plugins.txt)
 5. Installs the third-party skills listed in [`manifests/skills.txt`](manifests/skills.txt)
+6. Lists what an earlier version of this repo installed but the current one dropped (permission rules, plugins, skills, dangling links) and asks before removing it. Removed skills and links go to the backup dir; `--dry-run` or a non-interactive run only lists them
 
 A plain install only adds what's missing; versions already installed are left alone (that's `--update`'s job).
 

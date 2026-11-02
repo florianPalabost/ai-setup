@@ -4,6 +4,8 @@
 # Idempotent: safe to re-run. It only adds or links things; anything it would
 # replace is moved to a timestamped backup directory first, never deleted. The
 # only exception is the skill mirrors it generates itself, kept in sync in place.
+# Rules, plugins and skills that an earlier version of this repo installed but
+# the current one dropped are listed, and removed only after you confirm.
 #
 # --update also pulls this repo, then moves every user-scope plugin,
 # marketplace and third-party skill to its latest upstream version.
@@ -24,7 +26,7 @@ PLUGINS_CHANGED=0
 ARGS=("$@")
 
 usage() {
-  sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 for arg in "$@"; do
@@ -407,6 +409,176 @@ install_skills() {
   prune_mirrors
 }
 
+# Print "<kind>\t<entry>" for each thing an earlier commit of this repo
+# installed, the current one no longer lists, and is still on this machine:
+#   rule:<allow|deny|ask>  permission rule in settings.json
+#   plugin                 user-scope plugin from manifests/plugins.txt
+#   skill                  skill from manifests/skills.txt
+#   link                   symlink into this repo or the vendor dir whose target is gone
+stale_entries() {
+  python3 - "$REPO_DIR" "$CLAUDE_DIR" "$VENDOR_DIR" <<'PY'
+import json, os, re, subprocess, sys
+from pathlib import Path
+
+repo, claude_dir, vendor_dir = sys.argv[1], Path(sys.argv[2]), sys.argv[3]
+
+def git(*args):
+    return subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True).stdout
+
+def versions(path):
+    """Contents of path at every commit that touched it, then the working tree."""
+    shas = git("log", "--format=%H", "--", path).split()
+    return [git("show", f"{sha}:{path}") for sha in shas], (Path(repo) / path).read_text()
+
+def manifest_keys(text, keys_of):
+    """Union of keys_of(fields), a set, over the manifest's entry lines."""
+    keys = set()
+    for line in text.splitlines():
+        fields = re.sub(r"#.*", "", line).split()
+        if fields:
+            keys |= keys_of(fields)
+    return keys
+
+# Permission rules
+settings = claude_dir / "settings.json"
+local = json.loads(settings.read_text()).get("permissions", {}) if settings.exists() else {}
+old, now = versions("global/settings.json")
+current = json.loads(now).get("permissions", {})
+stale = {}
+for text in old:
+    try:
+        perms = json.loads(text).get("permissions", {})
+    except ValueError:
+        continue
+    for kind, rules in perms.items():
+        if not isinstance(rules, list):
+            continue
+        for rule in rules:
+            if rule not in current.get(kind, []) and rule in local.get(kind, []):
+                stale.setdefault(f"rule:{kind}", {})[rule] = None
+for kind, rules in stale.items():
+    for rule in rules:
+        print(f"{kind}\t{rule}")
+
+# Plugins
+installed = set()
+if subprocess.run(["sh", "-c", "command -v claude"], capture_output=True).returncode == 0:
+    out = subprocess.run(["claude", "plugin", "list", "--json"], capture_output=True, text=True).stdout
+    installed = {p["id"] for p in json.loads(out or "[]") if p["scope"] == "user"}
+old, now = versions("manifests/plugins.txt")
+first = lambda f: {f[0]}
+gone = set().union(*(manifest_keys(t, first) for t in old)) - manifest_keys(now, first)
+for plugin in sorted(gone & installed):
+    print(f"plugin\t{plugin}")
+
+# Skills, by installed name
+def plugin_skill_names(url, renames):
+    """Names a plugin-skills line installs, from the checkout's current plugin.json."""
+    checkout = Path(vendor_dir) / os.path.basename(url).removesuffix(".git")
+    if not (checkout / ".claude-plugin" / "plugin.json").is_file():
+        return set()
+    paths = subprocess.run(
+        ["bash", "-c", 'source "$1/lib.sh" && plugin_skill_paths "$2"', "_", repo, str(checkout)],
+        capture_output=True, text=True,
+    ).stdout.split()
+    renamed = dict(rename.split("=", 1) for rename in renames)
+    return {renamed.get(name, name) for name in map(os.path.basename, paths)}
+
+def skill_names(fields):
+    kind, source, *rest = fields
+    if kind == "skills":
+        return {rest[0]}
+    if kind == "git":
+        return {rest[1] if len(rest) > 1 else os.path.basename(rest[0].rstrip("/"))}
+    if kind == "plugin-skills":
+        return plugin_skill_names(source, rest)
+    return set()
+
+old, now = versions("manifests/skills.txt")
+gone = set().union(*(manifest_keys(t, skill_names) for t in old)) - manifest_keys(now, skill_names)
+for skill in sorted(gone):
+    path = claude_dir / "skills" / skill
+    if path.exists() or path.is_symlink():
+        print(f"skill\t{path}")
+
+# Dangling links left by renamed or removed repo/vendor items
+for sub in ("skills", "commands", "agents"):
+    for path in sorted((claude_dir / sub).glob("*")):
+        if path.is_symlink() and not path.exists():
+            target = os.readlink(path)
+            if target.startswith((repo + "/", vendor_dir + "/")):
+                print(f"link\t{path}")
+PY
+}
+
+# $1: "rule:<kind>\t<rule>" lines from stale_entries.
+remove_rules() {
+  python3 - "$CLAUDE_DIR/settings.json" "$BACKUP_DIR" "$1" <<'PY'
+import json, shutil, sys
+from pathlib import Path
+
+dst, backup_dir, entries = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
+settings = json.loads(dst.read_text())
+perms = settings.get("permissions", {})
+for line in entries.splitlines():
+    kind, rule = line.split("\t", 1)
+    kind = kind.removeprefix("rule:")
+    if rule in perms.get(kind, []):
+        perms[kind].remove(rule)
+backup_dir.mkdir(parents=True, exist_ok=True)
+if not (backup_dir / "settings.json").exists():
+    shutil.copy2(dst, backup_dir / "settings.json")
+dst.write_text(json.dumps(settings, indent=2) + "\n")
+PY
+}
+
+# install.sh only adds, so whatever the repo stops listing stays behind.
+# List it, then remove it only if the user says yes.
+prune_stale() {
+  log "Leftovers from earlier versions of this repo"
+  require python3 "leftover check" || return 0
+  require git "leftover check" || return 0
+
+  local entries
+  entries="$(stale_entries)"
+  if [[ -z "$entries" ]]; then
+    info "none"
+    return 0
+  fi
+  while IFS=$'\t' read -r kind entry; do
+    info "$kind  $entry"
+  done <<<"$entries"
+
+  if ((DRY_RUN)); then
+    info "[dry-run] would ask to remove these"
+    return 0
+  fi
+  if [[ ! -t 0 ]]; then
+    info "not a terminal, keeping them (re-run interactively to remove)"
+    return 0
+  fi
+  local reply
+  read -r -p "    Remove these? Skills and links are moved to the backup dir. [y/N] " reply
+  if [[ "$reply" != [yY]* ]]; then
+    info "kept"
+    return 0
+  fi
+
+  local rules
+  rules="$(grep '^rule:' <<<"$entries" || true)"
+  [[ -n "$rules" ]] && remove_rules "$rules" && info "removed rules from $CLAUDE_DIR/settings.json"
+  while IFS=$'\t' read -r kind entry; do
+    case "$kind" in
+      plugin)
+        claude plugin uninstall --scope user "$entry" && PLUGINS_CHANGED=1 && info "uninstalled $entry"
+        ;;
+      skill | link) backup "$entry" ;;
+    esac
+  done <<<"$entries"
+  # Mirrors of the skills just removed
+  prune_mirrors
+}
+
 # Pull this repo, then re-run the pulled install.sh so the rest of the run
 # uses the new scripts and manifests.
 self_update() {
@@ -497,6 +669,7 @@ main() {
   link_own_plugins
   install_plugins
   install_skills
+  prune_stale
   if ((UPDATE)); then
     update_plugins
     update_skills
