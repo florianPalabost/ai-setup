@@ -17,7 +17,7 @@ Items on the reference machine that a snapshot deliberately leaves out of the ma
 _Avoid_: exclude list, blacklist
 
 **Skill mirror**:
-A directory that install generates in the vendor dir to stand in for a vendored skill that can't be linked as is: it links to the skill's files, leaving out `.claude-plugin/` so Claude Code doesn't load the skill a second time as a plugin.
+A directory that install generates in the vendor dir to stand in for a vendored skill that can't be linked as is: it links to the skill's files, leaving out `.claude-plugin/` so Claude Code doesn't load the skill a second time as a plugin, and holds a rewritten `SKILL.md` where a rename applies.
 _Avoid_: copy, shadow
 
 ## Operations

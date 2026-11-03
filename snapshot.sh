@@ -31,7 +31,7 @@ require python3 "snapshot" || exit 1
 
 log "Snapshot ($CLAUDE_DIR -> manifests/)"
 
-# Vendored git skills: "<skill dir> <clone url> <path in repo>", one per line.
+# Vendored git skills: "<installed name> <clone url> <path in repo>", one per line.
 vendored_skills() {
   local skill target repo
   shopt -s nullglob
@@ -109,7 +109,12 @@ npx_rows = sorted(
     for name, entry in lock.items()
     if name not in ignored and entry.get("sourceType") == "github"
 )
-git_rows = sorted(["git", url, path] for name, url, path in vendored if name not in ignored)
+# A 4th field records a skill installed under another name (see install.sh)
+git_rows = sorted(
+    ["git", url, path] + ([name] if name != os.path.basename(path) else [])
+    for name, url, path in vendored
+    if name not in ignored
+)
 
 # Anything else in the skills dir has a source we can't tell.
 known = set(lock) | {name for name, _, _ in vendored} | ignored

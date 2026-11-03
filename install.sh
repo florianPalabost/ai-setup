@@ -168,6 +168,10 @@ install_plugins() {
   done < <(manifest_lines "$REPO_DIR/manifests/plugins.txt")
 }
 
+# Skill names a manifest git line may rename from or to. Being plain words,
+# they need no escaping in the sed program rename_script builds.
+SKILL_NAME_PATTERN='^[a-z0-9-]+$'
+
 # Point the mirror entry $2 at $1.
 mirror_link() {
   local src="$1" dst="$2"
@@ -180,23 +184,37 @@ mirror_link() {
   run ln -s "$src" "$dst"
 }
 
-# Claude Code also loads a skill dir holding .claude-plugin/ as a
-# "<name>@skills-dir" plugin, so its commands would show up twice: bare from
-# ~/.claude/commands, and as "<name>:<command>". Such a skill is linked through
-# its skill mirror (see GLOSSARY.md) in $VENDOR_DIR/.mirrors/<name>: a link to
-# every entry but .claude-plugin, plus .source naming the checkout dir for
+# A vendored skill is linked through its skill mirror (see GLOSSARY.md) in
+# $VENDOR_DIR/.mirrors/<name> when either:
+# - its dir holds .claude-plugin/: Claude Code would also load it as a
+#   "<name>@skills-dir" plugin, so its commands would show up twice (bare from
+#   ~/.claude/commands, and as "<name>:<command>"). The mirror leaves it out.
+# - a rename (see rename_script) changes its SKILL.md: the mirror holds the
+#   rewritten copy.
+# Every other entry is linked, and .source names the checkout dir for
 # snapshot.sh. Synced on every run, changing only what differs. Prints the
 # mirror path.
+# $3: sed -E program from rename_script, possibly empty.
 mirror_skill() {
-  local src="$1" name="$2" mirror entry dst
+  local src="$1" name="$2" sed_script="$3" mirror entry dst
   mirror="$VENDOR_DIR/.mirrors/$name"
   {
     [[ -d "$mirror" ]] || run mkdir -p "$mirror"
     shopt -s nullglob dotglob
     for entry in "$src"/*; do
-      if [[ "$(basename "$entry")" != ".claude-plugin" ]]; then
-        mirror_link "$entry" "$mirror/$(basename "$entry")"
-      fi
+      dst="$mirror/$(basename "$entry")"
+      case "$(basename "$entry")" in
+        .claude-plugin) ;;
+        SKILL.md)
+          if ! rewrites "$sed_script" "$entry"; then
+            mirror_link "$entry" "$dst"
+          elif [[ -L "$dst" ]] || ! sed -E "$sed_script" "$entry" | cmp -s - "$dst"; then
+            [[ -L "$dst" ]] && run rm "$dst"
+            run_to "$dst" sed -E "$sed_script" "$entry"
+          fi
+          ;;
+        *) mirror_link "$entry" "$dst" ;;
+      esac
     done
     # Entries upstream dropped
     for dst in "$mirror"/*; do
@@ -210,6 +228,42 @@ mirror_skill() {
     fi
   } >&2
   printf '%s\n' "$mirror"
+}
+
+# Whether the sed -E program $1 (possibly empty) changes the file $2.
+rewrites() {
+  [[ -n "$1" ]] && ! sed -E "$1" "$2" | cmp -s - "$2"
+}
+
+# The sed -E program that applies the renames git lines give for the repo
+# cloned from $1 (4th field), wherever a skill name appears as a whole word.
+# Each substitution runs twice: a match consumes the character after it, which
+# can hide the next occurrence from the first pass.
+rename_script() {
+  local url="$1" type source target name old sub script=""
+  while read -r type source target name; do
+    old="$(basename "$target")"
+    if [[ "$type" != "git" || "$source" != "$url" || -z "$name" || "$name" == "$old" ]]; then
+      continue
+    fi
+    if [[ ! "$old" =~ $SKILL_NAME_PATTERN || ! "$name" =~ $SKILL_NAME_PATTERN ]]; then
+      continue # warned about by install_skills
+    fi
+    sub="s/(^|[^a-z0-9-])$old([^a-z0-9-]|\$)/\1$name\2/g"
+    script+="$sub;$sub;"
+  done < <(manifest_lines "$REPO_DIR/manifests/skills.txt")
+  printf '%s' "$script"
+}
+
+# Warn about the files of skill $2 (dir $1), other than SKILL.md, that mention
+# a renamed skill: they are linked as is, so the old name stays in them.
+warn_unrenamed() {
+  local src="$1" name="$2" sed_script="$3" file
+  while IFS= read -r -d '' file; do
+    if [[ "$file" != "$src/SKILL.md" ]] && rewrites "$sed_script" "$file"; then
+      warn "$name: ${file#"$src"/} mentions a renamed skill, which isn't rewritten there"
+    fi
+  done < <(find "$src" -type f -name '*.md' -print0)
 }
 
 # Remove the skill mirrors no skill links to any more (skill dropped or renamed).
@@ -231,10 +285,10 @@ prune_mirrors() {
   shopt -u nullglob
 }
 
+# $1 clone url, $2 path in repo, $3 installed name.
 install_git_skill() {
-  local url="$1" path="$2" name dest cmd
-  name="$(basename "$url" .git)"
-  dest="$VENDOR_DIR/$name"
+  local url="$1" path="$2" name="$3" dest cmd sed_script
+  dest="$VENDOR_DIR/$(basename "$url" .git)"
 
   if [[ ! -d "$dest/.git" ]]; then
     run mkdir -p "$VENDOR_DIR"
@@ -242,14 +296,18 @@ install_git_skill() {
   fi
   # Only on a dry run, which clones nothing
   if [[ ! -d "$dest" ]]; then
-    info "$(basename "$path"): not cloned yet, so its links can't be previewed"
+    info "$name: not cloned yet, so its links can't be previewed"
     return 0
   fi
 
-  if [[ -d "$dest/$path/.claude-plugin" ]]; then
-    link "$(mirror_skill "$dest/$path" "$(basename "$path")")" "$CLAUDE_DIR/skills/$(basename "$path")"
+  sed_script="$(rename_script "$url")"
+  if [[ -n "$sed_script" ]]; then
+    warn_unrenamed "$dest/$path" "$name" "$sed_script"
+  fi
+  if [[ -d "$dest/$path/.claude-plugin" ]] || rewrites "$sed_script" "$dest/$path/SKILL.md"; then
+    link "$(mirror_skill "$dest/$path" "$name" "$sed_script")" "$CLAUDE_DIR/skills/$name"
   else
-    link "$dest/$path" "$CLAUDE_DIR/skills/$(basename "$path")"
+    link "$dest/$path" "$CLAUDE_DIR/skills/$name"
   fi
   shopt -s nullglob
   for cmd in "$dest/$path"/commands/*.md; do
@@ -260,9 +318,9 @@ install_git_skill() {
 
 # $1: only handle the lines of this type (skills|git); all of them by default.
 install_skills() {
-  local only="${1:-}" type source target
+  local only="${1:-}" type source target name
   log "Third-party skills (manifests/skills.txt${only:+, $only lines})"
-  while read -r type source target; do
+  while read -r type source target name; do
     if [[ -n "$only" && "$type" != "$only" ]]; then
       continue
     fi
@@ -275,7 +333,12 @@ install_skills() {
         fi
         ;;
       git)
-        require git "skill $source" && install_git_skill "$source" "$target"
+        name="${name:-$(basename "$target")}"
+        if [[ ! "$name" =~ $SKILL_NAME_PATTERN || ! "$(basename "$target")" =~ $SKILL_NAME_PATTERN ]]; then
+          warn "skipping $target: skill names must match $SKILL_NAME_PATTERN"
+        elif require git "skill $source"; then
+          install_git_skill "$source" "$target" "$name"
+        fi
         ;;
       *) warn "unknown skill type '$type' in manifests/skills.txt" ;;
     esac
@@ -376,7 +439,7 @@ main() {
   if ((UPDATE)); then
     update_plugins
     update_skills
-    # Pick up the entries the pull added to mirrored skills
+    # Sync mirrors with the pulled checkouts (new entries, rewritten copies)
     install_skills git
   fi
   [[ -d "$BACKUP_DIR" ]] && log "Backups saved in $BACKUP_DIR"
