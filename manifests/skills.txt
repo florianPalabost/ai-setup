@@ -6,6 +6,10 @@
 #                                               and <path>/commands/*.md as slash commands.
 #                                               <name> installs it under another name, and
 #                                               renames it in the other skills of the repo.
+#   plugin-skills  <clone url>  [<skill>=<name> ...]
+#                                            -> cloned, then every skill its
+#                                               .claude-plugin/plugin.json ships is linked
+#                                               like a git line; <skill>=<name> renames one.
 
 skills  cursor/plugins            unslop
 skills  humanlayer/skills         show-me

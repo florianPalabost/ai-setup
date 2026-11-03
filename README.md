@@ -82,7 +82,7 @@ git diff manifests/     # review, update the "What I use" tables below, commit
 | --- | --- | --- |
 | User-scope plugins and their enabled/disabled state | `claude plugin list --json` + `~/.claude/plugins/known_marketplaces.json` | `plugins.txt` |
 | `npx skills` skills | `~/.agents/.skill-lock.json` | `skills.txt` (`skills` lines) |
-| Vendored git skills | symlinks in `~/.claude/skills` into the vendor dir (for a skill mirror, the checkout its `.source` names), then `git remote` + path, + the link name if it renames the skill | `skills.txt` (`git` lines) |
+| Vendored git skills | symlinks in `~/.claude/skills` into the vendor dir (for a skill mirror, the checkout its `.source` names), then `git remote` + path, + the link name if it renames the skill. A repo whose links are exactly the skills its plugin ships collapses into one line | `skills.txt` (`git` or `plugin-skills` lines) |
 | Own skills | symlinks in `~/.claude/skills` into this repo | skipped, already in the repo |
 | Anything else in `~/.claude/skills` | | not written; warned as "unknown source" |
 
