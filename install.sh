@@ -2,7 +2,8 @@
 # Install this AI setup on the current machine.
 #
 # Idempotent: safe to re-run. It only adds or links things; anything it would
-# replace is moved to a timestamped backup directory first, never deleted.
+# replace is moved to a timestamped backup directory first, never deleted. The
+# only exception is the skill mirrors it generates itself, kept in sync in place.
 #
 # --update also pulls this repo, then moves every user-scope plugin,
 # marketplace and third-party skill to its latest upstream version.
@@ -41,6 +42,17 @@ run() {
     printf '    [dry-run] %s\n' "$*"
   else
     "$@"
+  fi
+}
+
+# Like run, writing the command's stdout to the file $1.
+run_to() {
+  local dst="$1"
+  shift
+  if ((DRY_RUN)); then
+    printf '    [dry-run] %s > %s\n' "$*" "$dst"
+  else
+    "$@" >"$dst"
   fi
 }
 
@@ -156,6 +168,69 @@ install_plugins() {
   done < <(manifest_lines "$REPO_DIR/manifests/plugins.txt")
 }
 
+# Point the mirror entry $2 at $1.
+mirror_link() {
+  local src="$1" dst="$2"
+  if [[ -L "$dst" && "$(readlink "$dst")" == "$src" ]]; then
+    return 0
+  fi
+  if [[ -e "$dst" || -L "$dst" ]]; then
+    run rm "$dst"
+  fi
+  run ln -s "$src" "$dst"
+}
+
+# Claude Code also loads a skill dir holding .claude-plugin/ as a
+# "<name>@skills-dir" plugin, so its commands would show up twice: bare from
+# ~/.claude/commands, and as "<name>:<command>". Such a skill is linked through
+# its skill mirror (see GLOSSARY.md) in $VENDOR_DIR/.mirrors/<name>: a link to
+# every entry but .claude-plugin, plus .source naming the checkout dir for
+# snapshot.sh. Synced on every run, changing only what differs. Prints the
+# mirror path.
+mirror_skill() {
+  local src="$1" name="$2" mirror entry dst
+  mirror="$VENDOR_DIR/.mirrors/$name"
+  {
+    [[ -d "$mirror" ]] || run mkdir -p "$mirror"
+    shopt -s nullglob dotglob
+    for entry in "$src"/*; do
+      if [[ "$(basename "$entry")" != ".claude-plugin" ]]; then
+        mirror_link "$entry" "$mirror/$(basename "$entry")"
+      fi
+    done
+    # Entries upstream dropped
+    for dst in "$mirror"/*; do
+      if [[ "$(basename "$dst")" != ".source" && ! -e "$src/$(basename "$dst")" ]]; then
+        run rm "$dst"
+      fi
+    done
+    shopt -u nullglob dotglob
+    if [[ "$(cat "$mirror/.source" 2>/dev/null)" != "$src" ]]; then
+      run_to "$mirror/.source" printf '%s\n' "$src"
+    fi
+  } >&2
+  printf '%s\n' "$mirror"
+}
+
+# Remove the skill mirrors no skill links to any more (skill dropped or renamed).
+prune_mirrors() {
+  local mirror skill used
+  shopt -s nullglob
+  for mirror in "$VENDOR_DIR"/.mirrors/*; do
+    used=0
+    for skill in "$CLAUDE_DIR"/skills/*; do
+      if [[ -L "$skill" && "$(readlink "$skill")" == "$mirror" ]]; then
+        used=1
+      fi
+    done
+    if ((!used)); then
+      run rm -rf "$mirror"
+      info "removed unused mirror $mirror"
+    fi
+  done
+  shopt -u nullglob
+}
+
 install_git_skill() {
   local url="$1" path="$2" name dest cmd
   name="$(basename "$url" .git)"
@@ -165,8 +240,17 @@ install_git_skill() {
     run mkdir -p "$VENDOR_DIR"
     run git clone --depth 1 --quiet "$url" "$dest"
   fi
+  # Only on a dry run, which clones nothing
+  if [[ ! -d "$dest" ]]; then
+    info "$(basename "$path"): not cloned yet, so its links can't be previewed"
+    return 0
+  fi
 
-  link "$dest/$path" "$CLAUDE_DIR/skills/$(basename "$path")"
+  if [[ -d "$dest/$path/.claude-plugin" ]]; then
+    link "$(mirror_skill "$dest/$path" "$(basename "$path")")" "$CLAUDE_DIR/skills/$(basename "$path")"
+  else
+    link "$dest/$path" "$CLAUDE_DIR/skills/$(basename "$path")"
+  fi
   shopt -s nullglob
   for cmd in "$dest/$path"/commands/*.md; do
     link "$cmd" "$CLAUDE_DIR/commands/$(basename "$cmd")"
@@ -174,10 +258,14 @@ install_git_skill() {
   shopt -u nullglob
 }
 
+# $1: only handle the lines of this type (skills|git); all of them by default.
 install_skills() {
-  log "Third-party skills (manifests/skills.txt)"
-  local type source target
+  local only="${1:-}" type source target
+  log "Third-party skills (manifests/skills.txt${only:+, $only lines})"
   while read -r type source target; do
+    if [[ -n "$only" && "$type" != "$only" ]]; then
+      continue
+    fi
     case "$type" in
       skills)
         if [[ -e "$CLAUDE_DIR/skills/$target" ]]; then
@@ -192,6 +280,7 @@ install_skills() {
       *) warn "unknown skill type '$type' in manifests/skills.txt" ;;
     esac
   done < <(manifest_lines "$REPO_DIR/manifests/skills.txt")
+  prune_mirrors
 }
 
 # Pull this repo, then re-run the pulled install.sh so the rest of the run
@@ -287,6 +376,8 @@ main() {
   if ((UPDATE)); then
     update_plugins
     update_skills
+    # Pick up the entries the pull added to mirrored skills
+    install_skills git
   fi
   [[ -d "$BACKUP_DIR" ]] && log "Backups saved in $BACKUP_DIR"
   log "Done"

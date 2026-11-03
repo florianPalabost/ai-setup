@@ -29,7 +29,7 @@ cd ~/dev/ai-setup
 ./install.sh
 ```
 
-`install.sh` is idempotent and **never deletes anything**: whatever it would replace is moved to `~/.claude/backups/ai-setup-<timestamp>/`. It:
+`install.sh` is idempotent and **never deletes anything**: whatever it would replace is moved to `~/.claude/backups/ai-setup-<timestamp>/`. The only exception is the [skill mirrors](GLOSSARY.md) it generates itself, kept in sync in place. It:
 
 1. Symlinks `global/AGENTS.md` and `global/CLAUDE.md` into `~/.claude/`
 2. Merges `global/settings.json` into `~/.claude/settings.json` (merged, not symlinked, so machine-specific hooks never end up in the repo)
@@ -82,7 +82,7 @@ git diff manifests/     # review, update the "What I use" tables below, commit
 | --- | --- | --- |
 | User-scope plugins and their enabled/disabled state | `claude plugin list --json` + `~/.claude/plugins/known_marketplaces.json` | `plugins.txt` |
 | `npx skills` skills | `~/.agents/.skill-lock.json` | `skills.txt` (`skills` lines) |
-| Vendored git skills | symlinks in `~/.claude/skills` into the vendor dir, then `git remote` + path | `skills.txt` (`git` lines) |
+| Vendored git skills | symlinks in `~/.claude/skills` into the vendor dir (for a skill mirror, the checkout its `.source` names), then `git remote` + path | `skills.txt` (`git` lines) |
 | Own skills | symlinks in `~/.claude/skills` into this repo | skipped, already in the repo |
 | Anything else in `~/.claude/skills` | | not written; warned as "unknown source" |
 
