@@ -20,3 +20,21 @@ require() {
 manifest_lines() {
   sed -e 's/#.*//' -e '/^[[:space:]]*$/d' "$1"
 }
+
+# Paths, relative to the checkout $1, of the skills its
+# .claude-plugin/plugin.json ships, one per line. Each "skills" entry is a skill
+# dir, or a dir of skill dirs; without the key, every skills/<name>/.
+plugin_skill_paths() {
+  python3 - "$1" <<'PY'
+import json, sys
+from pathlib import Path
+
+root = Path(sys.argv[1]).resolve()
+entries = json.loads((root / ".claude-plugin" / "plugin.json").read_text()).get("skills", ["skills"])
+for entry in [entries] if isinstance(entries, str) else entries:
+    path = (root / entry).resolve()
+    skills = [path] if (path / "SKILL.md").is_file() else sorted(p.parent for p in path.glob("*/SKILL.md"))
+    for skill in skills:
+        print(skill.relative_to(root))
+PY
+}

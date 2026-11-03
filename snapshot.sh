@@ -50,7 +50,22 @@ vendored_skills() {
   shopt -u nullglob
 }
 
-python3 - "$REPO_DIR" "$CLAUDE_DIR" "$SKILL_LOCK" <(claude plugin list --json) <(vendored_skills) <(manifest_lines "$REPO_DIR/manifests/ignore.txt") <<'PY'
+# "<clone url> <path in repo>" for each skill a vendored checkout's plugin ships.
+plugin_skills() {
+  local repo url path
+  shopt -s nullglob
+  for repo in "$VENDOR_DIR"/*/; do
+    repo="${repo%/}"
+    [[ -f "$repo/.claude-plugin/plugin.json" ]] || continue
+    url="$(git -C "$repo" remote get-url origin)"
+    while read -r path; do
+      printf '%s %s\n' "$url" "$path"
+    done < <(plugin_skill_paths "$repo")
+  done
+  shopt -u nullglob
+}
+
+python3 - "$REPO_DIR" "$CLAUDE_DIR" "$SKILL_LOCK" <(claude plugin list --json) <(vendored_skills) <(manifest_lines "$REPO_DIR/manifests/ignore.txt") <(plugin_skills) <<'PY'
 import json, os, sys
 from pathlib import Path
 
@@ -109,12 +124,27 @@ npx_rows = sorted(
     for name, entry in lock.items()
     if name not in ignored and entry.get("sourceType") == "github"
 )
-# A 4th field records a skill installed under another name (see install.sh)
-git_rows = sorted(
-    ["git", url, path] + ([name] if name != os.path.basename(path) else [])
-    for name, url, path in vendored
-    if name not in ignored
-)
+# A repo whose linked skills are exactly the ones its plugin ships collapses
+# into one plugin-skills line, otherwise it gets a git line per skill. Either
+# way, a skill installed under another name records it (see install.sh).
+plugin_paths = {}
+for line in Path(sys.argv[7]).read_text().splitlines():
+    url, path = line.split()
+    plugin_paths.setdefault(url, set()).add(path)
+linked = {}
+for name, url, path in vendored:
+    if name not in ignored:
+        linked.setdefault(url, {})[path] = name
+git_rows, plugin_skill_rows = [], []
+for url, skills in linked.items():
+    renamed = {path: name for path, name in skills.items() if name != os.path.basename(path)}
+    if plugin_paths.get(url) == set(skills):
+        renames = sorted(f"{os.path.basename(path)}={name}" for path, name in renamed.items())
+        plugin_skill_rows.append(["plugin-skills", url] + renames)
+    else:
+        git_rows += [["git", url, path] + ([renamed[path]] if path in renamed else []) for path in skills]
+git_rows.sort()
+plugin_skill_rows.sort()
 
 # Anything else in the skills dir has a source we can't tell.
 known = set(lock) | {name for name, _, _ in vendored} | ignored
@@ -126,7 +156,7 @@ for skill in sorted((claude_dir / "skills").iterdir()):
     warn(f"skills/{skill.name}: unknown source, not recorded (add it to manifests/ignore.txt to silence)")
 
 write_manifest(repo_dir / "manifests" / "plugins.txt", plugin_rows)
-write_manifest(repo_dir / "manifests" / "skills.txt", npx_rows, git_rows)
+write_manifest(repo_dir / "manifests" / "skills.txt", npx_rows, git_rows, plugin_skill_rows)
 PY
 
 log "Done: review with 'git diff manifests/', then update the README tables"

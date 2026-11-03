@@ -235,23 +235,54 @@ rewrites() {
   [[ -n "$1" ]] && ! sed -E "$1" "$2" | cmp -s - "$2"
 }
 
-# The sed -E program that applies the renames git lines give for the repo
-# cloned from $1 (4th field), wherever a skill name appears as a whole word.
-# Each substitution runs twice: a match consumes the character after it, which
-# can hide the next occurrence from the first pass.
-rename_script() {
-  local url="$1" type source target name old sub script=""
-  while read -r type source target name; do
-    old="$(basename "$target")"
-    if [[ "$type" != "git" || "$source" != "$url" || -z "$name" || "$name" == "$old" ]]; then
-      continue
-    fi
-    if [[ ! "$old" =~ $SKILL_NAME_PATTERN || ! "$name" =~ $SKILL_NAME_PATTERN ]]; then
-      continue # warned about by install_skills
-    fi
-    sub="s/(^|[^a-z0-9-])$old([^a-z0-9-]|\$)/\1$name\2/g"
-    script+="$sub;$sub;"
+# "<old> <new>" for each rename the manifest gives for the repo cloned from $1:
+# the 4th field of its git lines, the <skill>=<name> fields of its
+# plugin-skills line.
+manifest_renames() {
+  local url="$1" type source fields target name rename
+  while read -r type source fields; do
+    [[ "$source" == "$url" ]] || continue
+    case "$type" in
+      git)
+        read -r target name <<<"$fields"
+        if [[ -n "$name" ]]; then
+          printf '%s %s\n' "$(basename "$target")" "$name"
+        fi
+        ;;
+      plugin-skills)
+        for rename in $fields; do
+          printf '%s %s\n' "${rename%%=*}" "${rename#*=}"
+        done
+        ;;
+    esac
   done < <(manifest_lines "$REPO_DIR/manifests/skills.txt")
+}
+
+# The name the manifest installs skill $2 of the repo cloned from $1 under.
+renamed() {
+  local old new
+  while read -r old new; do
+    if [[ "$old" == "$2" ]]; then
+      printf '%s\n' "$new"
+      return 0
+    fi
+  done < <(manifest_renames "$1")
+  printf '%s\n' "$2"
+}
+
+# The sed -E program that applies the manifest's renames for the repo cloned
+# from $1, wherever a skill name appears as a whole word. Each substitution runs
+# twice: a match consumes the character after it, which can hide the next
+# occurrence from the first pass.
+rename_script() {
+  local old new sub script=""
+  while read -r old new; do
+    if [[ "$old" == "$new" || ! "$old" =~ $SKILL_NAME_PATTERN || ! "$new" =~ $SKILL_NAME_PATTERN ]]; then
+      continue # invalid names are warned about by install_git_skill
+    fi
+    sub="s/(^|[^a-z0-9-])$old([^a-z0-9-]|\$)/\1$new\2/g"
+    script+="$sub;$sub;"
+  done < <(manifest_renames "$1")
   printf '%s' "$script"
 }
 
@@ -285,15 +316,28 @@ prune_mirrors() {
   shopt -u nullglob
 }
 
-# $1 clone url, $2 path in repo, $3 installed name.
-install_git_skill() {
-  local url="$1" path="$2" name="$3" dest cmd sed_script
-  dest="$VENDOR_DIR/$(basename "$url" .git)"
-
+# Clone $1 into the vendor dir unless it's there; prints the checkout dir.
+vendor_checkout() {
+  local dest
+  dest="$VENDOR_DIR/$(basename "$1" .git)"
   if [[ ! -d "$dest/.git" ]]; then
-    run mkdir -p "$VENDOR_DIR"
-    run git clone --depth 1 --quiet "$url" "$dest"
+    {
+      run mkdir -p "$VENDOR_DIR"
+      run git clone --depth 1 --quiet "$1" "$dest"
+    } >&2
   fi
+  printf '%s\n' "$dest"
+}
+
+# $1 clone url, $2 path in repo.
+install_git_skill() {
+  local url="$1" path="$2" name dest cmd sed_script
+  name="$(renamed "$url" "$(basename "$path")")"
+  if [[ ! "$name" =~ $SKILL_NAME_PATTERN || ! "$(basename "$path")" =~ $SKILL_NAME_PATTERN ]]; then
+    warn "skipping $path: skill names must match $SKILL_NAME_PATTERN"
+    return 0
+  fi
+  dest="$(vendor_checkout "$url")"
   # Only on a dry run, which clones nothing
   if [[ ! -d "$dest" ]]; then
     info "$name: not cloned yet, so its links can't be previewed"
@@ -316,12 +360,26 @@ install_git_skill() {
   shopt -u nullglob
 }
 
-# $1: only handle the lines of this type (skills|git); all of them by default.
+# Every skill the plugin in the repo cloned from $1 ships (see plugin_skill_paths).
+install_plugin_skills() {
+  local url="$1" dest path
+  dest="$(vendor_checkout "$url")"
+  # Only on a dry run, which clones nothing
+  if [[ ! -d "$dest" ]]; then
+    info "$url: not cloned yet, so its skills can't be previewed"
+    return 0
+  fi
+  while read -r path; do
+    install_git_skill "$url" "$path"
+  done < <(plugin_skill_paths "$dest")
+}
+
+# $1: "vendored" to only handle the git and plugin-skills lines.
 install_skills() {
-  local only="${1:-}" type source target name
-  log "Third-party skills (manifests/skills.txt${only:+, $only lines})"
-  while read -r type source target name; do
-    if [[ -n "$only" && "$type" != "$only" ]]; then
+  local only="${1:-}" type source target
+  log "Third-party skills (manifests/skills.txt${only:+, $only only})"
+  while read -r type source target _; do
+    if [[ -n "$only" && "$type" == "skills" ]]; then
       continue
     fi
     case "$type" in
@@ -333,11 +391,14 @@ install_skills() {
         fi
         ;;
       git)
-        name="${name:-$(basename "$target")}"
-        if [[ ! "$name" =~ $SKILL_NAME_PATTERN || ! "$(basename "$target")" =~ $SKILL_NAME_PATTERN ]]; then
-          warn "skipping $target: skill names must match $SKILL_NAME_PATTERN"
-        elif require git "skill $source"; then
-          install_git_skill "$source" "$target" "$name"
+        # A rename in the 4th field is read by install_git_skill
+        if require git "skill $source"; then
+          install_git_skill "$source" "$target"
+        fi
+        ;;
+      plugin-skills)
+        if require git "skills of $source"; then
+          install_plugin_skills "$source"
         fi
         ;;
       *) warn "unknown skill type '$type' in manifests/skills.txt" ;;
@@ -440,7 +501,7 @@ main() {
     update_plugins
     update_skills
     # Sync mirrors with the pulled checkouts (new entries, rewritten copies)
-    install_skills git
+    install_skills vendored
   fi
   [[ -d "$BACKUP_DIR" ]] && log "Backups saved in $BACKUP_DIR"
   log "Done"
