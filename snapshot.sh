@@ -38,6 +38,10 @@ vendored_skills() {
   for skill in "$CLAUDE_DIR"/skills/*; do
     [[ -L "$skill" ]] || continue
     target="$(readlink -f "$skill")"
+    # A skill mirror (see install.sh) names the checkout dir it stands for
+    if [[ -f "$target/.source" ]]; then
+      target="$(<"$target/.source")"
+    fi
     [[ "$target" == "$VENDOR_DIR"/* ]] || continue
     repo="$VENDOR_DIR/$(cut -d/ -f1 <<<"${target#"$VENDOR_DIR"/}")"
     printf '%s %s %s\n' "$(basename "$skill")" \

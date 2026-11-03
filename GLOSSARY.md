@@ -5,7 +5,7 @@ A personal AI coding setup: the instructions, settings, own skills and third-par
 ## Language
 
 **Reference machine**:
-The machine whose installed setup the repo mirrors. What is installed there is, by definition, the setup.
+The machine whose installed setup the repo records. What is installed there is, by definition, the setup.
 _Avoid_: main machine, source machine
 
 **Manifest**:
@@ -15,6 +15,10 @@ _Avoid_: config, lockfile
 **Ignore list**:
 Items on the reference machine that a snapshot deliberately leaves out of the manifests, because they're personal or experimental.
 _Avoid_: exclude list, blacklist
+
+**Skill mirror**:
+A directory that install generates in the vendor dir to stand in for a vendored skill that can't be linked as is: it links to the skill's files, leaving out `.claude-plugin/` so Claude Code doesn't load the skill a second time as a plugin.
+_Avoid_: copy, shadow
 
 ## Operations
 
