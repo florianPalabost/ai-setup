@@ -114,7 +114,6 @@ GLOSSARY.md, docs/adr/            vocabulary and design decisions
 
 | Plugin | Why |
 | --- | --- |
-| [mattpocock-skills](https://github.com/mattpocock/skills) | My main workflow: `/grill-me`, `/grill-with-docs`, `/to-spec`, `/to-tickets`, `/implement`, `/tdd`, `/code-review`, `/retro`. Run `/ask-matt` to pick the right one. |
 | [frontend-design](https://github.com/anthropics/claude-code/tree/main/plugins/frontend-design) | UI design guidance |
 | [commit-commands](https://github.com/anthropics/claude-code/tree/main/plugins/commit-commands) | `/commit`, `/commit-push-pr` |
 | [php-lsp](https://github.com/anthropics/claude-plugins-official), [typescript-lsp](https://github.com/anthropics/claude-plugins-official), [rust-analyzer-lsp](https://github.com/anthropics/claude-plugins-official) | Code intelligence for my stack (Laravel + React, plus Rust) |
@@ -130,6 +129,9 @@ GLOSSARY.md, docs/adr/            vocabulary and design decisions
 | `unslop` | [cursor/plugins](https://github.com/cursor/plugins) |
 | `vercel-react-best-practices`, `web-design-guidelines` | [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills) |
 | `visual-explainer` (+ `/diff-review`, `/plan-review`, `/project-recap`…) | [nicobailon/visual-explainer](https://github.com/nicobailon/visual-explainer) |
+| `grill-me`, `grill-with-docs`, `to-spec`, `to-tickets`, `implement`, `tdd`, `matt-code-review`, `retro`, `ask-matt`… | [mattpocock/skills](https://github.com/mattpocock/skills) |
+
+mattpocock/skills is my main workflow; run `/ask-matt` to pick the right skill. It's vendored rather than installed as a plugin, so its skills have no `mattpocock-skills:` prefix. Its `code-review` is installed as `matt-code-review` so it doesn't clash with the built-in `/code-review`.
 
 ### Per-project tooling (not installed globally)
 
