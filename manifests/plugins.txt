@@ -4,7 +4,6 @@
 commit-commands@claude-code-plugins        anthropics/claude-code
 frontend-design@claude-code-plugins        anthropics/claude-code
 impeccable@impeccable                      pbakaus/impeccable                  disabled
-mattpocock-skills@mattpocock               mattpocock/skills
 php-lsp@claude-plugins-official            anthropics/claude-plugins-official
 rust-analyzer-lsp@claude-plugins-official  anthropics/claude-plugins-official
 typescript-lsp@claude-plugins-official     anthropics/claude-plugins-official

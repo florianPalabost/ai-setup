@@ -21,3 +21,5 @@ skills  vercel-labs/agent-skills  web-design-guidelines
 skills  vercel-labs/skills        find-skills
 
 git  https://github.com/nicobailon/visual-explainer.git  plugins/visual-explainer
+
+plugin-skills  https://github.com/mattpocock/skills.git  code-review=matt-code-review
