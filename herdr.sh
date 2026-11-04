@@ -607,9 +607,21 @@ remind_gh_sign_in() {
     else
       warn "for the PR sections, install gh (https://cli.github.com), then run \`gh auth login\`"
     fi
-  elif ! gh auth status >/dev/null 2>&1; then
+  elif ! gh_signed_in; then
     warn "for the PR sections, run \`gh auth login\`"
   fi
+}
+
+# Any gh call records a device id in its state folder, and a dry run leaves the
+# home alone, so that folder goes somewhere temporary for the check.
+gh_signed_in() {
+  ((DRY_RUN)) || { gh auth status >/dev/null 2>&1; return; }
+  local state code
+  state="$(mktemp -d)"
+  XDG_STATE_HOME="$state" gh auth status >/dev/null 2>&1
+  code=$?
+  rm -rf "$state"
+  return "$code"
 }
 
 # Build whatever is missing and, on an update, rebuild whatever an older herdr

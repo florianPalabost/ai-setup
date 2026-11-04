@@ -487,6 +487,20 @@ test_dry_run_ends_with_gh_auth_login_too() {
   assert_contains <(tail -n 1 "$OUT") "run \`gh auth login\`"
 }
 
+test_dry_run_checks_the_gh_sign_in_without_writing_to_the_home() {
+  # Arrange
+  new_repo_copy
+  herdr_not_installed
+  touch "$SANDBOX/gh-signed-out"
+
+  # Act
+  install --dry-run
+
+  # Assert
+  assert_contains <(tail -n 1 "$OUT") "run \`gh auth login\`"
+  assert_no_file "$SANDBOX_HOME/.local/state/gh"
+}
+
 test_a_machine_with_no_display_is_not_told_about_gh() {
   # Arrange: the sign-in only serves the panel, which this machine doesn't get
   new_repo_copy
@@ -529,6 +543,7 @@ run_all() {
   test_case "nothing is said about gh when signed in" test_nothing_is_said_about_gh_when_signed_in
   test_case "gh that could not be installed is named at the end" test_gh_that_could_not_be_installed_is_named_at_the_end
   test_case "dry run ends with gh auth login too" test_dry_run_ends_with_gh_auth_login_too
+  test_case "dry run checks the gh sign-in without writing to the home" test_dry_run_checks_the_gh_sign_in_without_writing_to_the_home
   test_case "a machine with no display is not told about gh" test_a_machine_with_no_display_is_not_told_about_gh
 }
 
