@@ -9,19 +9,17 @@ const withChecks = (nodes, state = "FAILURE", totalCount = nodes.length) => ({
   commits: { nodes: [{ commit: { statusCheckRollup: { state, contexts: { totalCount, nodes } } } }] },
 });
 
-test("github.com remotes parse in https, scp and ssh form", () => {
-  const repo = { owner: "cli", name: "cli" };
-  assert.deepEqual(parseRemote("https://github.com/cli/cli.git"), repo);
-  assert.deepEqual(parseRemote("https://github.com/cli/cli"), repo);
-  assert.deepEqual(parseRemote("git@github.com:cli/cli.git"), repo);
-  assert.deepEqual(parseRemote("ssh://git@github.com/cli/cli.git"), repo);
-});
+for (const url of ["https://github.com/cli/cli.git", "https://github.com/cli/cli", "git@github.com:cli/cli.git", "ssh://git@github.com/cli/cli.git"]) {
+  test(`${url} is a github.com remote`, () => {
+    assert.deepEqual(parseRemote(url), { owner: "cli", name: "cli" });
+  });
+}
 
-test("other hosts aren't GitHub, even with github.com in the path", () => {
-  assert.equal(parseRemote("https://gitlab.com/cli/cli.git"), null);
-  assert.equal(parseRemote("https://evil.example/github.com/cli/cli"), null);
-  assert.equal(parseRemote("git@ghe.corp:cli/cli.git"), null);
-});
+for (const url of ["https://gitlab.com/cli/cli.git", "https://evil.example/github.com/cli/cli", "git@ghe.corp:cli/cli.git"]) {
+  test(`${url} isn't GitHub`, () => {
+    assert.equal(parseRemote(url), null);
+  });
+}
 
 test("among PRs with this branch name, another owner's is left out and an open one wins", () => {
   // Arrange
@@ -181,23 +179,30 @@ test("one view makes one gh call, and only a read", async () => {
 
   // Assert
   assert.equal(ghCalls().length, 1);
-  const { args } = ghCalls()[0];
-  assert.deepEqual(args.slice(0, 2), ["api", "graphql"]);
-  assert.match(args.find((a) => a.startsWith("query=")), /^query=query /);
+  assert.deepEqual(ghCalls()[0].args.slice(0, 2), ["api", "graphql"]);
+  assert.match(ghCalls()[0].args.find((a) => a.startsWith("query=")), /^query=query /);
 });
 
-test("a view may use gh's cache, and a refresh after a cd doesn't", async () => {
+test("a view may use gh's cache", async () => {
   // Arrange
-  const cached = repoWorld({ gh: answer({}) });
-  const fresh = repoWorld({ gh: answer({}) });
+  const { exec, ghCalls } = repoWorld({ gh: answer({}) });
 
   // Act
-  await loadPr(cached.exec, at, { cache: true });
-  await loadPr(fresh.exec, at, { cache: false });
+  await loadPr(exec, at, { cache: true });
 
   // Assert
-  assert.ok(cached.ghCalls()[0].args.includes("--cache"));
-  assert.ok(!fresh.ghCalls()[0].args.includes("--cache"));
+  assert.ok(ghCalls()[0].args.includes("--cache"));
+});
+
+test("a refresh after a cd doesn't use gh's cache", async () => {
+  // Arrange
+  const { exec, ghCalls } = repoWorld({ gh: answer({}) });
+
+  // Act
+  await loadPr(exec, at, { cache: false });
+
+  // Assert
+  assert.ok(!ghCalls()[0].args.includes("--cache"));
 });
 
 test("the query looks in the repo and branch the folder is on", async () => {
@@ -374,32 +379,36 @@ test("detached HEAD has no branch to look up", async () => {
   assert.equal(ghCalls().length, 0);
 });
 
-test("a space with no folder or on another machine makes no call at all", async () => {
-  // Arrange
-  const { exec, calls } = repoWorld({ gh: answer({}) });
+for (const [what, place, kind] of [
+  ["with no folder", { cwd: null, on: null }, PR_VIEW.NO_FOLDER],
+  ["on another machine", { cwd: "/x", on: "vps" }, PR_VIEW.REMOTE],
+]) {
+  test(`a space ${what} makes no call at all`, async () => {
+    // Arrange
+    const { exec, calls } = repoWorld({ gh: answer({}) });
 
-  // Act
-  const none = await loadPr(exec, { cwd: null, on: null }, { cache: false });
-  const remote = await loadPr(exec, { cwd: "/x", on: "vps" }, { cache: false });
+    // Act
+    const view = await loadPr(exec, place, { cache: false });
 
-  // Assert
-  assert.equal(none.kind, PR_VIEW.NO_FOLDER);
-  assert.equal(remote.kind, PR_VIEW.REMOTE);
-  assert.equal(calls.length, 0);
-});
+    // Assert
+    assert.equal(view.kind, kind);
+    assert.equal(calls.length, 0);
+  });
+}
 
-test("gh missing or signed out reaches the view as the problem to fix", async () => {
-  // Arrange
-  const missing = repoWorld({ gh: new Error("not found") });
-  const signedOut = repoWorld({ gh: { code: 4, stdout: "", stderr: "please run: gh auth login" } });
+for (const [what, gh, problem] of [
+  ["gh missing", new Error("not found"), GH_PROBLEM.MISSING],
+  ["gh signed out", { code: 4, stdout: "", stderr: "please run: gh auth login" }, GH_PROBLEM.SIGNED_OUT],
+]) {
+  test(`${what} reaches the view as the problem to fix`, async () => {
+    // Arrange
+    const { exec } = repoWorld({ gh });
 
-  // Act
-  const a = await loadPr(missing.exec, at, { cache: false });
-  const b = await loadPr(signedOut.exec, at, { cache: false });
+    // Act
+    const view = await loadPr(exec, at, { cache: false });
 
-  // Assert
-  assert.equal(a.kind, PR_VIEW.GH_PROBLEM);
-  assert.equal(a.problem, GH_PROBLEM.MISSING);
-  assert.equal(b.kind, PR_VIEW.GH_PROBLEM);
-  assert.equal(b.problem, GH_PROBLEM.SIGNED_OUT);
-});
+    // Assert
+    assert.equal(view.kind, PR_VIEW.GH_PROBLEM);
+    assert.equal(view.problem, problem);
+  });
+}

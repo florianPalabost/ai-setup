@@ -86,7 +86,7 @@ test("a load that throws becomes an error result", async () => {
   assert.deepEqual(slot.value, { kind: LOAD_VIEW.ERROR, message: "no such folder" });
 });
 
-test("the version moves only when the result changed, so a same answer causes no redraw", async () => {
+test("a same answer leaves the version alone, so it causes no redraw", async () => {
   // Arrange
   const slot = sharedSlot("pr", {});
   await startRefresh(slot, "view", async () => ({ kind: "pr", n: 1 }));
@@ -94,11 +94,21 @@ test("the version moves only when the result changed, so a same answer causes no
 
   // Act
   await startRefresh(slot, "view", async () => ({ kind: "pr", n: 1 }));
-  const same = slot.version;
+
+  // Assert
+  assert.equal(slot.version, before);
+});
+
+test("a new answer moves the version", async () => {
+  // Arrange
+  const slot = sharedSlot("pr", {});
+  await startRefresh(slot, "view", async () => ({ kind: "pr", n: 1 }));
+  const before = slot.version;
+
+  // Act
   await startRefresh(slot, "view", async () => ({ kind: "pr", n: 2 }));
 
   // Assert
-  assert.equal(same, before);
   assert.equal(slot.version, before + 1);
 });
 
