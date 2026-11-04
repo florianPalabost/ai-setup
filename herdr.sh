@@ -6,6 +6,7 @@
 # is kept as patches in herdr/patches/ and built into real files here, from
 # whatever the installed herdr ships (docs/adr/0002). A build checks its patch
 # against the shipped file first, so a patch that no longer applies changes nothing.
+# Install builds what's missing. Update also rebuilds what another herdr version built.
 
 HERDR_HOME="${HERDR_APP_HOME:-$HOME/.config/herdr-app}"
 # herdr-app must ask the window of the home this script writes to.
@@ -235,18 +236,60 @@ build_layout() {
   info "built $HERDR_LAYOUT from $HERDR_LAYOUT_SHIPPED"
 }
 
-# Whether everything the layout depends on is already there.
+# The version the clone's JSON file $1 records, empty if it records none.
+cloned_from_version() {
+  python3 - "$1" <<'PY'
+import json, sys
+
+try:
+    print(json.load(open(sys.argv[1]))["cloned_from"]["version"])
+except (OSError, ValueError, KeyError, TypeError):
+    print("")
+PY
+}
+
+# Whether this is an update and $2, the version the build $1 came from, isn't the
+# running herdr's. Says so, which is what a dry run reports.
+outdated() {
+  local what="$1" recorded="$2" running
+  ((UPDATE)) || return 1
+  running="$(herdr_version)"
+  [[ "$recorded" != "$running" ]] || return 1
+  info "$what came from herdr ${recorded:-of unknown version}, running $running"
+}
+
+changes_outdated() {
+  [[ -f "$HERDR_CHANGES_JS" ]] || return 1
+  outdated "Changes code" "$(sed -n "s|^// $HERDR_VERSION_MARK ||p" "$HERDR_CHANGES_JS")"
+}
+
+mod_clone_outdated() {
+  [[ -d "$HERDR_HOME/mods/$1" ]] || return 1
+  outdated "$1" "$(cloned_from_version "$HERDR_HOME/mods/$1/mod.json")"
+}
+
+layout_outdated() {
+  [[ -f "$HERDR_HOME/layouts/$HERDR_LAYOUT.json" ]] || return 1
+  outdated "$HERDR_LAYOUT" "$(cloned_from_version "$HERDR_HOME/layouts/$HERDR_LAYOUT.json")"
+}
+
+# Whether everything the layout depends on is there, built from the right herdr.
 herdr_all_built() {
   local spec _shipped clone _patch
   [[ -f "$HERDR_CHANGES_JS" && -f "$HERDR_HOME/layouts/$HERDR_LAYOUT.json" ]] || return 1
+  changes_outdated >/dev/null && return 1
+  layout_outdated >/dev/null && return 1
   for spec in "${HERDR_MOD_CLONES[@]}"; do
     read -r _shipped clone _patch <<<"$spec"
     [[ -d "$HERDR_HOME/mods/$clone" ]] || return 1
+    mod_clone_outdated "$clone" >/dev/null && return 1
   done
+  return 0
 }
 
-# Build whatever is missing, then show the layout. Stays on the current layout
-# if a piece can't be built and has no earlier build.
+# Build whatever is missing and, on an update, rebuild whatever an older herdr
+# built, then show the layout. Stays on the current layout if a piece can't be
+# built and has no earlier build; a piece with an earlier build keeps it.
 install_herdr() {
   log "Herdr Git panel ($HERDR_HOME)"
   require herdr-app "Git panel" || return 0
@@ -273,17 +316,22 @@ install_herdr() {
     info "[dry-run] herdr isn't open: a real run would stop here and ask for it"
   fi
 
+  # Shipped files are only this version's once its window has started, so this
+  # waits for the window even though it doesn't go through it.
+  if changes_outdated; then
+    build_changes || true
+  fi
   for spec in "${HERDR_MOD_CLONES[@]}"; do
     read -r shipped clone patch <<<"$spec"
-    if [[ ! -d "$HERDR_HOME/mods/$clone" ]]; then
-      build_mod_clone "$shipped" "$clone" "$patch" || ready=0
+    if [[ ! -d "$HERDR_HOME/mods/$clone" ]] || mod_clone_outdated "$clone"; then
+      build_mod_clone "$shipped" "$clone" "$patch" || [[ -d "$HERDR_HOME/mods/$clone" ]] || ready=0
     fi
   done
   if ((!ready)); then
     return 0
   fi
-  if [[ ! -f "$HERDR_HOME/layouts/$HERDR_LAYOUT.json" ]]; then
-    build_layout || return 0
+  if [[ ! -f "$HERDR_HOME/layouts/$HERDR_LAYOUT.json" ]] || layout_outdated; then
+    build_layout || [[ -f "$HERDR_HOME/layouts/$HERDR_LAYOUT.json" ]] || return 0
   fi
   if [[ "$(herdr_shown_layout)" != "$HERDR_LAYOUT" ]]; then
     run herdr-app do layout.switch "{\"name\":\"$HERDR_LAYOUT\"}"
