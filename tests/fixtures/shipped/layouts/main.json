@@ -1,0 +1,16 @@
+{
+  "id": "root",
+  "type": "row",
+  "children": [
+    { "id": "tabs", "type": "block", "content": { "mod": "tabs" } },
+    {
+      "id": "panel-body",
+      "type": "stack",
+      "active": "files",
+      "children": [
+        { "id": "files", "type": "block", "content": { "mod": "files" } },
+        { "id": "changes", "type": "block", "content": { "mod": "changes" } }
+      ]
+    }
+  ]
+}

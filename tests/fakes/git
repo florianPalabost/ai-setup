@@ -1,0 +1,7 @@
+#!/bin/sh
+# Stands in for git in install tests: nothing is cloned from the network, the
+# rest goes to the real git, named by $REAL_GIT.
+case "$1" in
+  clone) exit 0 ;;
+  *) exec "$REAL_GIT" "$@" ;;
+esac

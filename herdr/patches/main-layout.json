@@ -1,0 +1,6 @@
+{
+  "blocks": {
+    "tabs": { "from": "tabs", "to": "tabs-git" },
+    "changes": { "from": "changes", "to": "git" }
+  }
+}

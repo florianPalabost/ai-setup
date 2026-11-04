@@ -14,6 +14,17 @@ paste-cache/
 cache/
 debug/
 
+# herdr: only own mods and patches are tracked. keys.json, settings.json and
+# whatever herdr writes stay machine-local, including what it writes into a
+# linked mod's folder, and the generated Changes code.
+/herdr/*
+!/herdr/mods/
+!/herdr/patches/
+/herdr/mods/git/changes.js
+/herdr/mods/*/gpui-kit.d.ts
+/herdr/mods/*/jsconfig.json
+/herdr/mods/*/*.error
+
 # OS / editor
 .DS_Store
 .idea/

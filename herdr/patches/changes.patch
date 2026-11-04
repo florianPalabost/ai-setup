@@ -1,0 +1,14 @@
+--- a/main.js
++++ b/main.js
+@@ -11 +11 @@
+-const key = () => JSON.stringify(location());
++export const key = () => JSON.stringify(location());
+@@ -31 +31 @@
+-export default class Changes extends View {
++export class Changes {
+@@ -183 +183 @@
+-      .child(h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
++      .when(!this.embedded, (el) => el.child(h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
+@@ -186 +186 @@
+-        .child(div().flex_1()).child(div().text_size(11).text_color(t.ansi2).child(`+${add}`)).child(div().text_size(11).text_color(t.ansi1).child(`−${del}`)))
++        .child(div().flex_1()).child(div().text_size(11).text_color(t.ansi2).child(`+${add}`)).child(div().text_size(11).text_color(t.ansi1).child(`−${del}`))))
