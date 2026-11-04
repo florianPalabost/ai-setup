@@ -138,7 +138,15 @@ function repoWorld({ head = "feat/x", remotes = "origin\thttps://github.com/me/r
   return { exec, calls, ghCalls: () => calls.filter((c) => c.command === "gh") };
 }
 
-const answer = (nodes) => ({ code: 0, stdout: JSON.stringify({ data: { repository: { pullRequests: { nodes } } } }), stderr: "" });
+// What GitHub answers: `open` and `ended` hang off the pushed branch. For a branch
+// no longer on GitHub, `authored` is the head owner's PRs by that name and `deleted`
+// the base repo's list by name.
+const data = ({ open = [], ended = [], authored = [], deleted = [] } = {}) => ({
+  head: { ref: { open: { nodes: open }, ended: { nodes: ended } } },
+  authored: { nodes: authored },
+  base: { ended: { nodes: deleted } },
+});
+const answer = (lists) => ({ code: 0, stdout: JSON.stringify({ data: data(lists) }), stderr: "" });
 const prNode = {
   number: 12, title: "Add it", url: "https://github.com/me/repo/pull/12", state: "OPEN", isDraft: false,
   reviewDecision: "APPROVED", mergeStateStatus: "CLEAN", headRepositoryOwner: { login: "me" },
@@ -148,7 +156,7 @@ const at = { cwd: "/repo/sub", on: null };
 
 test("the PR of the branch comes back with its state and checks", async () => {
   // Arrange
-  const { exec } = repoWorld({ gh: answer([prNode]) });
+  const { exec } = repoWorld({ gh: answer({ open: [prNode] }) });
 
   // Act
   const view = await loadPr(exec, at, { cache: false });
@@ -166,7 +174,7 @@ test("the PR of the branch comes back with its state and checks", async () => {
 
 test("one view makes one gh call, and only a read", async () => {
   // Arrange
-  const { exec, ghCalls } = repoWorld({ gh: answer([prNode]) });
+  const { exec, ghCalls } = repoWorld({ gh: answer({ open: [prNode] }) });
 
   // Act
   await loadPr(exec, at, { cache: true });
@@ -180,8 +188,8 @@ test("one view makes one gh call, and only a read", async () => {
 
 test("a view may use gh's cache, and a refresh after a cd doesn't", async () => {
   // Arrange
-  const cached = repoWorld({ gh: answer([]) });
-  const fresh = repoWorld({ gh: answer([]) });
+  const cached = repoWorld({ gh: answer({}) });
+  const fresh = repoWorld({ gh: answer({}) });
 
   // Act
   await loadPr(cached.exec, at, { cache: true });
@@ -194,7 +202,7 @@ test("a view may use gh's cache, and a refresh after a cd doesn't", async () => 
 
 test("the query looks in the repo and branch the folder is on", async () => {
   // Arrange
-  const { exec, ghCalls } = repoWorld({ gh: answer([]) });
+  const { exec, ghCalls } = repoWorld({ gh: answer({}) });
 
   // Act
   await loadPr(exec, at, { cache: false });
@@ -207,23 +215,80 @@ test("the query looks in the repo and branch the folder is on", async () => {
   assert.equal(options.cwd, "/repo");
 });
 
-test("a fork's PR is looked up on upstream, filtered by the owner pushed to", async () => {
+test("a fork's PR is looked up from the branch it pushes to, whatever else upstream has by that name", async () => {
   // Arrange
   const remotes = "origin\tgit@github.com:me/repo.git (fetch)\nupstream\thttps://github.com/big/repo.git (fetch)\n";
-  const stranger = { ...prNode, number: 99, headRepositoryOwner: { login: "stranger" } };
-  const { exec, ghCalls } = repoWorld({ remotes, gh: answer([stranger, prNode]) });
+  const { exec, ghCalls } = repoWorld({ remotes, gh: answer({ open: [prNode] }) });
 
   // Act
   const view = await loadPr(exec, at, { cache: false });
 
   // Assert
-  assert.ok(ghCalls()[0].args.includes("owner=big"));
+  const { args } = ghCalls()[0];
+  assert.ok(args.includes("headOwner=me"));
+  assert.ok(args.includes("headName=repo"));
+  assert.ok(args.includes("ref=refs/heads/feat/x"));
+  assert.ok(args.includes("owner=big"));
   assert.equal(view.pr.number, 12);
+});
+
+test("an older open PR wins over a newer closed one on the same branch", async () => {
+  // Arrange
+  const closed = { ...prNode, number: 30, state: "CLOSED" };
+  const { exec } = repoWorld({ gh: answer({ open: [prNode], ended: [closed] }) });
+
+  // Act
+  const view = await loadPr(exec, at, { cache: false });
+
+  // Assert
+  assert.equal(view.pr.number, 12);
+});
+
+test("a merged PR whose branch was deleted is still found, among others' by that name", async () => {
+  // Arrange
+  const stranger = { ...prNode, number: 99, state: "MERGED", headRepositoryOwner: { login: "stranger" } };
+  const merged = { ...prNode, number: 40, state: "MERGED" };
+  const noBranch = { ...data({ deleted: [stranger, merged] }), head: { ref: null } };
+  const { exec } = repoWorld({ gh: { code: 0, stdout: JSON.stringify({ data: noBranch }), stderr: "" } });
+
+  // Act
+  const view = await loadPr(exec, at, { cache: false });
+
+  // Assert
+  assert.equal(view.pr.number, 40);
+});
+
+test("on a busy upstream, a deleted branch's PR is found among the head owner's", async () => {
+  // Arrange
+  const stranger = { ...prNode, number: 99, state: "MERGED", headRepositoryOwner: { login: "stranger" } };
+  const merged = { ...prNode, number: 40, state: "MERGED" };
+  const noBranch = { ...data({ authored: [merged], deleted: [stranger] }), head: { ref: null } };
+  const { exec, ghCalls } = repoWorld({ gh: { code: 0, stdout: JSON.stringify({ data: noBranch }), stderr: "" } });
+
+  // Act
+  const view = await loadPr(exec, at, { cache: false });
+
+  // Assert
+  assert.ok(ghCalls()[0].args.includes("authored=repo:me/repo is:pr head:feat/x author:me sort:updated-desc"));
+  assert.equal(view.pr.number, 40);
+});
+
+test("with the pushed-to repo gone, the base repo's answer still counts", async () => {
+  // Arrange: gh exits 1 and prints what it did find
+  const merged = { ...prNode, number: 40, state: "MERGED" };
+  const stdout = JSON.stringify({ data: { head: null, base: data({ deleted: [merged] }).base }, errors: [{ type: "NOT_FOUND", path: ["head"] }] });
+  const { exec } = repoWorld({ gh: { code: 1, stdout, stderr: "gh: Could not resolve to a Repository" } });
+
+  // Act
+  const view = await loadPr(exec, at, { cache: false });
+
+  // Assert
+  assert.equal(view.pr.number, 40);
 });
 
 test("no PR offers the compare page to create one", async () => {
   // Arrange
-  const { exec } = repoWorld({ gh: answer([]) });
+  const { exec } = repoWorld({ gh: answer({}) });
 
   // Act
   const view = await loadPr(exec, at, { cache: false });
@@ -236,7 +301,7 @@ test("no PR offers the compare page to create one", async () => {
 test("no PR from a fork compares across owners", async () => {
   // Arrange
   const remotes = "origin\tgit@github.com:me/repo.git (fetch)\nupstream\thttps://github.com/big/repo.git (fetch)\n";
-  const { exec } = repoWorld({ remotes, gh: answer([]) });
+  const { exec } = repoWorld({ remotes, gh: answer({}) });
 
   // Act
   const view = await loadPr(exec, at, { cache: false });
@@ -248,7 +313,7 @@ test("no PR from a fork compares across owners", async () => {
 test("a remote that isn't GitHub is named, with no gh call", async () => {
   // Arrange
   const remotes = "origin\thttps://gitlab.com/me/repo.git (fetch)\n";
-  const { exec, ghCalls } = repoWorld({ remotes, gh: answer([]) });
+  const { exec, ghCalls } = repoWorld({ remotes, gh: answer({}) });
 
   // Act
   const view = await loadPr(exec, at, { cache: false });
@@ -263,7 +328,7 @@ test("a remote that isn't GitHub is named, with no gh call", async () => {
 test("a token inside a remote URL never reaches the view", async () => {
   // Arrange
   const remotes = "origin\thttps://me:s3cret@gitlab.com/me/repo.git (fetch)\n";
-  const { exec } = repoWorld({ remotes, gh: answer([]) });
+  const { exec } = repoWorld({ remotes, gh: answer({}) });
 
   // Act
   const view = await loadPr(exec, at, { cache: false });
@@ -275,7 +340,7 @@ test("a token inside a remote URL never reaches the view", async () => {
 test("the branch's own remote decides, over origin", async () => {
   // Arrange
   const remotes = "origin\thttps://gitlab.com/me/repo.git (fetch)\nhub\thttps://github.com/me/repo.git (fetch)\n";
-  const { exec, ghCalls } = repoWorld({ remotes, branchRemote: "hub\n", gh: answer([prNode]) });
+  const { exec, ghCalls } = repoWorld({ remotes, branchRemote: "hub\n", gh: answer({ open: [prNode] }) });
 
   // Act
   const view = await loadPr(exec, at, { cache: false });
@@ -287,7 +352,7 @@ test("the branch's own remote decides, over origin", async () => {
 
 test("a folder outside git says so, with no gh call", async () => {
   // Arrange
-  const { exec, ghCalls } = repoWorld({ gitFails: true, gh: answer([]) });
+  const { exec, ghCalls } = repoWorld({ gitFails: true, gh: answer({}) });
 
   // Act
   const view = await loadPr(exec, at, { cache: false });
@@ -299,7 +364,7 @@ test("a folder outside git says so, with no gh call", async () => {
 
 test("detached HEAD has no branch to look up", async () => {
   // Arrange
-  const { exec, ghCalls } = repoWorld({ head: "", gh: answer([]) });
+  const { exec, ghCalls } = repoWorld({ head: "", gh: answer({}) });
 
   // Act
   const view = await loadPr(exec, at, { cache: false });
@@ -311,7 +376,7 @@ test("detached HEAD has no branch to look up", async () => {
 
 test("a space with no folder or on another machine makes no call at all", async () => {
   // Arrange
-  const { exec, calls } = repoWorld({ gh: answer([]) });
+  const { exec, calls } = repoWorld({ gh: answer({}) });
 
   // Act
   const none = await loadPr(exec, { cwd: null, on: null }, { cache: false });

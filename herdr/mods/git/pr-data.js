@@ -5,22 +5,34 @@ import { ghGraphql } from "./gh.js";
 const CHECKS_FETCHED = 100;
 const CACHE_FOR = "30s"; // Under the shortest timer, and shared by every mod copy.
 
-const QUERY = `query PrForBranch($owner: String!, $name: String!, $branch: String!) {
-  repository(owner: $owner, name: $name) {
-    pullRequests(headRefName: $branch, first: 10, states: [OPEN, MERGED, CLOSED],
-                 orderBy: {field: UPDATED_AT, direction: DESC}) {
-      nodes {
-        number title url state isDraft reviewDecision mergeStateStatus
-        headRepositoryOwner { login }
-        commits(last: 1) { nodes { commit { statusCheckRollup { state
-          contexts(first: ${CHECKS_FETCHED}) { totalCount nodes {
-            __typename
-            ... on CheckRun { name status conclusion detailsUrl }
-            ... on StatusContext { context state targetUrl }
-          } } } } } }
-      }
+const LIST_FETCHED = 10;
+
+// Asked from the pushed branch, so nobody else's PR with that name can crowd ours
+// out: a busy upstream has hundreds called patch-1. A branch deleted after its PR
+// ended has no ref left, so two lists cover that: the head owner's PRs by that name,
+// and the base repo's latest by name, for an organisation's branch someone else
+// opened the PR from. A longer list with checks makes GitHub answer HTTP 502.
+const QUERY = `query PrForBranch($owner: String!, $name: String!, $branch: String!, $headOwner: String!, $headName: String!, $ref: String!, $authored: String!) {
+  head: repository(owner: $headOwner, name: $headName) {
+    ref(qualifiedName: $ref) {
+      open: associatedPullRequests(states: [OPEN], first: ${LIST_FETCHED}, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { ...Pr } }
+      ended: associatedPullRequests(states: [MERGED, CLOSED], first: ${LIST_FETCHED}, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { ...Pr } }
     }
   }
+  authored: search(type: ISSUE, query: $authored, first: ${LIST_FETCHED}) { nodes { ...Pr } }
+  base: repository(owner: $owner, name: $name) {
+    ended: pullRequests(headRefName: $branch, states: [MERGED, CLOSED], first: ${LIST_FETCHED}, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { ...Pr } }
+  }
+}
+fragment Pr on PullRequest {
+  number title url state isDraft reviewDecision mergeStateStatus
+  headRepositoryOwner { login }
+  commits(last: 1) { nodes { commit { statusCheckRollup { state
+    contexts(first: ${CHECKS_FETCHED}) { totalCount nodes {
+      __typename
+      ... on CheckRun { name status conclusion detailsUrl }
+      ... on StatusContext { context state targetUrl }
+    } } } } } }
 }`;
 
 // What the section can be showing: `kind` of each result of loadPr.
@@ -57,12 +69,14 @@ export function parseRemote(url) {
 
 const withoutCredentials = (url) => url.replace(/^([a-z+]+:\/\/)[^@/]+@/i, "$1");
 
-// A branch name alone matches other people's forks too. The list arrives most
-// recently updated first.
+// A branch name alone matches other people's forks too. Each list arrives most
+// recently updated first, and those on the pushed branch come ahead of the others.
 export function pickPr(nodes, headOwner) {
   const mine = nodes.filter((n) => n.headRepositoryOwner?.login?.toLowerCase() === headOwner.toLowerCase());
   return mine.find((n) => n.state === "OPEN") ?? mine[0];
 }
+
+const candidates = ({ head, authored, base }) => [head?.ref?.open, head?.ref?.ended, authored, base?.ended].flatMap((list) => list?.nodes ?? []);
 
 const FAILING = new Set(["FAILURE", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE", "STALE", "ERROR"]);
 const PASSING = new Set(["SUCCESS", "NEUTRAL"]);
@@ -126,11 +140,14 @@ export async function loadPr(exec, { cwd, on }, { cache }) {
 
   const result = await ghGraphql(exec, {
     query: QUERY, cwd: root, cache: cache ? CACHE_FOR : null,
-    vars: { owner: base.owner, name: base.name, branch },
+    vars: {
+      owner: base.owner, name: base.name, branch, headOwner: head.owner, headName: head.name, ref: `refs/heads/${branch}`,
+      authored: `repo:${base.owner}/${base.name} is:pr head:${branch} author:${head.owner} sort:updated-desc`,
+    },
   });
   if (!result.ok) return { kind: PR_VIEW.GH_PROBLEM, problem: result.problem, message: result.message };
 
-  const pr = pickPr(result.data?.repository?.pullRequests?.nodes ?? [], head.owner);
+  const pr = pickPr(candidates(result.data ?? {}), head.owner);
   if (!pr) return { kind: PR_VIEW.NO_PR, branch, compareUrl: compareUrl(base, head, branch) };
   return {
     kind: PR_VIEW.PR,
