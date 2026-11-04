@@ -4,13 +4,13 @@
 # Idempotent: safe to re-run. It only adds or links things; anything it would
 # replace is moved to a timestamped backup directory first, never deleted. The
 # only exception is the skill mirrors it generates itself, kept in sync in place.
-# Rules, plugins and skills that an earlier version of this repo installed but
-# the current one dropped are listed, and removed only after you confirm.
+# Rules, plugins, skills and herdr mods that an earlier version of this repo
+# installed but the current one dropped are listed, and removed only after you confirm.
 #
 # --update also pulls this repo, then moves every user-scope plugin,
 # marketplace and third-party skill to its latest upstream version.
 #
-# With herdr open, it also sets up the Git panel (see herdr.sh).
+# Where there's a display, it also installs herdr and sets up its Git panel (see herdr.sh).
 #
 # Usage: ./install.sh [--update] [--dry-run]
 
@@ -544,7 +544,7 @@ prune_stale() {
   require git "leftover check" || return 0
 
   local entries
-  entries="$(stale_entries)"
+  entries="$(stale_entries && herdr_stale_entries)"
   if [[ -z "$entries" ]]; then
     info "none"
     return 0
@@ -555,6 +555,11 @@ prune_stale() {
 
   if ((DRY_RUN)); then
     info "[dry-run] would ask to remove these"
+    local showing
+    showing="$(herdr_dropped_layout_showing "$entries")"
+    if [[ -n "$showing" ]]; then
+      info "[dry-run] $showing is showing: herdr would leave it before it is removed"
+    fi
     return 0
   fi
   if [[ ! -t 0 ]]; then
@@ -562,10 +567,14 @@ prune_stale() {
     return 0
   fi
   local reply
-  read -r -p "    Remove these? Skills and links are moved to the backup dir. [y/N] " reply
+  read -r -p "    Remove these? Skills, links and herdr files are moved to the backup dir. [y/N] " reply
   if [[ "$reply" != [yY]* ]]; then
     info "kept"
     return 0
+  fi
+
+  if ! herdr_leave_dropped_layout "$entries"; then
+    entries="$(grep -v '^herdr-' <<<"$entries" || true)"
   fi
 
   local rules
@@ -576,7 +585,7 @@ prune_stale() {
       plugin)
         claude plugin uninstall --scope user "$entry" && PLUGINS_CHANGED=1 && info "uninstalled $entry"
         ;;
-      skill | link) backup "$entry" ;;
+      skill | link | herdr-mod | herdr-layout) backup "$entry" ;;
     esac
   done <<<"$entries"
   # Mirrors of the skills just removed
@@ -684,6 +693,7 @@ main() {
   [[ -d "$BACKUP_DIR" ]] && log "Backups saved in $BACKUP_DIR"
   log "Done"
   ((PLUGINS_CHANGED)) && warn "plugins were updated: restart Claude Code to apply"
+  remind_gh_sign_in
   return 0
 }
 

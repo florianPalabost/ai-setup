@@ -3,22 +3,54 @@
 #
 # Every install runs under `env -i` with a throwaway HOME, so nothing inherited
 # can lead it to the real one: not HOME, CLAUDE_CONFIG_DIR, XDG_DATA_HOME or
-# HERDR_APP_HOME. herdr-app, claude and npx are the fakes in tests/fakes, and the
-# real ones aren't on PATH.
+# HERDR_APP_HOME. herdr-app, claude, npx and everything that installs software are
+# the fakes in tests/fakes, and the real ones aren't on PATH: see system_tools.
 
 TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(dirname "$TESTS_DIR")"
 REAL_GIT="$(command -v git)"
-SYSTEM_PATH="/usr/bin:/bin"
 FAILED=0
 RAN=0
+
+# A directory of links to the system's commands, leaving out anything that could
+# install software or reach the real herdr. A test that forgets a fake then finds
+# no command, rather than running the real installer, apt or sudo.
+system_tools() {
+  local src tools=()
+  SYSTEM_TOOLS="$(mktemp -d)"
+  for src in /usr/bin/* /bin/*; do
+    case "${src##*/}" in
+      herdr-app | herdr-core | hc | gh | curl | wget | sudo | apt | apt-get | brew | winget | powershell | pwsh) ;;
+      *) tools+=("$src") ;;
+    esac
+  done
+  ln -sf "${tools[@]}" "$SYSTEM_TOOLS/"
+}
+system_tools
 
 new_sandbox() {
   SANDBOX="$(mktemp -d)"
   SANDBOX_HOME="$SANDBOX/home"
   HERDR="$SANDBOX_HOME/.config/herdr-app"
   mkdir -p "$SANDBOX_HOME" "$SANDBOX/bin"
-  cp "$TESTS_DIR/fakes/herdr-app" "$TESTS_DIR/fakes/claude" "$TESTS_DIR/fakes/npx" "$TESTS_DIR/fakes/git" "$SANDBOX/bin/"
+  cp "$TESTS_DIR/fakes/herdr-app" "$TESTS_DIR/fakes/claude" "$TESTS_DIR/fakes/npx" "$TESTS_DIR/fakes/git" \
+    "$TESTS_DIR/fakes/uname" "$TESTS_DIR/fakes/gh" "$TESTS_DIR/fakes/curl" "$SANDBOX/bin/"
+}
+
+# Put fakes from tests/fakes on PATH that most tests must not have, such as the
+# package managers. Each logs its calls to $SANDBOX/tool-calls.log.
+give_tools() {
+  local tool
+  for tool in "$@"; do
+    cp "$TESTS_DIR/fakes/$tool" "$SANDBOX/bin/"
+  done
+}
+
+# A machine with no herdr. The fake curl serves an installer that puts this
+# herdr-app in ~/.local/bin, as the official one does.
+herdr_not_installed() {
+  mkdir -p "$SANDBOX/installable"
+  mv "$SANDBOX/bin/herdr-app" "$SANDBOX/installable/herdr-app"
 }
 
 # A copy of the repo's scripts and herdr files, for a run that writes into the
@@ -41,7 +73,10 @@ herdr_with_window() {
 }
 
 in_sandbox() {
-  env -i HOME="$SANDBOX_HOME" PATH="$SANDBOX/bin:$SYSTEM_PATH" REAL_GIT="$REAL_GIT" \
+  env -i HOME="$SANDBOX_HOME" PATH="$SANDBOX/bin:$SYSTEM_TOOLS" REAL_GIT="$REAL_GIT" \
+    DISPLAY="${FAKE_DISPLAY-:0}" WAYLAND_DISPLAY="${FAKE_WAYLAND_DISPLAY-}" \
+    FAKE_UNAME="${FAKE_UNAME:-Linux}" FAKE_SANDBOX="$SANDBOX" FAKE_SHIPPED="$TESTS_DIR/fixtures/shipped" \
+    HERDR_WINDOW_WAIT_SECS=2 HERDR_STATUS_CALL_SECS=1 \
     FAKE_HERDR_VERSION="${FAKE_HERDR_VERSION:-0.1.12}" "$@"
 }
 
@@ -137,6 +172,7 @@ test_case() {
 }
 
 finish() {
+  rm -rf "$SYSTEM_TOOLS"
   printf '%d run, %d failed\n' "$RAN" "$FAILED"
   ((FAILED == 0))
 }

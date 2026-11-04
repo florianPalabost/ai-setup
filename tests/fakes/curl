@@ -1,0 +1,21 @@
+#!/bin/sh
+# Stands in for curl in install tests: never touches the network. Writes to its -o
+# file an installer that puts $FAKE_SANDBOX/installable/herdr-app in ~/.local/bin.
+# Fails if $FAKE_SANDBOX/curl-fails exists; the installer does if installer-fails does.
+EXIT_CURL_HTTP_ERROR=22
+
+echo "curl $*" >>"$FAKE_SANDBOX/tool-calls.log"
+[ ! -e "$FAKE_SANDBOX/curl-fails" ] || exit "$EXIT_CURL_HTTP_ERROR"
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -o) out="$2"; shift ;;
+  esac
+  shift
+done
+cat >"$out" <<'INSTALLER'
+#!/bin/sh
+echo "fake herdr installer ran" >>"$FAKE_SANDBOX/tool-calls.log"
+[ ! -e "$FAKE_SANDBOX/installer-fails" ] || exit 1
+mkdir -p "$HOME/.local/bin"
+cp "$FAKE_SANDBOX/installable/herdr-app" "$HOME/.local/bin/herdr-app"
+INSTALLER

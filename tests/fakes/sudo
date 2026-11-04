@@ -1,0 +1,5 @@
+#!/bin/sh
+# Stands in for sudo in install tests: logs the call and never runs anything as
+# root. Needs a password if $FAKE_SANDBOX/sudo-wants-password exists.
+echo "sudo $*" >>"$FAKE_SANDBOX/tool-calls.log"
+[ ! -e "$FAKE_SANDBOX/sudo-wants-password" ]

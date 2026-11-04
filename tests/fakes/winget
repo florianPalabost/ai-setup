@@ -1,0 +1,5 @@
+#!/bin/sh
+# Stands in for winget in install tests: logs the call, and refuses if
+# $FAKE_SANDBOX/winget-fails exists.
+echo "winget $*" >>"$FAKE_SANDBOX/tool-calls.log"
+[ ! -e "$FAKE_SANDBOX/winget-fails" ]

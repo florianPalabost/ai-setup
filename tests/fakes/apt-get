@@ -1,0 +1,4 @@
+#!/bin/sh
+# Stands in for apt-get in install tests. Only ever reached by name: the fake sudo
+# runs nothing, so a test sees the apt call in sudo's log line.
+echo "apt-get $*" >>"$FAKE_SANDBOX/tool-calls.log"

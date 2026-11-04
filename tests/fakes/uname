@@ -1,0 +1,3 @@
+#!/bin/sh
+# Stands in for uname in install tests: the platform is whatever the test says.
+echo "$FAKE_UNAME"
