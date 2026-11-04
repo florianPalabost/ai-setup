@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { GH_PROBLEM } from "../herdr/mods/git/gh.js";
 import { LOAD_VIEW } from "../herdr/mods/git/shared-result.js";
 import { PRS_VIEW } from "../herdr/mods/git/prs-data.js";
-import { PRS_INTERVAL_MS, ago, checksMark, listNote, prsEmptyText, prsSummary, reviewWord, since } from "../herdr/mods/git/prs-text.js";
+import { ago, checksMark, listNote, prsEmptyText, prsInterval, prsSummary, reviewWord, since } from "../herdr/mods/git/prs-text.js";
 
 const SECOND = 1000, MINUTE = 60 * SECOND, HOUR = 60 * MINUTE, DAY = 24 * HOUR;
 const NOW = 1_000_000_000_000;
@@ -85,6 +85,24 @@ test("the review decision reads in one word, and none shows nothing", () => {
   assert.equal(reviewWord(null), null);
 });
 
-test("the list refreshes every five minutes", () => {
-  assert.equal(PRS_INTERVAL_MS, 5 * MINUTE);
+const withChecks = (checks) => ({ ...list(1), groups: [{ id: "wait", rows: [{ checks }] }] });
+
+test("the timer runs each minute while any row's checks are pending", () => {
+  assert.equal(prsInterval(withChecks("PENDING")), MINUTE);
+});
+
+test("the timer treats expected checks as pending", () => {
+  assert.equal(prsInterval(withChecks("EXPECTED")), MINUTE);
+});
+
+test("the timer runs every five minutes with nothing pending", () => {
+  assert.equal(prsInterval(withChecks("FAILURE")), 5 * MINUTE);
+});
+
+test("the timer runs every five minutes before any answer", () => {
+  assert.equal(prsInterval(null), 5 * MINUTE);
+});
+
+test("the timer runs every five minutes after a problem", () => {
+  assert.equal(prsInterval(problem(GH_PROBLEM.SIGNED_OUT)), 5 * MINUTE);
 });

@@ -1,16 +1,15 @@
 // The My PRs & reviews section: what's waiting on me across all of github.com.
 import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { exec, theme, window } from "herdr";
+import * as herdr from "herdr";
 import { openUrl } from "./links.js";
+import { here, placeKey } from "./location.js";
 import { PRS_VIEW, loadMyPrs } from "./prs-data.js";
-import { PRS_INTERVAL_MS, ago, checksMark, listNote, prsEmptyText, prsSummary, reviewWord } from "./prs-text.js";
+import { ago, checksMark, listNote, prsEmptyText, prsInterval, prsSummary, reviewWord } from "./prs-text.js";
 import { SlotWatcher, refreshDue, sharedSlot, startRefresh } from "./shared-result.js";
 
 const SLOT = "prs";
-// The list isn't tied to a space or branch, so there is one view.
-const VIEW_KEY = "mine";
-// Only decides whether something is due; the calls follow PRS_INTERVAL_MS.
+// Only decides whether something is due; the calls follow prsInterval.
 const TICK_MS = 15000;
 
 class MyPrs {
@@ -26,11 +25,12 @@ class MyPrs {
   }
 
   // Runs from every panel render and timer tick, in every copy, open or collapsed,
-  // since the collapsed header needs the count too.
+  // since the collapsed header needs the count too. The list isn't tied to a place,
+  // but a cd or branch change is when a fresh push may have moved it.
   follow(cx) {
-    const { slot } = this;
-    const due = refreshDue(slot, VIEW_KEY, { active: window()?.active ?? true, now: Date.now(), interval: PRS_INTERVAL_MS });
-    if (due) startRefresh(slot, VIEW_KEY, () => loadMyPrs(exec, due));
+    const { slot } = this, key = placeKey(here(herdr));
+    const due = refreshDue(slot, key, { active: herdr.window()?.active ?? true, now: Date.now(), interval: prsInterval(slot.value) });
+    if (due) startRefresh(slot, key, () => loadMyPrs(herdr.exec, due));
     this.watcher.watch(cx);
   }
 
@@ -68,7 +68,7 @@ class MyPrs {
   }
 
   render() {
-    const t = theme(), view = this.slot.value, now = Date.now();
+    const t = herdr.theme(), view = this.slot.value, now = Date.now();
     this.watcher.markSeen();
     this.shownEmptyText = null;
     if (view?.kind !== PRS_VIEW.LIST || view.total === 0) {

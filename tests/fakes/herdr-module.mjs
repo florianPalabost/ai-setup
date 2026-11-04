@@ -6,11 +6,11 @@ import { spawnSync } from "node:child_process";
 const color = new Proxy({}, { get: () => "#000000" });
 
 export const world = {
-  spaces: [], panes: [], focused: null, props: {}, shared: {}, runs: [], execs: [], overlays: [], notes: [], windowActive: true, execGate: null,
+  spaces: [], panes: [], focused: null, props: {}, shared: {}, runs: [], execs: [], overlays: [], notes: [], windowActive: true, execGate: null, execAnswer: null,
 };
 
 export function resetWorld(change = {}) {
-  Object.assign(world, { spaces: [], panes: [], focused: null, props: {}, shared: {}, runs: [], execs: [], overlays: [], notes: [], windowActive: true, execGate: null }, change);
+  Object.assign(world, { spaces: [], panes: [], focused: null, props: {}, shared: {}, runs: [], execs: [], overlays: [], notes: [], windowActive: true, execGate: null, execAnswer: null }, change);
 }
 
 export const spaces = () => world.spaces;
@@ -35,6 +35,9 @@ export async function exec(program, args, { cwd } = {}) {
   world.execs.push({ program, args, cwd });
   // A test can hold a call back with this, to make answers arrive out of order.
   await world.execGate?.({ program, args, cwd });
+  // A test can answer for a program that mustn't really run, such as gh.
+  const answered = world.execAnswer?.({ program, args, cwd });
+  if (answered) return answered;
   const result = spawnSync(program, args, { cwd, encoding: "utf8", maxBuffer: 1 << 28 });
   if (result.error) throw result.error;
   return { code: result.status, stdout: result.stdout, stderr: result.stderr };
