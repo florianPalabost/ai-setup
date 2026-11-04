@@ -98,7 +98,7 @@ place_link() {
   if [[ -d "$src" ]]; then
     cmd //c mklink //J "$(cygpath -w "$dst")" "$(cygpath -w "$src")" >/dev/null
   else
-    cp "$src" "$dst" && warn "symlinks aren't permitted here, so $dst is a copy: re-run install to refresh it"
+    cp "$src" "$dst" && warn "symlinks aren't permitted here, so $dst is a copy: re-run install to bring it up to date"
   fi
 }
 

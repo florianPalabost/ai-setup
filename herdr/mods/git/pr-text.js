@@ -3,8 +3,8 @@
 import { ghFix } from "./gh.js";
 import { PR_VIEW } from "./pr-data.js";
 
-const FAST_MS = 60000; // CI pending
-const SLOW_MS = 300000; // otherwise
+export const REFRESH_PENDING_MS = 60000; // CI pending
+export const REFRESH_IDLE_MS = 300000; // otherwise
 
 export const GLYPH = { fail: "✗", pending: "◌", pass: "✓", skip: "⊘" };
 const BUCKET_WORD = { fail: "failing", pending: "pending", pass: "passing", skip: "skipped" };
@@ -64,5 +64,5 @@ export function shownChecks(list, showAll) {
 export function prInterval(view) {
   const checks = view?.pr?.checks;
   const pending = checks && (checks.pending > 0 || checks.rollup === "PENDING" || checks.rollup === "EXPECTED");
-  return pending ? FAST_MS : SLOW_MS;
+  return pending ? REFRESH_PENDING_MS : REFRESH_IDLE_MS;
 }

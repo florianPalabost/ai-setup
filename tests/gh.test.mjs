@@ -104,3 +104,40 @@ test("the fix text tells the person what to do", () => {
   assert.match(ghFix({ problem: GH_PROBLEM.SIGNED_OUT }), /gh auth login/);
   assert.equal(ghFix({ problem: GH_PROBLEM.FAILED, message: "boom" }), "gh failed: boom");
 });
+
+test("an answer with part of it not found still counts", async () => {
+  // Arrange
+  const stdout = JSON.stringify({ data: { head: null, base: { name: "repo" } }, errors: [{ type: "NOT_FOUND", path: ["head"] }] });
+  const exec = async () => ({ code: 1, stdout, stderr: "gh: Could not resolve to a Repository" });
+
+  // Act
+  const result = await ghGraphql(exec, { query: "q" });
+
+  // Assert
+  assert.deepEqual(result, { ok: true, data: { head: null, base: { name: "repo" } } });
+});
+
+test("an answer with nothing found is a failure", async () => {
+  // Arrange
+  const stdout = JSON.stringify({ data: { head: null, base: null }, errors: [{ type: "NOT_FOUND", path: ["head"] }] });
+  const exec = async () => ({ code: 1, stdout, stderr: "gh: Could not resolve to a Repository" });
+
+  // Act
+  const result = await ghGraphql(exec, { query: "q" });
+
+  // Assert
+  assert.equal(result.ok, false);
+  assert.equal(result.problem, GH_PROBLEM.FAILED);
+});
+
+test("part of an answer doesn't hide another kind of error", async () => {
+  // Arrange
+  const stdout = JSON.stringify({ data: { head: null, base: { name: "repo" } }, errors: [{ type: "FORBIDDEN", path: ["head"] }] });
+  const exec = async () => ({ code: 1, stdout, stderr: "gh: Resource not accessible" });
+
+  // Act
+  const result = await ghGraphql(exec, { query: "q" });
+
+  // Assert
+  assert.equal(result.ok, false);
+});

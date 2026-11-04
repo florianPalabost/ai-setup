@@ -138,7 +138,7 @@ test_windows_file_falls_back_to_a_copy_with_a_warning() {
   assert_eq 0 "$code" "exit code"
   assert_eq "one" "$(cat "$dst")" "copy"
   [[ ! -L "$dst" ]] || fail "expected a copy, found a link"
-  assert_contains "$OUT" "re-run install to refresh"
+  assert_contains "$OUT" "re-run install to bring it up to date"
 }
 
 test_windows_rerun_leaves_an_unchanged_copy_alone() {
@@ -159,7 +159,7 @@ test_windows_rerun_leaves_an_unchanged_copy_alone() {
   assert_no_file "$SANDBOX_HOME/.claude/backups"
 }
 
-test_windows_rerun_refreshes_a_stale_copy_and_keeps_the_old_one() {
+test_windows_rerun_replaces_a_stale_copy_and_keeps_the_old_one() {
   # Arrange
   new_repo_copy
   on_windows
@@ -305,7 +305,7 @@ test_case "Windows link uses a native symlink when permitted" test_windows_link_
 test_case "Windows folder falls back to a junction" test_windows_folder_falls_back_to_a_junction
 test_case "Windows file falls back to a copy with a warning" test_windows_file_falls_back_to_a_copy_with_a_warning
 test_case "Windows re-run leaves an unchanged copy alone" test_windows_rerun_leaves_an_unchanged_copy_alone
-test_case "Windows re-run refreshes a stale copy and keeps the old one" test_windows_rerun_refreshes_a_stale_copy_and_keeps_the_old_one
+test_case "Windows re-run replaces a stale copy and keeps the old one" test_windows_rerun_replaces_a_stale_copy_and_keeps_the_old_one
 test_case "Windows refused junction warns and carries on" test_windows_refused_junction_warns_and_carries_on
 test_case "Windows mirror entries fall back too" test_windows_mirror_entries_fall_back_too
 test_case "Windows dry run makes no link" test_windows_dry_run_makes_no_link

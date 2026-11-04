@@ -69,7 +69,13 @@ herdr_with_window() {
   mkdir -p "$HERDR"
   cp -R "$TESTS_DIR/fixtures/shipped/mods" "$TESTS_DIR/fixtures/shipped/layouts" "$HERDR/"
   printf '{"layout":"main"}' >"$HERDR/shared.json"
+  window_started_on "${FAKE_HERDR_VERSION:-0.1.12}"
   touch "$HERDR/fake-window"
+}
+
+# What herdr records on each start: the version that wrote the shipped files.
+window_started_on() {
+  printf '{"last_run":"%s","presented":[]}' "$1" >"$HERDR/update-notes.json"
 }
 
 in_sandbox() {

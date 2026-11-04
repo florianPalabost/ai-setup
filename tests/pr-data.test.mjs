@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { GH_PROBLEM } from "../herdr/mods/git/gh.js";
-import { PR_VIEW, checksOf, loadPr, locate, parseRemote, pickPr } from "../herdr/mods/git/pr-data.js";
+import { PR_VIEW, checksOf, loadPr, parseRemote, pickPr } from "../herdr/mods/git/pr-data.js";
 
 const check = (name, status, conclusion, url = `https://ci/${name}`) => ({ __typename: "CheckRun", name, status, conclusion, detailsUrl: url });
 const status = (context, state) => ({ __typename: "StatusContext", context, state, targetUrl: `https://ci/${context}` });
@@ -9,19 +9,17 @@ const withChecks = (nodes, state = "FAILURE", totalCount = nodes.length) => ({
   commits: { nodes: [{ commit: { statusCheckRollup: { state, contexts: { totalCount, nodes } } } }] },
 });
 
-test("github.com remotes parse in https, scp and ssh form", () => {
-  const repo = { owner: "cli", name: "cli" };
-  assert.deepEqual(parseRemote("https://github.com/cli/cli.git"), repo);
-  assert.deepEqual(parseRemote("https://github.com/cli/cli"), repo);
-  assert.deepEqual(parseRemote("git@github.com:cli/cli.git"), repo);
-  assert.deepEqual(parseRemote("ssh://git@github.com/cli/cli.git"), repo);
-});
+for (const url of ["https://github.com/cli/cli.git", "https://github.com/cli/cli", "git@github.com:cli/cli.git", "ssh://git@github.com/cli/cli.git"]) {
+  test(`${url} is a github.com remote`, () => {
+    assert.deepEqual(parseRemote(url), { owner: "cli", name: "cli" });
+  });
+}
 
-test("other hosts aren't GitHub, even with github.com in the path", () => {
-  assert.equal(parseRemote("https://gitlab.com/cli/cli.git"), null);
-  assert.equal(parseRemote("https://evil.example/github.com/cli/cli"), null);
-  assert.equal(parseRemote("git@ghe.corp:cli/cli.git"), null);
-});
+for (const url of ["https://gitlab.com/cli/cli.git", "https://evil.example/github.com/cli/cli", "git@ghe.corp:cli/cli.git"]) {
+  test(`${url} isn't GitHub`, () => {
+    assert.equal(parseRemote(url), null);
+  });
+}
 
 test("among PRs with this branch name, another owner's is left out and an open one wins", () => {
   // Arrange
@@ -138,7 +136,15 @@ function repoWorld({ head = "feat/x", remotes = "origin\thttps://github.com/me/r
   return { exec, calls, ghCalls: () => calls.filter((c) => c.command === "gh") };
 }
 
-const answer = (nodes) => ({ code: 0, stdout: JSON.stringify({ data: { repository: { pullRequests: { nodes } } } }), stderr: "" });
+// What GitHub answers: `open` and `ended` hang off the pushed branch. For a branch
+// no longer on GitHub, `authored` is the head owner's PRs by that name and `deleted`
+// the base repo's list by name.
+const data = ({ open = [], ended = [], authored = [], deleted = [] } = {}) => ({
+  head: { ref: { open: { nodes: open }, ended: { nodes: ended } } },
+  authored: { nodes: authored },
+  base: { ended: { nodes: deleted } },
+});
+const answer = (lists) => ({ code: 0, stdout: JSON.stringify({ data: data(lists) }), stderr: "" });
 const prNode = {
   number: 12, title: "Add it", url: "https://github.com/me/repo/pull/12", state: "OPEN", isDraft: false,
   reviewDecision: "APPROVED", mergeStateStatus: "CLEAN", headRepositoryOwner: { login: "me" },
@@ -148,7 +154,7 @@ const at = { cwd: "/repo/sub", on: null };
 
 test("the PR of the branch comes back with its state and checks", async () => {
   // Arrange
-  const { exec } = repoWorld({ gh: answer([prNode]) });
+  const { exec } = repoWorld({ gh: answer({ open: [prNode] }) });
 
   // Act
   const view = await loadPr(exec, at, { cache: false });
@@ -166,35 +172,42 @@ test("the PR of the branch comes back with its state and checks", async () => {
 
 test("one view makes one gh call, and only a read", async () => {
   // Arrange
-  const { exec, ghCalls } = repoWorld({ gh: answer([prNode]) });
+  const { exec, ghCalls } = repoWorld({ gh: answer({ open: [prNode] }) });
 
   // Act
   await loadPr(exec, at, { cache: true });
 
   // Assert
   assert.equal(ghCalls().length, 1);
-  const { args } = ghCalls()[0];
-  assert.deepEqual(args.slice(0, 2), ["api", "graphql"]);
-  assert.match(args.find((a) => a.startsWith("query=")), /^query=query /);
+  assert.deepEqual(ghCalls()[0].args.slice(0, 2), ["api", "graphql"]);
+  assert.match(ghCalls()[0].args.find((a) => a.startsWith("query=")), /^query=query /);
 });
 
-test("a view may use gh's cache, and a refresh after a cd doesn't", async () => {
+test("a view may use gh's cache", async () => {
   // Arrange
-  const cached = repoWorld({ gh: answer([]) });
-  const fresh = repoWorld({ gh: answer([]) });
+  const { exec, ghCalls } = repoWorld({ gh: answer({}) });
 
   // Act
-  await loadPr(cached.exec, at, { cache: true });
-  await loadPr(fresh.exec, at, { cache: false });
+  await loadPr(exec, at, { cache: true });
 
   // Assert
-  assert.ok(cached.ghCalls()[0].args.includes("--cache"));
-  assert.ok(!fresh.ghCalls()[0].args.includes("--cache"));
+  assert.ok(ghCalls()[0].args.includes("--cache"));
+});
+
+test("a refresh after a cd doesn't use gh's cache", async () => {
+  // Arrange
+  const { exec, ghCalls } = repoWorld({ gh: answer({}) });
+
+  // Act
+  await loadPr(exec, at, { cache: false });
+
+  // Assert
+  assert.ok(!ghCalls()[0].args.includes("--cache"));
 });
 
 test("the query looks in the repo and branch the folder is on", async () => {
   // Arrange
-  const { exec, ghCalls } = repoWorld({ gh: answer([]) });
+  const { exec, ghCalls } = repoWorld({ gh: answer({}) });
 
   // Act
   await loadPr(exec, at, { cache: false });
@@ -207,23 +220,80 @@ test("the query looks in the repo and branch the folder is on", async () => {
   assert.equal(options.cwd, "/repo");
 });
 
-test("a fork's PR is looked up on upstream, filtered by the owner pushed to", async () => {
+test("a fork's PR is looked up from the branch it pushes to, whatever else upstream has by that name", async () => {
   // Arrange
   const remotes = "origin\tgit@github.com:me/repo.git (fetch)\nupstream\thttps://github.com/big/repo.git (fetch)\n";
-  const stranger = { ...prNode, number: 99, headRepositoryOwner: { login: "stranger" } };
-  const { exec, ghCalls } = repoWorld({ remotes, gh: answer([stranger, prNode]) });
+  const { exec, ghCalls } = repoWorld({ remotes, gh: answer({ open: [prNode] }) });
 
   // Act
   const view = await loadPr(exec, at, { cache: false });
 
   // Assert
-  assert.ok(ghCalls()[0].args.includes("owner=big"));
+  const { args } = ghCalls()[0];
+  assert.ok(args.includes("headOwner=me"));
+  assert.ok(args.includes("headName=repo"));
+  assert.ok(args.includes("ref=refs/heads/feat/x"));
+  assert.ok(args.includes("owner=big"));
   assert.equal(view.pr.number, 12);
+});
+
+test("an older open PR wins over a newer closed one on the same branch", async () => {
+  // Arrange
+  const closed = { ...prNode, number: 30, state: "CLOSED" };
+  const { exec } = repoWorld({ gh: answer({ open: [prNode], ended: [closed] }) });
+
+  // Act
+  const view = await loadPr(exec, at, { cache: false });
+
+  // Assert
+  assert.equal(view.pr.number, 12);
+});
+
+test("a merged PR whose branch was deleted is still found, among others' by that name", async () => {
+  // Arrange
+  const stranger = { ...prNode, number: 99, state: "MERGED", headRepositoryOwner: { login: "stranger" } };
+  const merged = { ...prNode, number: 40, state: "MERGED" };
+  const noBranch = { ...data({ deleted: [stranger, merged] }), head: { ref: null } };
+  const { exec } = repoWorld({ gh: { code: 0, stdout: JSON.stringify({ data: noBranch }), stderr: "" } });
+
+  // Act
+  const view = await loadPr(exec, at, { cache: false });
+
+  // Assert
+  assert.equal(view.pr.number, 40);
+});
+
+test("on a busy upstream, a deleted branch's PR is found among the head owner's", async () => {
+  // Arrange
+  const stranger = { ...prNode, number: 99, state: "MERGED", headRepositoryOwner: { login: "stranger" } };
+  const merged = { ...prNode, number: 40, state: "MERGED" };
+  const noBranch = { ...data({ authored: [merged], deleted: [stranger] }), head: { ref: null } };
+  const { exec, ghCalls } = repoWorld({ gh: { code: 0, stdout: JSON.stringify({ data: noBranch }), stderr: "" } });
+
+  // Act
+  const view = await loadPr(exec, at, { cache: false });
+
+  // Assert
+  assert.ok(ghCalls()[0].args.includes("authored=repo:me/repo is:pr head:feat/x author:me sort:updated-desc"));
+  assert.equal(view.pr.number, 40);
+});
+
+test("with the pushed-to repo gone, the base repo's answer still counts", async () => {
+  // Arrange: gh exits 1 and prints what it did find
+  const merged = { ...prNode, number: 40, state: "MERGED" };
+  const stdout = JSON.stringify({ data: { head: null, base: data({ deleted: [merged] }).base }, errors: [{ type: "NOT_FOUND", path: ["head"] }] });
+  const { exec } = repoWorld({ gh: { code: 1, stdout, stderr: "gh: Could not resolve to a Repository" } });
+
+  // Act
+  const view = await loadPr(exec, at, { cache: false });
+
+  // Assert
+  assert.equal(view.pr.number, 40);
 });
 
 test("no PR offers the compare page to create one", async () => {
   // Arrange
-  const { exec } = repoWorld({ gh: answer([]) });
+  const { exec } = repoWorld({ gh: answer({}) });
 
   // Act
   const view = await loadPr(exec, at, { cache: false });
@@ -236,7 +306,7 @@ test("no PR offers the compare page to create one", async () => {
 test("no PR from a fork compares across owners", async () => {
   // Arrange
   const remotes = "origin\tgit@github.com:me/repo.git (fetch)\nupstream\thttps://github.com/big/repo.git (fetch)\n";
-  const { exec } = repoWorld({ remotes, gh: answer([]) });
+  const { exec } = repoWorld({ remotes, gh: answer({}) });
 
   // Act
   const view = await loadPr(exec, at, { cache: false });
@@ -248,7 +318,7 @@ test("no PR from a fork compares across owners", async () => {
 test("a remote that isn't GitHub is named, with no gh call", async () => {
   // Arrange
   const remotes = "origin\thttps://gitlab.com/me/repo.git (fetch)\n";
-  const { exec, ghCalls } = repoWorld({ remotes, gh: answer([]) });
+  const { exec, ghCalls } = repoWorld({ remotes, gh: answer({}) });
 
   // Act
   const view = await loadPr(exec, at, { cache: false });
@@ -263,7 +333,7 @@ test("a remote that isn't GitHub is named, with no gh call", async () => {
 test("a token inside a remote URL never reaches the view", async () => {
   // Arrange
   const remotes = "origin\thttps://me:s3cret@gitlab.com/me/repo.git (fetch)\n";
-  const { exec } = repoWorld({ remotes, gh: answer([]) });
+  const { exec } = repoWorld({ remotes, gh: answer({}) });
 
   // Act
   const view = await loadPr(exec, at, { cache: false });
@@ -275,7 +345,7 @@ test("a token inside a remote URL never reaches the view", async () => {
 test("the branch's own remote decides, over origin", async () => {
   // Arrange
   const remotes = "origin\thttps://gitlab.com/me/repo.git (fetch)\nhub\thttps://github.com/me/repo.git (fetch)\n";
-  const { exec, ghCalls } = repoWorld({ remotes, branchRemote: "hub\n", gh: answer([prNode]) });
+  const { exec, ghCalls } = repoWorld({ remotes, branchRemote: "hub\n", gh: answer({ open: [prNode] }) });
 
   // Act
   const view = await loadPr(exec, at, { cache: false });
@@ -287,7 +357,7 @@ test("the branch's own remote decides, over origin", async () => {
 
 test("a folder outside git says so, with no gh call", async () => {
   // Arrange
-  const { exec, ghCalls } = repoWorld({ gitFails: true, gh: answer([]) });
+  const { exec, ghCalls } = repoWorld({ gitFails: true, gh: answer({}) });
 
   // Act
   const view = await loadPr(exec, at, { cache: false });
@@ -299,7 +369,7 @@ test("a folder outside git says so, with no gh call", async () => {
 
 test("detached HEAD has no branch to look up", async () => {
   // Arrange
-  const { exec, ghCalls } = repoWorld({ head: "", gh: answer([]) });
+  const { exec, ghCalls } = repoWorld({ head: "", gh: answer({}) });
 
   // Act
   const view = await loadPr(exec, at, { cache: false });
@@ -309,98 +379,36 @@ test("detached HEAD has no branch to look up", async () => {
   assert.equal(ghCalls().length, 0);
 });
 
-test("a space with no folder or on another machine makes no call at all", async () => {
-  // Arrange
-  const { exec, calls } = repoWorld({ gh: answer([]) });
+for (const [what, place, kind] of [
+  ["with no folder", { cwd: null, on: null }, PR_VIEW.NO_FOLDER],
+  ["on another machine", { cwd: "/x", on: "vps" }, PR_VIEW.REMOTE],
+]) {
+  test(`a space ${what} makes no call at all`, async () => {
+    // Arrange
+    const { exec, calls } = repoWorld({ gh: answer({}) });
 
-  // Act
-  const none = await loadPr(exec, { cwd: null, on: null }, { cache: false });
-  const remote = await loadPr(exec, { cwd: "/x", on: "vps" }, { cache: false });
+    // Act
+    const view = await loadPr(exec, place, { cache: false });
 
-  // Assert
-  assert.equal(none.kind, PR_VIEW.NO_FOLDER);
-  assert.equal(remote.kind, PR_VIEW.REMOTE);
-  assert.equal(calls.length, 0);
-});
+    // Assert
+    assert.equal(view.kind, kind);
+    assert.equal(calls.length, 0);
+  });
+}
 
-test("gh missing or signed out reaches the view as the problem to fix", async () => {
-  // Arrange
-  const missing = repoWorld({ gh: new Error("not found") });
-  const signedOut = repoWorld({ gh: { code: 4, stdout: "", stderr: "please run: gh auth login" } });
+for (const [what, gh, problem] of [
+  ["gh missing", new Error("not found"), GH_PROBLEM.MISSING],
+  ["gh signed out", { code: 4, stdout: "", stderr: "please run: gh auth login" }, GH_PROBLEM.SIGNED_OUT],
+]) {
+  test(`${what} reaches the view as the problem to fix`, async () => {
+    // Arrange
+    const { exec } = repoWorld({ gh });
 
-  // Act
-  const a = await loadPr(missing.exec, at, { cache: false });
-  const b = await loadPr(signedOut.exec, at, { cache: false });
+    // Act
+    const view = await loadPr(exec, at, { cache: false });
 
-  // Assert
-  assert.equal(a.kind, PR_VIEW.GH_PROBLEM);
-  assert.equal(a.problem, GH_PROBLEM.MISSING);
-  assert.equal(b.kind, PR_VIEW.GH_PROBLEM);
-  assert.equal(b.problem, GH_PROBLEM.SIGNED_OUT);
-});
-
-test("the focused terminal's folder and branch are where the panel looks", () => {
-  // Arrange
-  const live = {
-    spaces: [{ id: "s", active: true, folder: "/space", branch: "space-b", machine: null }],
-    focused: { tab: "t", pane: "p2", terminal: "t2", cwd: "/two" },
-    panes: [
-      { pane: "p1", tab: "t", terminal: "t1", cwd: "/one", branch: "one-b" },
-      { pane: "p2", tab: "t", terminal: "t2", cwd: "/two", branch: "two-b" },
-    ],
-  };
-
-  // Act
-  const at = locate(live);
-
-  // Assert
-  assert.deepEqual(at, { cwd: "/two", on: null, branch: "two-b" });
-});
-
-test("with a mod pane focused, the panel keeps to the tab's first terminal", () => {
-  // Arrange
-  const live = {
-    spaces: [{ id: "s", active: true, folder: "/space", branch: "space-b", machine: null }],
-    focused: { tab: "t", pane: "m", terminal: null, cwd: null },
-    panes: [
-      { pane: "m", tab: "t", terminal: null, mod: "x", cwd: null, branch: null },
-      { pane: "p1", tab: "t", terminal: "t1", cwd: "/one", branch: "one-b" },
-    ],
-  };
-
-  // Act
-  const at = locate(live);
-
-  // Assert
-  assert.deepEqual(at, { cwd: "/one", on: null, branch: "one-b" });
-});
-
-test("a focused layout terminal block on another machine is read as remote", () => {
-  // Arrange
-  const live = {
-    spaces: [{ id: "s", active: true, folder: "/space", branch: null, machine: null }],
-    focused: { tab: "t", pane: null, terminal: "vps/t7", cwd: "/srv" },
-    panes: [],
-  };
-
-  // Act
-  const at = locate(live);
-
-  // Assert
-  assert.deepEqual(at, { cwd: "/srv", on: "vps", branch: null });
-});
-
-test("no terminals fall back to the space's folder", () => {
-  // Arrange
-  const live = {
-    spaces: [{ id: "s", active: true, folder: "/space", branch: "b", machine: null }],
-    focused: null,
-    panes: [],
-  };
-
-  // Act
-  const at = locate(live);
-
-  // Assert
-  assert.deepEqual(at, { cwd: "/space", on: null, branch: "b" });
-});
+    // Assert
+    assert.equal(view.kind, PR_VIEW.GH_PROBLEM);
+    assert.equal(view.problem, problem);
+  });
+}

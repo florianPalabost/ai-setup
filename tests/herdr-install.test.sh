@@ -176,12 +176,11 @@ test_a_rebuild_replaces_the_clone_when_the_patch_applies() {
   new_repo_copy
   herdr_with_window
   install
-  FAKE_HERDR_VERSION=0.1.13
+  window_started_on 0.1.13
 
   # Act
   install_function build_mod_clone tabs tabs-git tabs.patch
   local code=$?
-  unset FAKE_HERDR_VERSION
 
   # Assert
   assert_eq 0 "$code" "exit code"
@@ -267,7 +266,7 @@ test_the_graph_fork_is_linked_and_its_icons_are_real_files() {
   [[ ! -L "$HERDR/git-graph-icons" && ! -L "$HERDR/git-graph-icons/branch.svg" ]] || fail "icons should be real files"
 }
 
-test_a_rerun_refreshes_changed_graph_icons() {
+test_a_rerun_replaces_changed_graph_icons() {
   # Arrange
   new_repo_copy
   herdr_with_window
@@ -362,7 +361,7 @@ run_all() {
   test_case "a failing rebuild keeps the last good layout clone" test_a_failing_rebuild_keeps_the_last_good_layout_clone
   test_case "a refused clone puts the last good one back" test_a_refused_clone_puts_the_last_good_one_back
   test_case "the graph fork is linked and its icons are real files" test_the_graph_fork_is_linked_and_its_icons_are_real_files
-  test_case "a rerun refreshes changed graph icons" test_a_rerun_refreshes_changed_graph_icons
+  test_case "a rerun replaces changed graph icons" test_a_rerun_replaces_changed_graph_icons
   test_case "a rerun with the icons current touches nothing" test_a_rerun_with_the_icons_current_touches_nothing
   test_case "the fork keeps upstream's licence and names its commit" test_the_fork_keeps_upstreams_licence_and_names_its_commit
   test_case "dry run changes nothing" test_dry_run_changes_nothing

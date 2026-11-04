@@ -3,6 +3,8 @@
 // is common to all of them (seen on herdr-app 0.1.12). Only touch it from a
 // function: herdr runs a broken save's top-level code too.
 const SLOTS = "__gitPanelSlots";
+// `kind` of the result when a load threw, beside the kinds each section's load returns.
+export const LOAD_VIEW = Object.freeze({ ERROR: "error" });
 // exec's own limit is 30 s. A copy closing mid-call may leave its promise unsettled.
 const STUCK_AFTER_MS = 35000;
 
@@ -26,7 +28,7 @@ export function startRefresh(slot, key, load, clock = Date.now) {
     try {
       value = await load();
     } catch (error) {
-      value = { kind: "error", message: String(error?.message ?? error) };
+      value = { kind: LOAD_VIEW.ERROR, message: String(error?.message ?? error) };
     }
     if (slot.pending !== run) return;
     slot.pending = null;
@@ -45,4 +47,30 @@ export function refreshDue(slot, key, { active, now, interval }) {
   if (slot.key !== key) return { cache: false };
   if (running(slot, now) || !active) return null;
   return now - slot.at >= interval ? { cache: true } : null;
+}
+
+// One copy's view of a slot: redraws it when a refresh brings a new answer, whichever
+// copy started that refresh. Each redraw redraws the whole window, so only for a new one.
+export class SlotWatcher {
+  constructor(slot) {
+    this.slot = slot;
+    this.seen = slot.version;
+    this.waitingOn = null;
+  }
+
+  // Waits on the refresh running now, once per refresh, however often it's called.
+  watch(cx) {
+    const { slot } = this;
+    if (!slot.pending || slot.pending === this.waitingOn) return;
+    const pending = (this.waitingOn = slot.pending);
+    cx.spawn(async (cx) => {
+      await pending;
+      if (slot.version !== this.seen) cx.notify();
+    });
+  }
+
+  // Call from render: what's in the slot now is on screen.
+  markSeen() {
+    this.seen = this.slot.version;
+  }
 }

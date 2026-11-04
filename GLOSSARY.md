@@ -28,7 +28,7 @@ _Avoid_: Git tab
 One collapsible part of the Git panel.
 
 **Graph tab**:
-The single, reused herdr tab that shows the full commit graph.
+The herdr tab that shows the full commit graph: one per space, reused if it's already open.
 
 **Clone**:
 A copy of something herdr ships, adjusted by this setup, which herdr never updates by itself.

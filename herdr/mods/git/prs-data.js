@@ -1,6 +1,6 @@
 // My open PRs and direct review requests, across all of github.com. One GraphQL
 // query with two searches. No herdr imports: exec is passed in.
-import { GH_PROBLEM, ghGraphql } from "./gh.js";
+import { GH_PROBLEM, ghGraphql, lastCommitRollup } from "./gh.js";
 
 const FETCHED = 50;
 const CACHE_FOR = "30s";
@@ -33,7 +33,7 @@ const row = (node) => ({
   url: node.url,
   draft: node.isDraft,
   review: node.reviewDecision ?? null,
-  checks: node.commits?.nodes?.[0]?.commit?.statusCheckRollup?.state ?? null,
+  checks: lastCommitRollup(node)?.state ?? null,
   author: node.author?.login ?? "ghost",
   updated: Date.parse(node.updatedAt),
 });

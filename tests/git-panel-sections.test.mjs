@@ -41,15 +41,11 @@ test("a section added after the state was saved gets its default, a dropped one 
   assert.deepEqual(open, { changes: false, pr: true, prs: false });
 });
 
-test("unreadable remembered state falls back to the defaults", () => {
-  for (const remembered of ["{not json", "null", "[1]", '{"changes":"yes"}']) {
-    // Act
-    const open = loadOpen(remembered, SECTIONS);
-
-    // Assert
-    assert.deepEqual(open, { changes: true, pr: true, prs: false }, remembered);
-  }
-});
+for (const remembered of ["{not json", "null", "[1]", '{"changes":"yes"}']) {
+  test(`unreadable remembered state ${remembered} falls back to the defaults`, () => {
+    assert.deepEqual(loadOpen(remembered, SECTIONS), { changes: true, pr: true, prs: false });
+  });
+}
 
 test("opening a section leaves the others as they are, so several can be open", () => {
   // Arrange

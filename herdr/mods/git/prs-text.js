@@ -2,12 +2,10 @@
 // what prs-data.js's loadMyPrs returned, or null before the first answer.
 import { ghFix } from "./gh.js";
 import { PRS_VIEW } from "./prs-data.js";
-import { GLYPH } from "./pr-text.js";
+import { GLYPH, REFRESH_IDLE_MS, REFRESH_PENDING_MS } from "./pr-text.js";
 
 const MINUTE_S = 60, HOUR_S = 3600, DAY_S = 86400;
 const MONTH_DAYS = 30, DAYS_BEFORE_MONTHS = 60;
-
-export const PRS_INTERVAL_MS = 300000;
 
 const CHECKS_TONE = { SUCCESS: "pass", FAILURE: "fail", ERROR: "fail", PENDING: "pending", EXPECTED: "pending" };
 const REVIEW_WORD = { APPROVED: "approved", CHANGES_REQUESTED: "changes", REVIEW_REQUIRED: "review" };
@@ -50,3 +48,8 @@ export function checksMark(state) {
 }
 
 export const reviewWord = (review) => REVIEW_WORD[review] ?? null;
+
+export function prsInterval(view) {
+  const pending = view?.groups?.some((group) => group.rows.some((pr) => CHECKS_TONE[pr.checks] === "pending"));
+  return pending ? REFRESH_PENDING_MS : REFRESH_IDLE_MS;
+}

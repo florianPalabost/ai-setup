@@ -492,7 +492,7 @@ export class Graph {
     const segment = (id, text, on, action) => div().id(id).h(22).px(9).flex().items_center().rounded(5).text_size(11.5).cursor_pointer()
       .bg(on ? t.raised : t.background).text_color(on ? t.foreground : t.muted).when(on, (e) => e.border_1().border_color(t.border))
       .hover((s) => s.text_color(t.foreground)).on_click(action).child(text);
-    const tick = (id, text, on, action) => h_flex().id(id).h(24).px(6).gap(6).items_center().rounded(6).cursor_pointer().text_size(11.5).text_color(t.muted)
+    const checkbox = (id, text, on, action) => h_flex().id(id).h(24).px(6).gap(6).items_center().rounded(6).cursor_pointer().text_size(11.5).text_color(t.muted)
       .hover((s) => s.bg(t.hover).text_color(t.foreground)).on_click(action)
       .child(div().size(13).rounded(3).border_1().border_color(on ? t.accent : t.input).when(on, (e) => e.bg(t.accent)).flex().items_center().justify_center()
         .when(on, (e) => e.child(svg(icon("check")).size(10).text_color(t.accent_foreground))))
@@ -501,8 +501,8 @@ export class Graph {
       .child(h_flex().p(2).gap(2).rounded(7).bg(t.background).border_1().border_color(t.border)
         .child(segment("graph-all", "All branches", this.all, (_e, cx) => this.setScope(true, cx)))
         .child(segment("graph-current", "Current", !this.all, (_e, cx) => this.setScope(false, cx))))
-      .child(tick("graph-remotes", "Remotes", this.remotes, (_e, cx) => this.setRemotes(cx)))
-      .child(tick("graph-first-parent", "First parent", this.firstParent, (_e, cx) => this.setFirstParent(cx)));
+      .child(checkbox("graph-remotes", "Remotes", this.remotes, (_e, cx) => this.setRemotes(cx)))
+      .child(checkbox("graph-first-parent", "First parent", this.firstParent, (_e, cx) => this.setFirstParent(cx)));
   }
 
   columns(t, width) {
