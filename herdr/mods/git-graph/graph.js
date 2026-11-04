@@ -26,6 +26,9 @@ const COMMIT_SEARCH_LIMIT = PAGE * 16;
 const DRAW_WAIT = 3000;
 // How long after rows start drawing to check that they got to the end.
 const DRAW_CUT_OFF_WAIT = 300;
+// How many draws in a row may be cut off before the table gives up.
+const DRAW_CUT_OFFS = 3;
+const MEASURED_ROWS = 1;
 const GRAPH_MOD = "git-graph";
 // The graph column's default keeps room for its "Graph" heading (and a lane or two) in narrow repos.
 const GRAPH_MIN = 56;
@@ -533,6 +536,8 @@ export class Graph {
               : div().id("graph-more").h(this.rowH()).flex_none().px(14).flex().items_center().text_color(t.accent).hover((s) => s.bg(t.hover))
                 .child(this.loading ? "Loading more commits…" : `Load ${PAGE} more commits`));
             this.drawing = false;
+            // Each frame first draws one row to measure it: that says nothing about the rows on screen.
+            if (rows.length > MEASURED_ROWS) this.cutOffs = 0;
             if (rows.length) this.drew = true;
             return rows;
           } catch (e) {
@@ -639,7 +644,8 @@ export class Graph {
   // sees that, only its log does, and the table is left with a header and no rows:
   // this is upstream's blank table. Each row costs time per lane crossing it, so many
   // lanes get there, more easily with more rows on screen. A draw that started and
-  // never reached its end is how it shows.
+  // never reached its end is how it shows. It can happen once to rows that draw
+  // fine next time, as when a tab is shown again, so it takes a few in a row.
   watchCutOff(cx) {
     this.drawing = true;
     if (this.cutOffWatch) return;
@@ -648,14 +654,15 @@ export class Graph {
       this.cutOffWatch = false;
       if (!this.drawing) return;
       this.drawing = false;
-      this.drawError = "These rows took too long to draw.";
+      this.cutOffs = (this.cutOffs ?? 0) + 1;
+      if (this.cutOffs >= DRAW_CUT_OFFS) this.drawError = "These rows took too long to draw.";
       cx.notify();
     });
   }
 
   clearDrawError() {
     if (this.drawError) this.scroll.scroll_to_item(0);
-    this.drawError = null; this.drew = false; this.drawing = false;
+    this.drawError = null; this.drew = false; this.drawing = false; this.cutOffs = 0;
   }
 
   // The same blank table, for any reason that never even started the rows.

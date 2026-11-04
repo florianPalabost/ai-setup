@@ -208,7 +208,7 @@ test("turning first-parent off brings the merged commits back", async () => {
   assert.ok(view.part.index.has(s1));
 });
 
-const DRAW_WAIT = 3000, DRAW_CUT_OFF_WAIT = 300;
+const DRAW_WAIT = 3000, DRAW_CUT_OFF_WAIT = 300, DRAW_CUT_OFFS = 3;
 
 test("a table whose rows never draw says so instead of staying blank", async () => {
   // Arrange: the list never asks for its rows, as on a repository too big for it
@@ -277,17 +277,44 @@ test("rows cut off mid-draw say so: herdr interrupts a slow list, and no catch s
   const { cx, draw } = await openGraph(repo);
   const { list } = findList(draw());
   const paint = globalThis.window.paint_path;
-  globalThis.window.paint_path = () => { for (;;); };
 
-  // Act
-  assert.throws(() => runInNewContext("drawRows()", { drawRows: () => list.render({ start: 0, end: 4 }, cx) }, { timeout: 50 }));
+  // Act: each frame herdr first draws one row to measure it, which succeeds
+  for (let i = 0; i < DRAW_CUT_OFFS; i++) {
+    globalThis.window.paint_path = paint;
+    list.render({ start: 0, end: 1 }, cx);
+    globalThis.window.paint_path = () => { for (;;); };
+    assert.throws(() => runInNewContext("drawRows()", { drawRows: () => list.render({ start: 0, end: 4 }, cx) }, { timeout: 50 }));
+    cx.fire(DRAW_CUT_OFF_WAIT);
+  }
   globalThis.window.paint_path = paint;
-  cx.fire(DRAW_CUT_OFF_WAIT);
   const root = draw();
 
   // Assert
   assert.match(textOf(root), /Can't draw this history/);
   assert.match(textOf(root), /too long/);
+});
+
+test("rows cut off once, then drawn, raise nothing: a tab shown again can be slow for a frame", async () => {
+  // Arrange
+  const { repo } = repoWithMerge();
+  const { cx, draw } = await openGraph(repo);
+  const { list } = findList(draw());
+  const paint = globalThis.window.paint_path;
+  globalThis.window.paint_path = () => { for (;;); };
+  assert.throws(() => runInNewContext("drawRows()", { drawRows: () => list.render({ start: 0, end: 4 }, cx) }, { timeout: 50 }));
+  globalThis.window.paint_path = paint;
+  const redraws = cx.notified;
+
+  // Act
+  cx.fire(DRAW_CUT_OFF_WAIT);
+  assert.ok(cx.notified > redraws, "it asks for another try");
+  list.render({ start: 0, end: 4 }, cx);
+  cx.fire(DRAW_CUT_OFF_WAIT);
+  const root = draw();
+
+  // Assert
+  assert.doesNotMatch(textOf(root), /Can't draw/);
+  assert.ok(findList(root));
 });
 
 test("rows that finish drawing raise nothing", async () => {
