@@ -1,15 +1,13 @@
 // The graph itself: Git Graph's table (graph, description, date, author,
 // commit) for the focused pane's repository, or `props.folder` when opened as
-// a pane. Labels take double-clicks (checkout) and right-clicks (menus).
+// a pane. Read-only: rows take clicks (details) and right-clicks (copy menus).
 import { div, svg, PathBuilder } from "gpui-kit";
 import { v_flex, h_flex, Scrollbar, v_virtual_list } from "gpui-base";
 import { spaces, panes, focused, exec, watchFolder, readTextFile, theme, settings, props, shared, setShared, openOverlay, home } from "herdr";
 import { layoutLanes } from "./lanes.js";
 import { READ, STATUS, UNCOMMITTED, LABEL, logArgs, parseLog, parseStatus, withUncommitted, labelsOf, hitLabel,
   menuFor, menuHeight, fileArgs, joinFiles, diffArgs, diffRows } from "./git.js";
-import { perform, openDialog, showChanges } from "./act.js";
-import { icon } from "./menu.js";
-import { available, check, openUpdate } from "./update.js";
+import { icon, showChanges } from "./menu.js";
 
 function location(folder) {
   if (folder) return { cwd: folder, on: null };
@@ -94,7 +92,7 @@ export class Graph {
     this.listId = `graph-rows-${Math.random().toString(36).slice(2)}`;
     this.diffId = `${this.listId}-diff`;
     this.all = true; this.remotes = true; this.wide = false; this.graphMax = 160; this.scale = null;
-    this.watchToken = 0; this.seenChange = shared("git-graph.changed");
+    this.watchToken = 0;
     this.cols = withDefaults(); this.drag = null;
     this.seen = new Map(); this.commitDetails = new Map();
     this.handle = cx.focus_handle();
@@ -102,8 +100,7 @@ export class Graph {
     this.refresh(cx);
     cx.timer.after(1500, (cx) => this.warm(cx));
     // Remote spaces can't be watched: poll them gently. New folders get read ahead.
-    cx.timer.every(15000, (cx) => { if (!this.watching) this.refresh(cx); this.warm(cx); check(); });
-    check();
+    cx.timer.every(15000, (cx) => { if (!this.watching) this.refresh(cx); this.warm(cx); });
   }
 
   key() { return JSON.stringify(location(this.folder)); }
@@ -242,17 +239,6 @@ export class Graph {
   setScope(all, cx) { if (this.all !== all) { this.all = all; this.limit = PAGE; this.refresh(cx); } cx.notify(); }
   setRemotes(cx) { this.remotes = !this.remotes; this.refresh(cx); cx.notify(); }
 
-  fetch(cx) {
-    if (this.fetching || !this.ctx) return;
-    this.fetching = true;
-    const ctx = this.ctx;
-    cx.spawn(async (cx) => {
-      await perform({ type: "fetch" }, {}, ctx).catch(() => {});
-      this.fetching = false; this.refresh(cx); cx.notify();
-    });
-    cx.notify();
-  }
-
   graphWidth() { return this.cols.graph ? this.clampColumn("graph", this.cols.graph) : Math.min(Math.max(GRAPH_MIN, PAD * 2 + this.lanes * LANE), this.graphMax); }
   trailing() { return this.wide ? ["date", "author", "hash"] : ["date"]; }
 
@@ -302,22 +288,9 @@ export class Graph {
     if (key === "more") return this.loadMore(cx);
     const commit = this.commits[this.index.get(key)];
     if (!commit) return;
-    if (press?.count >= 2) {
-      const hit = hitLabel(this.labels.get(key), press.x, this.graphWidth(), this.labelLimit());
-      if (hit) this.checkout(hit.part, cx);
-      return;
-    }
+    // The first click of a double-click already selected it; the second mustn't unselect it.
+    if (press?.count >= 2) return;
     this.pick(commit, cx);
-  }
-
-  checkout(part, cx) {
-    const ctx = this.ctx;
-    if (part.kind === "branch" && part.name !== ctx.current) cx.spawn(async () => { await perform({ type: "checkout", name: part.name }, {}, ctx); });
-    else if (part.kind === "remote") {
-      const branch = part.name.slice(part.name.indexOf("/") + 1);
-      if (ctx.branches.includes(branch)) { if (branch !== ctx.current) cx.spawn(async () => { await perform({ type: "checkout", name: branch }, {}, ctx); }); }
-      else openDialog({ type: "checkoutRemote", name: part.name, remote: part.name.slice(0, part.name.indexOf("/")), branch }, ctx);
-    }
   }
 
   contextMenu(key, e, cx) {
@@ -329,7 +302,7 @@ export class Graph {
     const target = commit.uncommitted ? { kind: "uncommitted", commit: brief(commit) }
       : hit && hit.part.kind !== "head" ? { kind: hit.part.kind, name: hit.part.name, commit: brief(commit) }
       : { kind: "commit", commit: brief(commit) };
-    const items = menuFor(target, this.ctx);
+    const items = menuFor(target);
     openOverlay({ mod: "git-graph", kind: "popup", at: "pointer", width: 268, height: menuHeight(items), props: { role: "menu", target, ctx: this.ctx } });
   }
 
@@ -462,11 +435,6 @@ export class Graph {
       .when(ready && Boolean(where), (e) => e.child(h_flex().h(22).px(7).gap(5).min_w(0).items_center().rounded(6).bg(t.accent + "26").text_color(t.accent)
         .child(svg(icon(this.current ? "branch" : "commit")).size(12).flex_none()).child(div().min_w(0).truncate().text_size(11.5).font_semibold().child(where))))
       .child(div().flex_1())
-      // A newer release: a dot, and the update window on click.
-      .when(Boolean(available()), (e) => e.child(h_flex().id("graph-update").h(24).px(7).gap(5).flex_none().items_center().rounded(6).text_size(11.5)
-        .cursor_pointer().text_color(t.accent).hover((s) => s.bg(t.hover)).on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-        .on_click(() => openUpdate()).child(div().size(6).rounded(3).bg(t.accent)).child("Update Graph")))
-      .when(ready && this.remoteNames?.length > 0, (e) => e.child(this.iconButton("graph-fetch", "fetch", this.fetching ? "Fetching…" : null, false, (_e, cx) => this.fetch(cx), t)))
       .when(this.state !== "nofolder", (e) => e.child(this.iconButton("graph-refresh", "refresh", null, false, (_e, cx) => this.refresh(cx), t)));
   }
 
@@ -602,10 +570,8 @@ export class Graph {
 
   render(cx) {
     if (this.key() !== this.context) this.refresh(cx);
-    const changed = shared("git-graph.changed");
     const savedCols = shared("git-graph.columns"), seen = JSON.stringify(savedCols ?? null);
     if (!this.drag && seen !== this.seenCols) { this.seenCols = seen; this.cols = withDefaults(savedCols); }
-    if (changed !== this.seenChange) { this.seenChange = changed; if (this.root) this.refresh(cx); }
     const t = theme(), mono = settings().font_family ?? "JetBrains Mono", ready = this.state === "ready";
     return v_flex().id("git-graph").size_full().min_h(0).rounded(10).overflow_hidden().bg(t.background).border_1().border_color(t.border)
       .text_color(t.foreground).text_size(12.5).track_focus(this.handle)

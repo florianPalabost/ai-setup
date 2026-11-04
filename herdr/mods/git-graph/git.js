@@ -1,6 +1,6 @@
 // Git for the graph, with no herdr imports so node can test it: reading the
-// history, the labels on each row and where they sit, and the actions behind
-// the menus. Commands are argv arrays, never a shell line.
+// history, the labels on each row and where they sit, and the right-click menus.
+// Commands are argv arrays, never a shell line, and none of them writes.
 
 // Reads write nothing under .git (no index refresh or lock, no fsmonitor
 // cookie), so the folder watch never wakes for the panel's own reads.
@@ -124,213 +124,22 @@ export function hitLabel(labels, x, start, limit = Infinity) {
   return null;
 }
 
-const shortHash = (hash) => hash.slice(0, 8);
-const currentName = (ctx) => ctx.current ?? "HEAD";
-const section = (...items) => items.filter(Boolean);
 const item = (label, icon, action) => ({ label, icon, action });
+const copy = (label, text) => item(label, "copy", { type: "copy", text });
 
-// The right-click menu for a commit, a label part or the uncommitted row:
-// Git Graph's menus, minus what needs VS Code. Sections are separated.
-export function menuFor(target, ctx) {
-  const cur = currentName(ctx), c = target.commit;
-  let sections;
-  if (target.kind === "uncommitted") {
-    sections = [
-      section(item("Stash uncommitted changes…", "stash", { type: "stash" })),
-      section(item("Reset uncommitted changes…", "reset", { type: "resetUncommitted" })),
-      section(item("Show in Changes panel", "mods/changes/changes.svg", { type: "showChanges" })),
-    ];
-  } else if (target.kind === "branch") {
-    const name = target.name, current = name === ctx.current;
-    sections = [
-      section(!current && item("Checkout branch", "branch", { type: "checkout", name }),
-        item("Rename branch…", "rename", { type: "renameBranch", name }),
-        !current && item("Delete branch…", "trash", { type: "deleteBranch", name })),
-      section(!current && item(`Merge into ${cur}…`, "merge", { type: "merge", ref: name, what: `branch ${name}` }),
-        !current && item(`Rebase ${cur} on this branch…`, "rebase", { type: "rebase", ref: name, what: `branch ${name}` })),
-      section(ctx.remotes.length > 0 && item("Push branch…", "push", { type: "push", name })),
-      section(item("Copy branch name", "copy", { type: "copy", text: name })),
-    ];
-  } else if (target.kind === "remote") {
-    const name = target.name, slash = name.indexOf("/"), remote = name.slice(0, slash), branch = name.slice(slash + 1);
-    const local = ctx.branches.includes(branch);
-    sections = [
-      section(branch !== ctx.current && (local
-        ? item(`Checkout ${branch}`, "branch", { type: "checkout", name: branch })
-        : item("Checkout branch…", "branch", { type: "checkoutRemote", name, remote, branch }))),
-      section(item(`Merge into ${cur}…`, "merge", { type: "merge", ref: name, what: `remote branch ${name}` })),
-      section(item("Delete remote branch…", "trash", { type: "deleteRemoteBranch", name, remote, branch })),
-      section(item("Copy branch name", "copy", { type: "copy", text: name })),
-    ];
-  } else if (target.kind === "tag") {
-    const name = target.name;
-    sections = [
-      section(item("Delete tag…", "trash", { type: "deleteTag", name })),
-      section(ctx.remotes.length > 0 && item("Push tag…", "push", { type: "pushTag", name })),
-      section(item("Copy tag name", "copy", { type: "copy", text: name })),
-    ];
-  } else {
-    const hash = c.hash, short = shortHash(hash), here = hash === ctx.head, merge = c.parents.length > 1;
-    sections = [
-      section(item("Add tag…", "tag", { type: "addTag", hash, short }),
-        item("Create branch…", "plus", { type: "createBranch", hash, short })),
-      section(!here && item("Checkout…", "commit", { type: "checkoutCommit", hash, short }),
-        !here && item("Cherry pick…", "cherry", { type: "cherryPick", hash, short, merge }),
-        item("Revert…", "revert", { type: "revert", hash, short, merge })),
-      section(!here && item(`Merge into ${cur}…`, "merge", { type: "merge", ref: hash, what: `commit ${short}` }),
-        !here && item(`Rebase ${cur} on this commit…`, "rebase", { type: "rebase", ref: hash, what: `commit ${short}` }),
-        item(`Reset ${cur} to this commit…`, "reset", { type: "reset", hash, short })),
-      section(item("Copy commit hash", "copy", { type: "copy", text: hash }),
-        item("Copy commit subject", "copy", { type: "copy", text: c.subject })),
-    ];
+// The right-click menu for a commit, a label part or the uncommitted row. The
+// fork is read-only: everything here copies a value or shows another panel.
+export function menuFor(target) {
+  switch (target.kind) {
+    case "uncommitted": return [item("Show in Changes panel", "mods/changes/changes.svg", { type: "showChanges" })];
+    case "branch":
+    case "remote": return [copy("Copy branch name", target.name)];
+    case "tag": return [copy("Copy tag name", target.name)];
+    default: return [copy("Copy commit hash", target.commit.hash), copy("Copy commit subject", target.commit.subject)];
   }
-  const out = [];
-  for (const s of sections.filter((s) => s.length)) { if (out.length) out.push({ separator: true }); out.push(...s); }
-  return out;
 }
 
 export const menuHeight = (items) => 10 + items.reduce((n, i) => n + (i.separator ? 9 : 30), 0);
-
-const remoteChoice = (ctx) => ({ id: "remote", label: "Remote", value: ctx.remotes.includes("origin") ? "origin" : ctx.remotes[0],
-  options: ctx.remotes.map((r) => ({ value: r, label: r })) });
-const mergeNote = (a) => (a.merge ? " It's a merge commit: its changes against its first parent are used." : "");
-
-// The dialog an action asks first, or null when it runs at once.
-export function dialogFor(action, ctx) {
-  const cur = currentName(ctx), a = action;
-  switch (a.type) {
-    case "checkoutRemote": return { title: "Checkout remote branch", detail: `Create a local branch that tracks ${a.name}, and check it out.`,
-      inputs: [{ id: "name", label: "Local branch name", value: a.branch }], confirm: "Checkout" };
-    case "checkoutCommit": return { title: "Checkout commit", detail: `Check out commit ${a.short}? You'll be on a detached HEAD: new commits belong to no branch until you create one.`, confirm: "Checkout" };
-    case "createBranch": return { title: "Create branch", detail: `At commit ${a.short}.`,
-      inputs: [{ id: "name", label: "Branch name", value: "" }], checks: [{ id: "checkout", label: "Check out the new branch", value: false }], confirm: "Create" };
-    case "addTag": return { title: "Add tag", detail: `At commit ${a.short}.`,
-      inputs: [{ id: "name", label: "Tag name", value: "" }, { id: "message", label: "Message (makes an annotated tag)", value: "", optional: true }], confirm: "Add tag" };
-    case "renameBranch": return { title: "Rename branch", detail: `Rename ${a.name}.`, inputs: [{ id: "name", label: "New name", value: a.name }], confirm: "Rename" };
-    case "deleteBranch": return { title: "Delete branch", detail: `Delete the local branch ${a.name}?`,
-      checks: [{ id: "force", label: "Force delete, even if it isn't merged", value: false }], confirm: "Delete", danger: true };
-    case "deleteRemoteBranch": return { title: "Delete remote branch", detail: `Delete ${a.branch} on ${a.remote}? This changes the remote for everyone who uses it.`, confirm: "Delete", danger: true };
-    case "deleteTag": return { title: "Delete tag", detail: `Delete the local tag ${a.name}?`, confirm: "Delete", danger: true };
-    case "merge": return { title: "Merge", detail: `Merge ${a.what} into ${cur}?`,
-      checks: [{ id: "noff", label: "Create a merge commit even if it could fast-forward", value: false }], confirm: "Merge" };
-    case "rebase": return { title: "Rebase", detail: `Rebase ${cur} on ${a.what}?`, confirm: "Rebase" };
-    case "cherryPick": return { title: "Cherry pick", detail: `Apply commit ${a.short} on top of ${cur}?${mergeNote(a)}`, confirm: "Cherry pick" };
-    case "revert": return { title: "Revert", detail: `Add a commit to ${cur} that undoes ${a.short}?${mergeNote(a)}`, confirm: "Revert" };
-    case "reset": return { title: "Reset", detail: `Move ${cur} to commit ${a.short}.`, confirm: "Reset",
-      choice: { id: "mode", label: "Mode", value: "mixed", options: [
-        { value: "soft", label: "Soft", detail: "Keep every change, staged" },
-        { value: "mixed", label: "Mixed", detail: "Keep every change, unstaged" },
-        { value: "hard", label: "Hard", detail: "Discard every change", danger: true }] } };
-    case "push": return { title: "Push branch", detail: `Push ${a.name}.`, choice: remoteChoice(ctx),
-      checks: [{ id: "upstream", label: "Set as upstream", value: true }], confirm: "Push" };
-    case "pushTag": return { title: "Push tag", detail: `Push the tag ${a.name}.`, choice: remoteChoice(ctx), confirm: "Push" };
-    case "stash": return { title: "Stash uncommitted changes", inputs: [{ id: "message", label: "Message", value: "", optional: true }],
-      checks: [{ id: "untracked", label: "Include untracked files", value: true }], confirm: "Stash" };
-    case "resetUncommitted": return { title: "Reset uncommitted changes", detail: "Reset the working tree to HEAD.", confirm: "Reset",
-      choice: { id: "mode", label: "Mode", value: "mixed", options: [
-        { value: "mixed", label: "Mixed", detail: "Unstage everything, keep the changes" },
-        { value: "hard", label: "Hard", detail: "Discard every change to tracked files", danger: true }] } };
-    default: return null;
-  }
-}
-
-export function dialogHeight(spec) {
-  const detail = spec.detail ? Math.ceil(spec.detail.length / 52) * 19 + 8 : 0;
-  return Math.ceil(36 + 26 + detail + (spec.inputs ?? []).length * 66 + (spec.checks ?? []).length * 30
-    + (spec.choice ? 24 + spec.choice.options.length * 42 : 0) + 30 + 52);
-}
-
-const values = (spec) => {
-  const v = {};
-  for (const i of spec?.inputs ?? []) v[i.id] = i.value ?? "";
-  for (const c of spec?.checks ?? []) v[c.id] = c.value;
-  if (spec?.choice) v[spec.choice.id] = spec.choice.value;
-  return v;
-};
-export const initialValues = (action, ctx) => values(dialogFor(action, ctx));
-
-// What's wrong with the typed values, or null. A name never reaches git as an option.
-export function validate(action, v, ctx) {
-  const spec = dialogFor(action, ctx);
-  for (const input of spec?.inputs ?? []) {
-    const text = String(v[input.id] ?? "").trim();
-    if (input.optional) continue;
-    if (!text) return `${input.label} is empty.`;
-    if (text.startsWith("-") || /\s/.test(text)) return `${input.label} can't start with "-" or contain spaces.`;
-  }
-  if (spec?.choice && !spec.choice.options.some((o) => o.value === v[spec.choice.id])) return `Pick a ${spec.choice.label.toLowerCase()}.`;
-  return null;
-}
-
-// The git commands an action runs, in order.
-export function commandsFor(a, v = {}, ctx = {}) {
-  // Validate again at the execution boundary, including actions without dialogs.
-  const hashes = ["checkoutCommit", "createBranch", "addTag", "cherryPick", "revert", "reset"];
-  const names = ["checkout", "checkoutRemote", "renameBranch", "deleteBranch", "deleteRemoteBranch", "deleteTag", "push", "pushTag"];
-  if (hashes.includes(a.type) && !objectId(a.hash)) throw new Error("Invalid commit identity");
-  if (names.includes(a.type) && !refName(a.name)) throw new Error("Invalid ref name");
-  if (["merge", "rebase"].includes(a.type) && !refName(a.ref)) throw new Error("Invalid ref name");
-  if (a.type === "deleteRemoteBranch" && (!refName(a.remote) || !refName(a.branch))) throw new Error("Invalid remote branch");
-  if (["checkoutRemote", "createBranch", "addTag", "renameBranch"].includes(a.type) && !refName(String(v.name ?? "").trim())) throw new Error("Invalid ref name");
-  if (["push", "pushTag"].includes(a.type) && (!refName(v.remote) || !ctx.remotes?.includes(v.remote))) throw new Error("Invalid remote");
-  if (a.type === "reset" && !["soft", "mixed", "hard"].includes(v.mode)) throw new Error("Invalid reset mode");
-  if (a.type === "resetUncommitted" && !["mixed", "hard"].includes(v.mode)) throw new Error("Invalid reset mode");
-  const name = String(v.name ?? "").trim(), message = String(v.message ?? "").trim();
-  switch (a.type) {
-    case "checkout": return [["checkout", a.name]];
-    case "checkoutRemote": return [["checkout", "-b", name, "--track", a.name]];
-    case "checkoutCommit": return [["checkout", "--detach", a.hash]];
-    case "createBranch": return [v.checkout ? ["checkout", "-b", name, a.hash] : ["branch", name, a.hash]];
-    case "addTag": return [message ? ["tag", "-a", name, "-m", message, a.hash] : ["tag", name, a.hash]];
-    case "renameBranch": return [["branch", "-m", a.name, name]];
-    case "deleteBranch": return [["branch", v.force ? "-D" : "-d", a.name]];
-    case "deleteRemoteBranch": return [["push", a.remote, "--delete", a.branch]];
-    case "deleteTag": return [["tag", "-d", a.name]];
-    case "merge": return [["merge", "--no-edit", ...(v.noff ? ["--no-ff"] : []), a.ref]];
-    case "rebase": return [["rebase", a.ref]];
-    case "cherryPick": return [["cherry-pick", ...(a.merge ? ["-m", "1"] : []), a.hash]];
-    case "revert": return [["revert", "--no-edit", ...(a.merge ? ["-m", "1"] : []), a.hash]];
-    case "reset": return [["reset", `--${v.mode}`, a.hash]];
-    case "push": return [["push", ...(v.upstream ? ["--set-upstream"] : []), v.remote, a.name]];
-    case "pushTag": return [["push", v.remote, `refs/tags/${a.name}`]];
-    case "stash": return [["stash", "push", ...(v.untracked ? ["--include-untracked"] : []), ...(message ? ["-m", message] : [])]];
-    case "resetUncommitted": return [["reset", `--${v.mode}`, "HEAD"]];
-    case "fetch": return [["fetch", "--all"]];
-    default: throw new Error("Unknown Git action");
-  }
-}
-
-export function doneText(a, v = {}) {
-  const name = String(v.name ?? "").trim();
-  switch (a.type) {
-    case "checkout": return `Checked out ${a.name}`;
-    case "checkoutRemote": return `Checked out ${name}, tracking ${a.name}`;
-    case "checkoutCommit": return `Checked out ${a.short}`;
-    case "createBranch": return `Created branch ${name}`;
-    case "addTag": return `Tagged ${a.short} as ${name}`;
-    case "renameBranch": return `Renamed ${a.name} to ${name}`;
-    case "deleteBranch": return `Deleted branch ${a.name}`;
-    case "deleteRemoteBranch": return `Deleted ${a.name}`;
-    case "deleteTag": return `Deleted tag ${a.name}`;
-    case "merge": return `Merged ${a.what}`;
-    case "rebase": return `Rebased on ${a.what}`;
-    case "cherryPick": return `Cherry-picked ${a.short}`;
-    case "revert": return `Reverted ${a.short}`;
-    case "reset": return `Reset to ${a.short} (${v.mode})`;
-    case "push": return `Pushed ${a.name} to ${v.remote}`;
-    case "pushTag": return `Pushed tag ${a.name} to ${v.remote}`;
-    case "stash": return "Stashed uncommitted changes";
-    case "resetUncommitted": return `Reset uncommitted changes (${v.mode})`;
-    case "fetch": return "Fetched";
-    default: return "Done";
-  }
-}
-
-// Git's own words, without its hints.
-export function gitError(result) {
-  const lines = (result.stderr || result.stdout || "").split("\n").map((l) => l.trimEnd()).filter((l) => l && !l.startsWith("hint:"));
-  return lines.slice(-6).join("\n") || `git exited with ${result.code}`;
-}
 
 // The files a commit changed against its first parent, joined from
 // --name-status and --numstat (renames off, so the paths match).
