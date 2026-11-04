@@ -1,4 +1,5 @@
 // Fixture: the lines of herdr's changes mod that matter to changes.patch.
+const key = () => JSON.stringify(location());
 export default class Changes extends View {
   render() {
     return v_flex()

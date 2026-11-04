@@ -1,5 +1,8 @@
 --- a/main.js
 +++ b/main.js
+@@ -11 +11 @@
+-const key = () => JSON.stringify(location());
++export const key = () => JSON.stringify(location());
 @@ -31 +31 @@
 -export default class Changes extends View {
 +export class Changes {

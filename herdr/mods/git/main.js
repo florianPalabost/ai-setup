@@ -22,6 +22,7 @@ export default class Git extends View {
 
   section({ id, label, fill }, t, cx) {
     const on = this.open[id], part = this.parts[id];
+    part.sync?.(cx);
     const head = h_flex().id(`head-${id}`).h(30).flex_none().px(10).gap(6).items_center().border_b(1).border_color(t.border)
       .cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => this.toggle(id, cx))
       .child(div().w(10).text_color(t.dim).child(on ? "▾" : "▸"))

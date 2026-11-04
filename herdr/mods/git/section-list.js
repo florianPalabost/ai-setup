@@ -6,8 +6,11 @@
 //                content, up to 40% of the panel, and scrolls beyond that
 //   create(props, cx)  builds the section, returning { summary(), render(cx) }:
 //                summary() is the header's text, render(cx) the body. Use cx
-//                as a View would: cx.notify() redraws the panel
-import { Changes } from "./changes.js";
+//                as a View would: cx.notify() redraws the panel. An optional
+//                sync(cx) runs on every panel render, open or collapsed, since
+//                render(cx) only runs while open: use it to follow the space
+//                so the collapsed summary stays true
+import { Changes, key } from "./changes.js";
 import { changesSummary } from "./sections.js";
 
 const changes = {
@@ -20,6 +23,7 @@ const changes = {
     part.embedded = true;
     part.init(props, cx);
     return {
+      sync: (cx) => { if (key() !== part.context) part.refresh(cx); },
       summary: () => changesSummary(part.files, part.error),
       render: (cx) => part.render(cx),
     };
