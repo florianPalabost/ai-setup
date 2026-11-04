@@ -1,0 +1,7 @@
+#!/bin/sh
+# Stands in for cygpath: -u turns C:\x into /c/x, -w leaves the path alone so
+# that a fake junction's target can be compared.
+case "$1" in
+  -u) printf '%s\n' "$2" | /bin/sed -e 's|\\|/|g' -e 's|^C:|/c|' ;;
+  *) printf '%s\n' "$2" ;;
+esac
