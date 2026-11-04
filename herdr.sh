@@ -31,6 +31,11 @@ HERDR_STATUS_CALL_SECS="${HERDR_STATUS_CALL_SECS:-10}"
 HERDR_STATUS_STUCK=124
 # Set once the herdr step goes ahead on this machine.
 HERDR_PANEL_WANTED=0
+# What the leftover check offers to remove. These can't be read from the repo's
+# history: the prototypes were only ever on prototype/* branches. When a mod or
+# clone leaves the lists above, add it here.
+HERDR_DROPPED_MODS=(proto-git proto-graph-community proto-pr-pane proto-prs-panel tabs-proto)
+HERDR_DROPPED_LAYOUTS=(main-proto)
 
 herdr_version() {
   herdr-app --version | awk '{print $NF}'
@@ -247,6 +252,80 @@ build_layout() {
     return 1
   fi
   info "built $HERDR_LAYOUT from $HERDR_LAYOUT_SHIPPED"
+}
+
+# Print, in the format of stale_entries, what the repo no longer lists and is
+# still on this machine:
+#   herdr-mod     dropped mod or clone, or a link into this repo whose target is gone
+#   herdr-layout  dropped layout clone
+# Only those named above qualify, so mods and layouts of the user's own never do,
+# and neither does anything installed.json records as shipped.
+herdr_stale_entries() {
+  python3 - "$HERDR_HOME" "$REPO_DIR" "${HERDR_DROPPED_MODS[*]}" "${HERDR_DROPPED_LAYOUTS[*]}" <<'PY'
+import json, os, sys
+from pathlib import Path
+
+home, repo, mods, layouts = Path(sys.argv[1]), sys.argv[2], sys.argv[3].split(), sys.argv[4].split()
+
+try:
+    shipped = set(json.loads((home / "installed.json").read_text()))
+except (OSError, ValueError):
+    shipped = set()
+
+for name in mods:
+    path = home / "mods" / name
+    if name not in shipped and (path.exists() or path.is_symlink()):
+        print(f"herdr-mod\t{path}")
+
+for path in sorted((home / "mods").glob("*")):
+    dangling = path.is_symlink() and not path.exists()
+    if dangling and path.name not in mods and os.readlink(path).startswith(repo + "/"):
+        print(f"herdr-mod\t{path}")
+
+for name in layouts:
+    path = home / "layouts" / f"{name}.json"
+    if f"layout:{name}" not in shipped and path.exists():
+        print(f"herdr-layout\t{path}")
+PY
+}
+
+# The name of the showing layout, if the stale_entries lines $1 list it.
+herdr_dropped_layout_showing() {
+  local shown
+  if herdr-app status >/dev/null 2>&1; then
+    shown="$(herdr_window_layout)"
+  else
+    shown="$(herdr_shown_layout)"
+  fi
+  if grep -qxF "$(printf 'herdr-layout\t%s' "$HERDR_HOME/layouts/$shown.json")" <<<"$1"; then
+    printf '%s' "$shown"
+  fi
+}
+
+# Show a layout that stays if the one showing is about to be removed. Returns 1
+# if that didn't happen: the mods and layout it uses must then stay too.
+herdr_leave_dropped_layout() {
+  local shown target="$HERDR_LAYOUT_SHIPPED"
+  shown="$(herdr_dropped_layout_showing "$1")"
+  [[ -n "$shown" ]] || return 0
+  if ! herdr-app status >/dev/null 2>&1; then
+    warn "$shown is showing and herdr isn't open: keeping the herdr files. Open it and re-run install"
+    return 1
+  fi
+  if [[ -f "$HERDR_HOME/layouts/$HERDR_LAYOUT.json" ]]; then
+    target="$HERDR_LAYOUT"
+  fi
+  if ! herdr-app do layout.switch "{\"name\":\"$target\"}" >/dev/null; then
+    warn "herdr could not switch away from $shown: keeping the herdr files"
+    return 1
+  fi
+  # layout.switch answers ok even when it didn't switch, so ask what's showing.
+  shown="$(herdr_window_layout)"
+  if [[ "$shown" != "$target" ]]; then
+    warn "herdr still shows $shown, not $target: keeping the herdr files"
+    return 1
+  fi
+  info "switched herdr to $target"
 }
 
 # Whether everything the layout depends on is already there.

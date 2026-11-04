@@ -37,7 +37,7 @@ cd ~/dev/ai-setup
 4. Adds the marketplaces and installs the plugins listed in [`manifests/plugins.txt`](manifests/plugins.txt)
 5. Installs the third-party skills listed in [`manifests/skills.txt`](manifests/skills.txt)
 6. Sets up [herdr](https://herdr.dev) with its Git panel (see below)
-7. Lists what an earlier version of this repo installed but the current one dropped (permission rules, plugins, skills, dangling links) and asks before removing it. Removed skills and links go to the backup dir; `--dry-run` or a non-interactive run only lists them
+7. Lists what an earlier version of this repo installed but the current one dropped (permission rules, plugins, skills, dangling links, herdr mods and clones) and asks before removing it. Removed skills, links and herdr files go to the backup dir, and herdr leaves a layout being removed first; `--dry-run` or a non-interactive run only lists them
 
 A plain install only adds what's missing; versions already installed are left alone (that's `--update`'s job).
 
