@@ -5,16 +5,13 @@ import { h_flex, v_flex } from "gpui-base";
 import * as herdr from "herdr";
 import { COMMITS_VIEW, commitsSummary, emptyText, laneWidth, loadCommits } from "./commits-data.js";
 import { openGraphTab } from "./graph-tab.js";
-import { locate } from "./pr-data.js";
+import { here, placeKey } from "./location.js";
 
 // Local reads, so cheap enough to catch a commit made anywhere.
 const TICK_MS = 10000;
 const COMMIT_ROW = 22, JOIN_ROW = 12;
 // The panel is narrow: a long branch name mustn't push the subject out.
 const REF_MAX = 80;
-
-const here = () => locate({ spaces: herdr.spaces(), focused: herdr.focused(), panes: herdr.panes() });
-const keyOf = ({ cwd, on, branch }) => JSON.stringify([cwd, on, branch]);
 
 class Commits {
   constructor(cx) {
@@ -24,19 +21,19 @@ class Commits {
     this.loading = false;
     this.follow(cx);
     cx.timer.every(TICK_MS, (cx) => {
-      if (!this.loading && (herdr.window()?.active ?? true)) this.load(cx, here());
+      if (!this.loading && (herdr.window()?.active ?? true)) this.load(cx, here(herdr));
     });
   }
 
   // Runs on every panel render, so a cd or branch change shows while collapsed too.
   follow(cx) {
-    const at = here();
-    if (keyOf(at) !== this.key) this.load(cx, at);
+    const at = here(herdr);
+    if (placeKey(at) !== this.key) this.load(cx, at);
   }
 
   // Keeps the last list until the answer. Each redraw redraws the whole window, so only for a new one.
   load(cx, at) {
-    this.key = keyOf(at);
+    this.key = placeKey(at);
     const asked = ++this.asked;
     this.loading = true;
     cx.spawn(async (cx) => {

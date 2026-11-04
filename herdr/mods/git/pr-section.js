@@ -1,9 +1,10 @@
 // The Pull request section: the PR of the shown space's branch.
 import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { exec, focused, panes, spaces, theme, window } from "herdr";
+import * as herdr from "herdr";
 import { openUrl } from "./links.js";
-import { PR_VIEW, loadPr, locate } from "./pr-data.js";
+import { here, placeKey } from "./location.js";
+import { PR_VIEW, loadPr } from "./pr-data.js";
 import { GLYPH, checkCounts, emptyText, mergeLabel, prInterval, prSummary, reviewLabel, shownChecks, stateLabel } from "./pr-text.js";
 import { refreshDue, sharedSlot, startRefresh } from "./shared-result.js";
 
@@ -11,9 +12,6 @@ const SLOT = "pr";
 // Only decides whether something is due; the calls follow prInterval.
 const TICK_MS = 15000;
 const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-
-const here = () => locate({ spaces: spaces(), focused: focused(), panes: panes() });
-const keyOf = ({ cwd, on, branch }) => JSON.stringify([cwd, on, branch]);
 
 class PullRequest {
   constructor(cx) {
@@ -28,9 +26,9 @@ class PullRequest {
   // Runs from every panel render and timer tick, in every copy. Whichever copy
   // finds a refresh due starts it, the others wait on the same promise.
   follow(cx) {
-    const { slot } = this, at = here(), key = keyOf(at), now = Date.now();
-    const due = refreshDue(slot, key, { active: window()?.active ?? true, now, interval: prInterval(slot.value) });
-    if (due) startRefresh(slot, key, () => loadPr(exec, at, due));
+    const { slot } = this, at = here(herdr), key = placeKey(at), now = Date.now();
+    const due = refreshDue(slot, key, { active: herdr.window()?.active ?? true, now, interval: prInterval(slot.value) });
+    if (due) startRefresh(slot, key, () => loadPr(herdr.exec, at, due));
     if (slot.pending && slot.pending !== this.waitingOn) {
       const pending = (this.waitingOn = slot.pending);
       cx.spawn(async (cx) => {
@@ -94,7 +92,7 @@ class PullRequest {
   }
 
   render() {
-    const t = theme(), view = this.slot.value;
+    const t = herdr.theme(), view = this.slot.value;
     this.seen = this.slot.version;
     if (view?.kind !== PR_VIEW.PR) return this.empty(t, view);
     return v_flex().p(10).gap(8).child(this.header(t, view.pr)).child(this.counts(t, view.pr.checks)).child(this.checks(t, view.pr.checks));
