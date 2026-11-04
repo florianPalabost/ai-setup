@@ -357,11 +357,34 @@ test_dry_run_reports_nothing_to_rebuild_when_all_is_current() {
   assert_contains "$OUT" "main-git is active"
 }
 
-test_with_the_window_closed_nothing_is_built_from_old_shipped_files() {
+test_with_the_window_closed_update_starts_it_and_builds_from_what_it_ships() {
   # Arrange: the new binary is in place, but shipped files only change on its first start
+  installed_on_old_herdr
+  rm "$HERDR/fake-window"
+  printf '// shipped by the old release\n' >>"$HERDR/mods/changes/main.js"
+  printf '// shipped by the old release\n' >>"$HERDR/mods/tabs/main.js"
+
+  # Act
+  FAKE_HERDR_VERSION="$NEW_VERSION" install --update
+  local code=$?
+
+  # Assert
+  assert_eq 0 "$code" "exit code"
+  assert_file "$HERDR/fake-launches.log"
+  assert_contains "$REPO_COPY/herdr/mods/git/changes.js" "herdr-version: $NEW_VERSION"
+  assert_lacks "$REPO_COPY/herdr/mods/git/changes.js" "shipped by the old release"
+  assert_eq "$NEW_VERSION" "$(json_get "$HERDR/mods/tabs-git/mod.json" cloned_from.version)" "tabs-git version"
+  assert_lacks "$HERDR/mods/tabs-git/main.js" "shipped by the old release"
+  assert_eq "$NEW_VERSION" "$(json_get "$HERDR/layouts/main-git.json" cloned_from.version)" "main-git version"
+  assert_eq "main-git" "$(json_get "$HERDR/shared.json" layout)" "shown layout"
+}
+
+test_a_window_that_never_opens_leaves_everything_as_it_was() {
+  # Arrange
   installed_on_old_herdr
   mark_builds
   rm "$HERDR/fake-window"
+  touch "$HERDR/fake-window-never-opens"
 
   # Act
   FAKE_HERDR_VERSION="$NEW_VERSION" install --update
@@ -373,8 +396,25 @@ test_with_the_window_closed_nothing_is_built_from_old_shipped_files() {
   assert_mod_clone_kept
   assert_layout_kept
   assert_contains "$REPO_COPY/herdr/mods/git/changes.js" "herdr-version: $OLD_VERSION"
-  assert_contains "$OUT" "herdr isn't open"
+  assert_contains "$OUT" "open it and re-run install"
   assert_lacks "$OUT" "main-git is active"
+}
+
+test_with_the_window_closed_and_all_current_no_window_opens() {
+  # Arrange
+  new_repo_copy
+  herdr_with_window
+  FAKE_HERDR_VERSION="$NEW_VERSION" install
+  rm "$HERDR/fake-window"
+
+  # Act
+  FAKE_HERDR_VERSION="$NEW_VERSION" install --update
+  local code=$?
+
+  # Assert
+  assert_eq 0 "$code" "exit code"
+  assert_no_file "$HERDR/fake-launches.log"
+  assert_contains "$OUT" "main-git is active"
 }
 
 run_all() {
@@ -394,7 +434,9 @@ run_all() {
   test_case "a failed layout rebuild still lands on the last good one" test_a_failed_layout_rebuild_still_lands_on_the_last_good_one
   test_case "dry run reports what would be rebuilt and changes nothing" test_dry_run_reports_what_would_be_rebuilt_and_changes_nothing
   test_case "dry run reports nothing to rebuild when all is current" test_dry_run_reports_nothing_to_rebuild_when_all_is_current
-  test_case "with the window closed nothing is built from old shipped files" test_with_the_window_closed_nothing_is_built_from_old_shipped_files
+  test_case "with the window closed update starts it and builds from what it ships" test_with_the_window_closed_update_starts_it_and_builds_from_what_it_ships
+  test_case "a window that never opens leaves everything as it was" test_a_window_that_never_opens_leaves_everything_as_it_was
+  test_case "with the window closed and all current no window opens" test_with_the_window_closed_and_all_current_no_window_opens
 }
 
 run_all
