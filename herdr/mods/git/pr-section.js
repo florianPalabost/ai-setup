@@ -6,7 +6,7 @@ import { openUrl } from "./links.js";
 import { here, placeKey } from "./location.js";
 import { PR_VIEW, loadPr } from "./pr-data.js";
 import { GLYPH, checkCounts, emptyText, mergeLabel, prInterval, prSummary, reviewLabel, shownChecks, stateLabel } from "./pr-text.js";
-import { refreshDue, sharedSlot, startRefresh } from "./shared-result.js";
+import { SlotWatcher, refreshDue, sharedSlot, startRefresh } from "./shared-result.js";
 
 const SLOT = "pr";
 // Only decides whether something is due; the calls follow prInterval.
@@ -18,9 +18,8 @@ const checkTones = (t) => ({ fail: t.ansi1, pending: t.ansi3, pass: t.ansi2, ski
 class PullRequest {
   constructor(cx) {
     this.slot = sharedSlot(SLOT);
+    this.watcher = new SlotWatcher(this.slot);
     this.showAll = false;
-    this.seen = this.slot.version;
-    this.waitingOn = null;
     this.follow(cx);
     cx.timer.every(TICK_MS, (cx) => this.follow(cx));
   }
@@ -31,18 +30,7 @@ class PullRequest {
     const { slot } = this, at = here(herdr), key = placeKey(at), now = Date.now();
     const due = refreshDue(slot, key, { active: herdr.window()?.active ?? true, now, interval: prInterval(slot.value) });
     if (due) startRefresh(slot, key, () => loadPr(herdr.exec, at, due));
-    if (slot.pending && slot.pending !== this.waitingOn) {
-      const pending = (this.waitingOn = slot.pending);
-      cx.spawn(async (cx) => {
-        await pending;
-        this.redrawIfChanged(cx);
-      });
-    }
-  }
-
-  // Each redraw redraws the whole window, so only for a new answer.
-  redrawIfChanged(cx) {
-    if (this.slot.version !== this.seen) cx.notify();
+    this.watcher.watch(cx);
   }
 
   header(t, pr) {
@@ -95,7 +83,7 @@ class PullRequest {
 
   render() {
     const t = herdr.theme(), view = this.slot.value;
-    this.seen = this.slot.version;
+    this.watcher.markSeen();
     if (view?.kind !== PR_VIEW.PR) return this.empty(t, view);
     return v_flex().p(10).gap(8).child(this.header(t, view.pr)).child(this.counts(t, view.pr.checks)).child(this.checks(t, view.pr.checks));
   }

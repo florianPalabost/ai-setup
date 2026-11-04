@@ -48,3 +48,29 @@ export function refreshDue(slot, key, { active, now, interval }) {
   if (running(slot, now) || !active) return null;
   return now - slot.at >= interval ? { cache: true } : null;
 }
+
+// One copy's view of a slot: redraws it when a refresh brings a new answer, whichever
+// copy started that refresh. Each redraw redraws the whole window, so only for a new one.
+export class SlotWatcher {
+  constructor(slot) {
+    this.slot = slot;
+    this.seen = slot.version;
+    this.waitingOn = null;
+  }
+
+  // Waits on the refresh running now, once per refresh, however often it's called.
+  watch(cx) {
+    const { slot } = this;
+    if (!slot.pending || slot.pending === this.waitingOn) return;
+    const pending = (this.waitingOn = slot.pending);
+    cx.spawn(async (cx) => {
+      await pending;
+      if (slot.version !== this.seen) cx.notify();
+    });
+  }
+
+  // Call from render: what's in the slot now is on screen.
+  markSeen() {
+    this.seen = this.slot.version;
+  }
+}

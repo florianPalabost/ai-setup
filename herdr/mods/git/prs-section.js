@@ -5,7 +5,7 @@ import { exec, theme, window } from "herdr";
 import { openUrl } from "./links.js";
 import { PRS_VIEW, loadMyPrs } from "./prs-data.js";
 import { PRS_INTERVAL_MS, ago, checksMark, listNote, prsEmptyText, prsSummary, reviewWord } from "./prs-text.js";
-import { refreshDue, sharedSlot, startRefresh } from "./shared-result.js";
+import { SlotWatcher, refreshDue, sharedSlot, startRefresh } from "./shared-result.js";
 
 const SLOT = "prs";
 // The list isn't tied to a space or branch, so there is one view.
@@ -16,8 +16,7 @@ const TICK_MS = 15000;
 class MyPrs {
   constructor(cx) {
     this.slot = sharedSlot(SLOT);
-    this.seen = this.slot.version;
-    this.waitingOn = null;
+    this.watcher = new SlotWatcher(this.slot);
     this.shownEmptyText = null;
     this.follow(cx);
     cx.timer.every(TICK_MS, (cx) => {
@@ -32,13 +31,7 @@ class MyPrs {
     const { slot } = this;
     const due = refreshDue(slot, VIEW_KEY, { active: window()?.active ?? true, now: Date.now(), interval: PRS_INTERVAL_MS });
     if (due) startRefresh(slot, VIEW_KEY, () => loadMyPrs(exec, due));
-    if (slot.pending && slot.pending !== this.waitingOn) {
-      const pending = (this.waitingOn = slot.pending);
-      cx.spawn(async (cx) => {
-        await pending;
-        if (this.slot.version !== this.seen) cx.notify();
-      });
-    }
+    this.watcher.watch(cx);
   }
 
   // "just now" would otherwise stay up with the window idle: an unchanged answer
@@ -76,7 +69,7 @@ class MyPrs {
 
   render() {
     const t = theme(), view = this.slot.value, now = Date.now();
-    this.seen = this.slot.version;
+    this.watcher.markSeen();
     this.shownEmptyText = null;
     if (view?.kind !== PRS_VIEW.LIST || view.total === 0) {
       this.shownEmptyText = prsEmptyText(view, this.slot.at, now);

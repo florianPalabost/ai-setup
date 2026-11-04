@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { LOAD_VIEW, refreshDue, sharedSlot, startRefresh } from "../herdr/mods/git/shared-result.js";
+import { LOAD_VIEW, SlotWatcher, refreshDue, sharedSlot, startRefresh } from "../herdr/mods/git/shared-result.js";
 
 const MINUTE = 60000;
 
@@ -195,4 +195,53 @@ test("nothing is due while a refresh of this view is running", () => {
 
   // Assert
   assert.equal(due, null);
+});
+
+// A cx that runs what's spawned and counts redraws.
+function watchingCx() {
+  const tasks = [];
+  const cx = { notified: 0, notify() { cx.notified++; }, spawn(fn) { tasks.push(fn(cx)); }, settle: () => Promise.all(tasks) };
+  return cx;
+}
+
+test("a copy redraws for a new answer another copy asked for", async () => {
+  // Arrange
+  const slot = sharedSlot("pr", {}), watcher = new SlotWatcher(slot), cx = watchingCx();
+
+  // Act
+  startRefresh(slot, "view", async () => ({ n: 1 }));
+  watcher.watch(cx);
+  await cx.settle();
+
+  // Assert
+  assert.equal(cx.notified, 1);
+});
+
+test("a copy doesn't redraw for an answer already on screen", async () => {
+  // Arrange
+  const slot = sharedSlot("pr", {}), watcher = new SlotWatcher(slot), cx = watchingCx();
+  await startRefresh(slot, "view", async () => ({ n: 1 }));
+  watcher.markSeen();
+
+  // Act
+  startRefresh(slot, "view", async () => ({ n: 1 }));
+  watcher.watch(cx);
+  await cx.settle();
+
+  // Assert
+  assert.equal(cx.notified, 0);
+});
+
+test("watching one refresh many times waits on it once", async () => {
+  // Arrange
+  const slot = sharedSlot("pr", {}), watcher = new SlotWatcher(slot), cx = watchingCx();
+  startRefresh(slot, "view", async () => ({ n: 1 }));
+
+  // Act
+  watcher.watch(cx);
+  watcher.watch(cx);
+  await cx.settle();
+
+  // Assert
+  assert.equal(cx.notified, 1);
 });
