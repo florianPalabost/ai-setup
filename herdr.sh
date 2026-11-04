@@ -27,6 +27,11 @@ herdr_version() {
   herdr-app --version | awk '{print $NF}'
 }
 
+# Whether this is Linux or WSL (uname says Linux for both) with nowhere to show a window.
+herdr_has_no_display() {
+  [[ "$(uname -s)" == Linux && -z "${DISPLAY:-}" && -z "${WAYLAND_DISPLAY:-}" ]]
+}
+
 # The layout herdr is showing, "main" if it hasn't recorded one.
 herdr_shown_layout() {
   python3 - "$HERDR_HOME/shared.json" <<'PY'
@@ -248,6 +253,10 @@ herdr_all_built() {
 # Build whatever is missing, then show the layout. Stays on the current layout
 # if a piece can't be built and has no earlier build.
 install_herdr() {
+  if herdr_has_no_display; then
+    log "Herdr Git panel: skipped, no DISPLAY or WAYLAND_DISPLAY"
+    return 0
+  fi
   log "Herdr Git panel ($HERDR_HOME)"
   require herdr-app "Git panel" || return 0
   require python3 "Git panel" || return 0
