@@ -41,7 +41,16 @@ cd ~/dev/ai-setup
 
 A plain install only adds what's missing; versions already installed are left alone (that's `--update`'s job).
 
-Requirements: `bash`, `git`, `python3`, `claude`, `npx`. The herdr step also needs `patch`, and `curl` if herdr has to be installed.
+Requirements: `bash` (3.2 is enough), `git`, Python 3 as `python3` or `python`, `claude`, `npx`. The herdr step also needs `patch`, and `curl` if herdr has to be installed.
+
+On native Windows, run `install.ps1` from PowerShell instead. It makes sure Git for Windows and Python exist (with `winget`), then runs the same `install.sh` under Git Bash:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install.ps1 -DryRun   # see what would change
+powershell -ExecutionPolicy Bypass -File .\install.ps1           # -Update for --update
+```
+
+Links there are native symlinks where Windows permits them (Developer Mode or admin). Otherwise folders become junctions and files become copies, with a warning: a copy only picks up a change when you re-run install. `snapshot.sh` stays reference-machine only and isn't ported.
 
 #### The herdr step
 
