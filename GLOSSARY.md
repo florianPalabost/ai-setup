@@ -20,6 +20,24 @@ _Avoid_: exclude list, blacklist
 A directory that install generates in the vendor dir to stand in for a vendored skill that can't be linked as is: it links to the skill's files, leaving out `.claude-plugin/` so Claude Code doesn't load the skill a second time as a plugin, and holds a rewritten `SKILL.md` where a rename applies.
 _Avoid_: copy, shadow
 
+**Git panel**:
+The herdr side panel that gathers git and GitHub information for the current branch and for the user's work.
+_Avoid_: Git tab
+
+**Section**:
+One collapsible part of the Git panel.
+
+**Graph tab**:
+The single, reused herdr tab that shows the full commit graph.
+
+**Clone**:
+A copy of something herdr ships, adjusted by this setup, which herdr never updates by itself.
+_Avoid_: fork
+
+**Vendored fork**:
+Third-party code kept in this repo and changed freely, with no expectation of following upstream.
+_Avoid_: clone
+
 ## Operations
 
 **Snapshot**:
