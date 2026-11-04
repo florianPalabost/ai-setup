@@ -66,7 +66,34 @@ def layout_clone(name, to):
         sys.exit(f"layout {to} already exists")
     layout = json.loads((home / "layouts" / f"{name}.json").read_text())
     dst.write_text(json.dumps({"cloned_from": {"name": name, "version": version}, **layout}))
+    # A clone takes its source's clicks, losing any recorded under its own name.
+    clicks_file(to).unlink(missing_ok=True)
+    if clicks_file(name).exists():
+        shutil.copy(clicks_file(name), clicks_file(to))
+    remember_clicks(to)
     show(to)
+
+
+def clicks_file(layout):
+    return home / "layouts/.state" / f"{layout}.json"
+
+
+# The window keeps the shown layout's clicks in memory, read from the file only
+# when it shows the layout, and each click writes all of them back over the file.
+def remember_clicks(layout):
+    path = clicks_file(layout)
+    nodes = json.loads(path.read_text()).get("nodes", {}) if path.exists() else {}
+    (home / "fake-clicks-in-memory.json").write_text(json.dumps(nodes))
+
+
+def click_resize(node, px):
+    memory = home / "fake-clicks-in-memory.json"
+    nodes = json.loads(memory.read_text())
+    nodes[node] = {"size": {"px": px}}
+    memory.write_text(json.dumps(nodes))
+    shown = json.loads((home / "shared.json").read_text())["layout"]
+    clicks_file(shown).parent.mkdir(exist_ok=True)
+    clicks_file(shown).write_text(json.dumps({"nodes": nodes}))
 
 
 def main(args):
@@ -99,7 +126,10 @@ def main(args):
     elif command == "layout.switch":
         # Answers ok either way, as the real one does for a missing layout.
         if not (home / "fake-layout.switch-ignored").exists():
+            remember_clicks(params["name"])
             show(params["name"])
+    elif command == "layout.resize":
+        click_resize(params["id"], params["px"])
     else:
         sys.exit(f"fake herdr-app: unknown command {command}")
 
