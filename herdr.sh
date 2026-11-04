@@ -6,6 +6,7 @@
 # is kept as patches in herdr/patches/ and built into real files here, from
 # whatever the installed herdr ships (docs/adr/0002). A build checks its patch
 # against the shipped file first, so a patch that no longer applies changes nothing.
+# Install builds what's missing. Update also rebuilds what another herdr version built.
 
 HERDR_HOME="${HERDR_APP_HOME:-$HOME/.config/herdr-app}"
 # herdr-app must ask the window of the home this script writes to.
@@ -21,6 +22,7 @@ HERDR_LAYOUT=main-git
 HERDR_LAYOUT_EDIT="$HERDR_SRC/patches/main-layout.json"
 HERDR_CHANGES_PATCH="$HERDR_SRC/patches/changes.patch"
 HERDR_CHANGES_JS="$HERDR_SRC/mods/git/changes.js"
+HERDR_CHANGES_LINK="$HERDR_HOME/mods/git"
 HERDR_VERSION_MARK="herdr-version:"
 HERDR_INSTALLER_SH="https://releases.herdr.dev/app/install.sh"
 HERDR_INSTALLER_PS1="https://releases.herdr.dev/app/install.ps1"
@@ -174,6 +176,11 @@ build_changes() {
       cat "$patched"
     } >"$HERDR_CHANGES_JS.tmp"
     mv "$HERDR_CHANGES_JS.tmp" "$HERDR_CHANGES_JS"
+    # An open window reloads a linked mod when the link changes, not when a file
+    # behind it does. Before the first link there is nothing to reload.
+    if [[ -L "$HERDR_CHANGES_LINK" ]]; then
+      touch -h "$HERDR_CHANGES_LINK"
+    fi
     info "generated $HERDR_CHANGES_JS from herdr $version"
   fi
   rm -f "$patched"
@@ -219,11 +226,21 @@ build_mod_clone() {
   info "built $clone from $shipped"
 }
 
+# Show the layout $1, reading its clicks from disk. The window only reads them
+# when it switches to a layout, and until then the next click overwrites the file
+# with what it holds in memory.
+show_layout_afresh() {
+  herdr-app do layout.switch "{\"name\":\"$HERDR_LAYOUT_SHIPPED\"}" >/dev/null || true
+  herdr-app do layout.switch "{\"name\":\"$1\"}" >/dev/null || true
+}
+
 # Build the layout clone. layout.clone also shows it, so when the edit fails, go
 # back to the layout that was showing. If anything fails, a clone already there
-# stays as it was.
+# stays as it was. layout.clone drops the clicks made on a layout of that name, so
+# they're put back and read again.
 build_layout() {
   local shipped="$HERDR_HOME/layouts/$HERDR_LAYOUT_SHIPPED.json" file="$HERDR_HOME/layouts/$HERDR_LAYOUT.json" before
+  local clicks="$HERDR_HOME/layouts/.state/$HERDR_LAYOUT.json" saved_clicks=""
   local args="{\"name\":\"$HERDR_LAYOUT_SHIPPED\",\"as\":\"$HERDR_LAYOUT\"}"
   if [[ ! -f "$shipped" ]]; then
     warn "$shipped not found: start herdr once, then re-run install"
@@ -240,18 +257,67 @@ build_layout() {
     return 0
   fi
   before="$(herdr_shown_layout)"
+  if [[ -f "$clicks" ]]; then
+    saved_clicks="$(mktemp)"
+    cp -p "$clicks" "$saved_clicks"
+  fi
   if ! herdr-app do layout.clone "$args" >/dev/null; then
     restore_backup "$file"
+    rm -f "$saved_clicks"
     warn "herdr could not clone $HERDR_LAYOUT_SHIPPED as $HERDR_LAYOUT"
     return 1
   fi
+  if [[ -n "$saved_clicks" ]]; then
+    cp -p "$saved_clicks" "$clicks"
+    rm -f "$saved_clicks"
+  fi
   if ! edited_layout "$file" "$HERDR_LAYOUT_EDIT" "$file" 2>/dev/null; then
-    herdr-app do layout.switch "{\"name\":\"$before\"}" >/dev/null || true
     restore_backup "$file"
+    show_layout_afresh "$before"
     warn_build_failed "$HERDR_LAYOUT_EDIT" "$HERDR_LAYOUT" "$file"
     return 1
   fi
+  if [[ -n "$saved_clicks" ]]; then
+    show_layout_afresh "$HERDR_LAYOUT"
+  fi
   info "built $HERDR_LAYOUT from $HERDR_LAYOUT_SHIPPED"
+}
+
+# The version the clone's JSON file $1 records, empty if it records none.
+cloned_from_version() {
+  python3 - "$1" <<'PY'
+import json, sys
+
+try:
+    print(json.load(open(sys.argv[1]))["cloned_from"]["version"])
+except (OSError, ValueError, KeyError, TypeError):
+    print("")
+PY
+}
+
+# Whether this is an update and $2, the version the build $1 came from, isn't the
+# running herdr's. Says so, which is what a dry run reports.
+outdated() {
+  local what="$1" recorded="$2" running
+  ((UPDATE)) || return 1
+  running="$(herdr_version)"
+  [[ "$recorded" != "$running" ]] || return 1
+  info "$what came from herdr ${recorded:-of unknown version}, running $running"
+}
+
+changes_outdated() {
+  [[ -f "$HERDR_CHANGES_JS" ]] || return 1
+  outdated "Changes code" "$(sed -n "s|^// $HERDR_VERSION_MARK ||p" "$HERDR_CHANGES_JS")"
+}
+
+mod_clone_outdated() {
+  [[ -d "$HERDR_HOME/mods/$1" ]] || return 1
+  outdated "$1" "$(cloned_from_version "$HERDR_HOME/mods/$1/mod.json")"
+}
+
+layout_outdated() {
+  [[ -f "$HERDR_HOME/layouts/$HERDR_LAYOUT.json" ]] || return 1
+  outdated "$HERDR_LAYOUT" "$(cloned_from_version "$HERDR_HOME/layouts/$HERDR_LAYOUT.json")"
 }
 
 # Print, in the format of stale_entries, what the repo no longer lists and is
@@ -328,14 +394,18 @@ herdr_leave_dropped_layout() {
   info "switched herdr to $target"
 }
 
-# Whether everything the layout depends on is already there.
+# Whether everything the layout depends on is there, built from the right herdr.
 herdr_all_built() {
   local spec _shipped clone _patch
   [[ -f "$HERDR_CHANGES_JS" && -f "$HERDR_HOME/layouts/$HERDR_LAYOUT.json" ]] || return 1
+  changes_outdated >/dev/null && return 1
+  layout_outdated >/dev/null && return 1
   for spec in "${HERDR_MOD_CLONES[@]}"; do
     read -r _shipped clone _patch <<<"$spec"
     [[ -d "$HERDR_HOME/mods/$clone" ]] || return 1
+    mod_clone_outdated "$clone" >/dev/null && return 1
   done
+  return 0
 }
 
 # Run herdr's official installer for this platform.
@@ -498,8 +568,9 @@ remind_gh_sign_in() {
   fi
 }
 
-# Build whatever is missing, then show the layout. Stays on the current layout
-# if a piece can't be built and has no earlier build.
+# Build whatever is missing and, on an update, rebuild whatever an older herdr
+# built, then show the layout. Stays on the current layout if a piece can't be
+# built and has no earlier build; a piece with an earlier build keeps it.
 install_herdr() {
   if herdr_has_no_display; then
     log "Herdr Git panel: skipped, no DISPLAY or WAYLAND_DISPLAY"
@@ -535,17 +606,22 @@ install_herdr() {
     build_changes || ready=0
   fi
 
+  # Shipped files are only this version's once its window has started, so this
+  # waits for the window even though it doesn't go through it.
+  if changes_outdated; then
+    build_changes || true
+  fi
   for spec in "${HERDR_MOD_CLONES[@]}"; do
     read -r shipped clone patch <<<"$spec"
-    if [[ ! -d "$HERDR_HOME/mods/$clone" ]]; then
-      build_mod_clone "$shipped" "$clone" "$patch" || ready=0
+    if [[ ! -d "$HERDR_HOME/mods/$clone" ]] || mod_clone_outdated "$clone"; then
+      build_mod_clone "$shipped" "$clone" "$patch" || [[ -d "$HERDR_HOME/mods/$clone" ]] || ready=0
     fi
   done
   if ((!ready)); then
     return 0
   fi
-  if [[ ! -f "$HERDR_HOME/layouts/$HERDR_LAYOUT.json" ]]; then
-    build_layout || return 0
+  if [[ ! -f "$HERDR_HOME/layouts/$HERDR_LAYOUT.json" ]] || layout_outdated; then
+    build_layout || [[ -f "$HERDR_HOME/layouts/$HERDR_LAYOUT.json" ]] || return 0
   fi
   if [[ "$(herdr_shown_layout)" != "$HERDR_LAYOUT" ]]; then
     run herdr-app do layout.switch "{\"name\":\"$HERDR_LAYOUT\"}"
