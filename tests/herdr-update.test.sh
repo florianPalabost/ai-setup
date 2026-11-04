@@ -12,12 +12,13 @@ RELEASE_MARK="// new in this release"
 # A machine with the Git panel built on the old herdr.
 installed_on_old_herdr() {
   new_repo_copy
-  herdr_with_window
+  FAKE_HERDR_VERSION="$OLD_VERSION" herdr_with_window
   FAKE_HERDR_VERSION="$OLD_VERSION" install
 }
 
 # What herdr writes on its first start of a new release: each shipped file changes.
 herdr_ships_a_new_release() {
+  window_started_on "$NEW_VERSION"
   printf '%s\n' "$RELEASE_MARK" >>"$HERDR/mods/tabs/main.js"
   printf '%s\n' "$RELEASE_MARK" >>"$HERDR/mods/changes/main.js"
   python3 - "$HERDR/layouts/main.json" <<'PY'
@@ -396,6 +397,66 @@ test_with_the_window_closed_update_starts_it_and_builds_from_what_it_ships() {
   assert_eq "main-git" "$(json_get "$HERDR/shared.json" layout)" "shown layout"
 }
 
+test_with_an_old_window_open_update_builds_nothing_yet() {
+  # Arrange: the new binary is in place, and the open window is still the old one
+  installed_on_old_herdr
+  mark_builds
+  rm "$HERDR/fake-calls.log"
+
+  # Act
+  FAKE_HERDR_VERSION="$NEW_VERSION" install --update
+  local code=$?
+
+  # Assert
+  assert_eq 0 "$code" "exit code"
+  assert_changes_kept
+  assert_mod_clone_kept
+  assert_layout_kept
+  assert_contains "$REPO_COPY/herdr/mods/git/changes.js" "herdr-version: $OLD_VERSION"
+  assert_lacks "$OUT" "came from herdr"
+  assert_no_file "$HERDR/fake-calls.log"
+}
+
+test_once_the_old_window_restarts_update_rebuilds() {
+  # Arrange: an update while the old window was open, which then restarted
+  installed_on_old_herdr
+  FAKE_HERDR_VERSION="$NEW_VERSION" install --update
+  herdr_ships_a_new_release
+
+  # Act
+  FAKE_HERDR_VERSION="$NEW_VERSION" install --update
+
+  # Assert
+  assert_contains "$REPO_COPY/herdr/mods/git/changes.js" "herdr-version: $NEW_VERSION"
+  assert_contains "$REPO_COPY/herdr/mods/git/changes.js" "$RELEASE_MARK"
+  assert_contains "$HERDR/mods/tabs-git/main.js" "$RELEASE_MARK"
+}
+
+test_changes_code_built_under_an_old_window_records_the_old_version() {
+  # Arrange: the code is missing, the binary is new, and the shipped files are still old
+  installed_on_old_herdr
+  rm "$REPO_COPY/herdr/mods/git/changes.js"
+
+  # Act
+  FAKE_HERDR_VERSION="$NEW_VERSION" install
+
+  # Assert
+  assert_contains "$REPO_COPY/herdr/mods/git/changes.js" "herdr-version: $OLD_VERSION"
+}
+
+test_a_failing_patch_names_the_version_of_the_files_it_failed_on() {
+  # Arrange
+  installed_on_old_herdr
+  rm "$REPO_COPY/herdr/mods/git/changes.js"
+  printf '// upstream rewrote the panel\n' >"$HERDR/mods/changes/main.js"
+
+  # Act
+  FAKE_HERDR_VERSION="$NEW_VERSION" install
+
+  # Assert
+  assert_contains "$OUT" "herdr/patches/changes.patch no longer applies to herdr $OLD_VERSION"
+}
+
 test_a_window_that_never_opens_leaves_everything_as_it_was() {
   # Arrange
   installed_on_old_herdr
@@ -453,6 +514,10 @@ run_all() {
   test_case "dry run reports what would be rebuilt and changes nothing" test_dry_run_reports_what_would_be_rebuilt_and_changes_nothing
   test_case "dry run reports nothing to rebuild when all is current" test_dry_run_reports_nothing_to_rebuild_when_all_is_current
   test_case "with the window closed update starts it and builds from what it ships" test_with_the_window_closed_update_starts_it_and_builds_from_what_it_ships
+  test_case "with an old window open update builds nothing yet" test_with_an_old_window_open_update_builds_nothing_yet
+  test_case "once the old window restarts update rebuilds" test_once_the_old_window_restarts_update_rebuilds
+  test_case "Changes code built under an old window records the old version" test_changes_code_built_under_an_old_window_records_the_old_version
+  test_case "a failing patch names the version of the files it failed on" test_a_failing_patch_names_the_version_of_the_files_it_failed_on
   test_case "a window that never opens leaves everything as it was" test_a_window_that_never_opens_leaves_everything_as_it_was
   test_case "with the window closed and all current no window opens" test_with_the_window_closed_and_all_current_no_window_opens
 }

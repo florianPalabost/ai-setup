@@ -42,8 +42,37 @@ HERDR_PANEL_WANTED=0
 HERDR_DROPPED_MODS=(proto-git proto-graph-community proto-pr-pane proto-prs-panel tabs-proto)
 HERDR_DROPPED_LAYOUTS=(main-proto)
 
+# The version of the binary on disk, which an update can replace under an open window.
 herdr_version() {
   herdr-app --version | awk '{print $NF}'
+}
+
+# The version the shipped files came from. herdr rewrites them on each start and
+# records that start's version, so this holds while an older window stays open
+# over a newer binary, and with no window at all.
+herdr_shipped_version() {
+  local version
+  version="$(py3 - "$HERDR_HOME/update-notes.json" <<'PY'
+import json, sys
+
+try:
+    print(json.load(open(sys.argv[1]))["last_run"])
+except (OSError, ValueError, KeyError, TypeError):
+    print("")
+PY
+)"
+  printf '%s\n' "${version:-$(herdr_version)}"
+}
+
+# The version a build should come from: the open window's, as its shipped files
+# are what a build reads and mod.clone records it. With none open, the binary's,
+# which is what the next window will be and write.
+herdr_running_version() {
+  if herdr_status; then
+    herdr_shipped_version
+  else
+    herdr_version
+  fi
 }
 
 # Whether this is Linux or WSL (uname says Linux for both) with nowhere to show a window.
@@ -140,7 +169,7 @@ layout_edit_applies() {
 # Warn that the patch $1 can't build $2, whose last good build is at $3.
 warn_build_failed() {
   local patch="$1" what="$2" last_good="$3"
-  warn "${patch#"$REPO_DIR"/} no longer applies to herdr $(herdr_version): $what not built"
+  warn "${patch#"$REPO_DIR"/} no longer applies to herdr $(herdr_shipped_version): $what not built"
   if [[ -e "$last_good" ]]; then
     warn "keeping the last good $what"
   else
@@ -183,7 +212,7 @@ build_changes() {
     warn_build_failed "$HERDR_CHANGES_PATCH" "Changes code" "$HERDR_CHANGES_JS"
     return 1
   fi
-  version="$(herdr_version)"
+  version="$(herdr_shipped_version)"
   if ((DRY_RUN)); then
     info "[dry-run] would generate $HERDR_CHANGES_JS from herdr $version"
   else
@@ -317,7 +346,7 @@ PY
 outdated() {
   local what="$1" recorded="$2" running
   ((UPDATE)) || return 1
-  running="$(herdr_version)"
+  running="$(herdr_running_version)"
   [[ "$recorded" != "$running" ]] || return 1
   info "$what came from herdr ${recorded:-of unknown version}, running $running"
 }

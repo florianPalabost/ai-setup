@@ -176,12 +176,11 @@ test_a_rebuild_replaces_the_clone_when_the_patch_applies() {
   new_repo_copy
   herdr_with_window
   install
-  FAKE_HERDR_VERSION=0.1.13
+  window_started_on 0.1.13
 
   # Act
   install_function build_mod_clone tabs tabs-git tabs.patch
   local code=$?
-  unset FAKE_HERDR_VERSION
 
   # Assert
   assert_eq 0 "$code" "exit code"
