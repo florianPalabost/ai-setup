@@ -1,0 +1,5 @@
+#!/bin/sh
+# Stands in for claude in install tests: no plugins, and nothing to do.
+case "$*" in
+  *--json*) echo '[]' ;;
+esac

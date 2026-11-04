@@ -10,12 +10,16 @@
 # --update also pulls this repo, then moves every user-scope plugin,
 # marketplace and third-party skill to its latest upstream version.
 #
+# With herdr open, it also sets up the Git panel (see herdr.sh).
+#
 # Usage: ./install.sh [--update] [--dry-run]
 
 set -euo pipefail
 
 # shellcheck source=lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+# shellcheck source=herdr.sh
+source "$(dirname "${BASH_SOURCE[0]}")/herdr.sh"
 
 BACKUP_DIR="$CLAUDE_DIR/backups/ai-setup-$(date +%Y%m%d-%H%M%S)"
 DRY_RUN=0
@@ -26,7 +30,7 @@ PLUGINS_CHANGED=0
 ARGS=("$@")
 
 usage() {
-  sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 for arg in "$@"; do
@@ -669,6 +673,7 @@ main() {
   link_own_plugins
   install_plugins
   install_skills
+  install_herdr
   prune_stale
   if ((UPDATE)); then
     update_plugins
@@ -682,4 +687,7 @@ main() {
   return 0
 }
 
-main
+# Sourced by the tests, to call one step on its own.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main
+fi

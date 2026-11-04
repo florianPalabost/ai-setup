@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+"""Stands in for herdr-app in install tests, working only on $HERDR_APP_HOME.
+
+Mirrors what the real CLI was seen doing: `status` fails with no window,
+`mod.clone` and `layout.clone` refuse an existing name, record cloned_from and
+(for mods) rewrite asset paths, and `layout.clone` shows the clone. The window
+counts as open while $HERDR_APP_HOME/fake-window exists, and a command refuses
+while $HERDR_APP_HOME/fake-<command>-fails exists. Each `do` is logged to
+$HERDR_APP_HOME/fake-calls.log.
+"""
+import json
+import os
+import shutil
+import sys
+from pathlib import Path
+
+EXIT_FAILED = 1
+EXIT_NO_WINDOW = 2
+
+home = Path(os.environ["HERDR_APP_HOME"])
+version = os.environ.get("FAKE_HERDR_VERSION", "0.1.12")
+
+
+def show(layout):
+    (home / "shared.json").write_text(json.dumps({"layout": layout}))
+
+
+def mod_clone(name, to):
+    src, dst = home / "mods" / name, home / "mods" / to
+    if dst.exists():
+        sys.exit(f"mod {to} already exists")
+    shutil.copytree(src, dst)
+    main = dst / "main.js"
+    main.write_text(main.read_text().replace(f"mods/{name}/", f"mods/{to}/"))
+    meta = json.loads((dst / "mod.json").read_text())
+    meta["cloned_from"] = {"name": name, "version": version}
+    (dst / "mod.json").write_text(json.dumps(meta, indent=2))
+
+
+def layout_clone(name, to):
+    dst = home / "layouts" / f"{to}.json"
+    if dst.exists():
+        sys.exit(f"layout {to} already exists")
+    layout = json.loads((home / "layouts" / f"{name}.json").read_text())
+    dst.write_text(json.dumps({"cloned_from": {"name": name, "version": version}, **layout}))
+    show(to)
+
+
+def main(args):
+    if args == ["--version"]:
+        print(f"herdr-app {version}")
+        return
+    if not (home / "fake-window").exists():
+        print(f"herdr-app: no Herdr window at {home}/herdr-app.sock", file=sys.stderr)
+        sys.exit(EXIT_NO_WINDOW)
+    if args == ["status"]:
+        print(json.dumps({"errors": []}))
+        return
+    if args[0] != "do":
+        sys.exit(EXIT_FAILED)
+    with (home / "fake-calls.log").open("a") as log:
+        log.write(" ".join(args[1:]) + "\n")
+    command, params = args[1], json.loads(args[2])
+    if (home / f"fake-{command}-fails").exists():
+        sys.exit(f"{command} refused")
+    if command == "mod.clone":
+        mod_clone(params["name"], params["as"])
+    elif command == "layout.clone":
+        layout_clone(params["name"], params["as"])
+    elif command == "layout.switch":
+        show(params["name"])
+    else:
+        sys.exit(f"fake herdr-app: unknown command {command}")
+
+
+main(sys.argv[1:])
