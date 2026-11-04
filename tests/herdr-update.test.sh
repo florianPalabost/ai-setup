@@ -301,6 +301,21 @@ test_a_failed_rebuild_still_lands_on_the_git_layout() {
   assert_eq "main-git" "$(json_get "$HERDR/shared.json" layout)" "shown layout"
 }
 
+test_a_failed_layout_rebuild_still_lands_on_the_last_good_one() {
+  # Arrange: the machine is on main, and main-git can't be rebuilt
+  installed_on_old_herdr
+  herdr_ships_a_new_release
+  printf '{"id":"root","type":"row","children":[{"id":"tabs","type":"block","content":{"mod":"tabs"}}]}' >"$HERDR/layouts/main.json"
+  printf '{"layout":"main"}' >"$HERDR/shared.json"
+
+  # Act
+  FAKE_HERDR_VERSION="$NEW_VERSION" install --update
+
+  # Assert
+  assert_eq "main-git" "$(json_get "$HERDR/shared.json" layout)" "shown layout"
+  assert_eq "$OLD_VERSION" "$(json_get "$HERDR/layouts/main-git.json" cloned_from.version)" "main-git version"
+}
+
 test_dry_run_reports_what_would_be_rebuilt_and_changes_nothing() {
   # Arrange
   installed_on_old_herdr
@@ -376,6 +391,7 @@ run_all() {
   test_case "a changes patch that no longer applies keeps that code only" test_a_changes_patch_that_no_longer_applies_keeps_that_code_only
   test_case "a layout edit that no longer applies keeps that clone only" test_a_layout_edit_that_no_longer_applies_keeps_that_clone_only
   test_case "a failed rebuild still lands on the git layout" test_a_failed_rebuild_still_lands_on_the_git_layout
+  test_case "a failed layout rebuild still lands on the last good one" test_a_failed_layout_rebuild_still_lands_on_the_last_good_one
   test_case "dry run reports what would be rebuilt and changes nothing" test_dry_run_reports_what_would_be_rebuilt_and_changes_nothing
   test_case "dry run reports nothing to rebuild when all is current" test_dry_run_reports_nothing_to_rebuild_when_all_is_current
   test_case "with the window closed nothing is built from old shipped files" test_with_the_window_closed_nothing_is_built_from_old_shipped_files
