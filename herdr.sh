@@ -259,7 +259,7 @@ build_layout() {
   before="$(herdr_shown_layout)"
   if [[ -f "$clicks" ]]; then
     saved_clicks="$(mktemp)"
-    cp "$clicks" "$saved_clicks"
+    cp -p "$clicks" "$saved_clicks"
   fi
   if ! herdr-app do layout.clone "$args" >/dev/null; then
     restore_backup "$file"
@@ -268,7 +268,7 @@ build_layout() {
     return 1
   fi
   if [[ -n "$saved_clicks" ]]; then
-    cp "$saved_clicks" "$clicks"
+    cp -p "$saved_clicks" "$clicks"
     rm -f "$saved_clicks"
   fi
   if ! edited_layout "$file" "$HERDR_LAYOUT_EDIT" "$file" 2>/dev/null; then

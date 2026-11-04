@@ -132,6 +132,21 @@ test_a_rebuilt_layout_keeps_the_clicks_made_on_it() {
   assert_eq "333" "$(json_get "$HERDR/layouts/.state/main-git.json" nodes.panel.size.px)" "later click"
 }
 
+test_put_back_clicks_keep_their_file_permissions() {
+  # Arrange
+  installed_on_old_herdr
+  herdr_ships_a_new_release
+  mkdir -p "$HERDR/layouts/.state"
+  printf '{"nodes":{}}' >"$HERDR/layouts/.state/main-git.json"
+  chmod 644 "$HERDR/layouts/.state/main-git.json"
+
+  # Act
+  FAKE_HERDR_VERSION="$NEW_VERSION" install --update
+
+  # Assert
+  assert_eq "-rw-r--r--" "$(ls -l "$HERDR/layouts/.state/main-git.json" | cut -c1-10)" "permissions"
+}
+
 test_a_rebuilt_layout_with_no_clicks_does_not_reshow_it() {
   # Arrange
   installed_on_old_herdr
@@ -422,6 +437,7 @@ run_all() {
   test_case "regenerated Changes code reaches the open window" test_regenerated_changes_code_reaches_the_open_window
   test_case "current Changes code does not reload the mod" test_current_changes_code_does_not_reload_the_mod
   test_case "a rebuilt layout keeps the clicks made on it" test_a_rebuilt_layout_keeps_the_clicks_made_on_it
+  test_case "put back clicks keep their file permissions" test_put_back_clicks_keep_their_file_permissions
   test_case "a rebuilt layout with no clicks does not reshow it" test_a_rebuilt_layout_with_no_clicks_does_not_reshow_it
   test_case "update leaves alone what the running herdr built" test_update_leaves_alone_what_the_running_herdr_built
   test_case "update rebuilds only the clone from another version" test_update_rebuilds_only_the_clone_from_another_version
