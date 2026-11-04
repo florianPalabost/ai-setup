@@ -1,0 +1,6 @@
+#!/bin/sh
+# Stands in for gh in install tests: signed in unless $FAKE_SANDBOX/gh-signed-out exists.
+case "$*" in
+  "auth status") [ ! -e "$FAKE_SANDBOX/gh-signed-out" ] ;;
+  *) exit 1 ;;
+esac

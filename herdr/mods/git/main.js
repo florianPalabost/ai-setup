@@ -32,7 +32,7 @@ export default class Git extends View {
     const box = v_flex().id(`section-${id}`).min_h(0).child(head);
     if (!on) return box.flex_none();
     if (fill) return box.flex_1().child(div().id(`body-${id}`).flex_1().min_h(0).overflow_hidden().border_b(1).border_color(t.border).child(part.render(cx)));
-    return box.flex_none().max_h(CONTENT_SECTION_MAX_HEIGHT).child(div().id(`body-${id}`).min_h(0).overflow_y_scrollbar().border_b(1).border_color(t.border).child(part.render(cx)));
+    return box.flex_none().max_h(CONTENT_SECTION_MAX_HEIGHT).child(div().id(`body-${id}`).min_h(0).overflow_y_scroll().border_b(1).border_color(t.border).child(part.render(cx)));
   }
 
   render(cx) {

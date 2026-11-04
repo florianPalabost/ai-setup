@@ -1,0 +1,3 @@
+#!/bin/sh
+# Stands in for powershell in install tests: logs the call and installs nothing.
+echo "powershell $*" >>"$FAKE_SANDBOX/tool-calls.log"
