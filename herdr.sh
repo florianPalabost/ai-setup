@@ -285,7 +285,7 @@ build_layout() {
 
 # The version the clone's JSON file $1 records, empty if it records none.
 cloned_from_version() {
-  python3 - "$1" <<'PY'
+  py3 - "$1" <<'PY'
 import json, sys
 
 try:
