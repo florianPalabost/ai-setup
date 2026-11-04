@@ -422,6 +422,8 @@ export class Graph {
     const z = this.unit(), px = (lane) => x(lane) * z, py = (v) => y(v) * z;
     // One stroked path per color: a row is a handful of paints, however many lanes cross it.
     for (const [a, ya, b, yb, c, dashed] of row.segments) {
+      // Past the column, the line is clipped anyway: on a huge history, drawing it gets the row cut off.
+      if (Math.min(x(a), x(b)) > width) continue;
       const color = dashed ? t.dim : colors[c % colors.length], key = `${color}${dashed ? "-" : ""}`;
       let p = paths.get(key)?.p ?? (dashed ? PathBuilder.stroke(1.5 * z).dash_array([3 * z, 3 * z]) : PathBuilder.stroke(1.5 * z));
       p = p.move_to(px(a), py(ya));

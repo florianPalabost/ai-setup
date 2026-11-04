@@ -10,6 +10,7 @@ import { fakeCx,findById, findList, findPressTarget, textOf, walk } from "./fake
 import { resetWorld, world } from "./fakes/herdr-module.mjs";
 
 const { default: GitGraph } = await import("../herdr/mods/git-graph/main.js");
+const { Graph } = await import("../herdr/mods/git-graph/graph.js");
 const { Menu } = await import("../herdr/mods/git-graph/menu.js");
 
 const FORK = new URL("../herdr/mods/git-graph/", import.meta.url);
@@ -315,6 +316,22 @@ test("rows cut off once, then drawn, raise nothing: a tab shown again can be slo
   // Assert
   assert.doesNotMatch(textOf(root), /Can't draw/);
   assert.ok(findList(root));
+});
+
+test("lines wholly past the clipped graph column are not painted", () => {
+  // Arrange
+  const view = { rowH: () => 22, unit: () => 1 };
+  const row = { lane: 0, segments: [[0, 0, 0, 1, 0, false], [50, 0, 50, 1, 1, false]] };
+  const paint = globalThis.window.paint_path;
+  let painted = 0;
+  globalThis.window.paint_path = (...args) => { painted++; return paint(...args); };
+
+  // Act
+  Graph.prototype.graphCell.call(view, row, {}, ["#111", "#222"], { dim: "#333", background: "#000" }, 100);
+  globalThis.window.paint_path = paint;
+
+  // Assert
+  assert.equal(painted, 1);
 });
 
 test("rows that finish drawing raise nothing", async () => {
