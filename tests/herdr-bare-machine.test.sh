@@ -149,6 +149,123 @@ test_dry_run_does_not_run_the_installer() {
   assert_contains "$OUT" "[dry-run] would install herdr from https://releases.herdr.dev/app/install.sh"
 }
 
+gh_not_installed() {
+  rm "$SANDBOX/bin/gh"
+}
+
+test_gh_is_installed_with_brew() {
+  # Arrange
+  new_repo_copy
+  herdr_with_window
+  gh_not_installed
+  give_tools brew winget apt-get sudo
+
+  # Act
+  install
+  local code=$?
+
+  # Assert
+  assert_eq 0 "$code" "exit code"
+  assert_contains "$SANDBOX/tool-calls.log" "brew install gh"
+  assert_lacks "$SANDBOX/tool-calls.log" "winget"
+  assert_lacks "$SANDBOX/tool-calls.log" "sudo"
+}
+
+test_gh_is_installed_with_winget() {
+  # Arrange
+  new_repo_copy
+  herdr_with_window
+  gh_not_installed
+  give_tools winget
+
+  # Act
+  install
+
+  # Assert
+  assert_contains "$SANDBOX/tool-calls.log" "winget install --id GitHub.cli --exact --silent --accept-package-agreements --accept-source-agreements"
+}
+
+test_gh_is_installed_with_apt_when_sudo_needs_no_password() {
+  # Arrange
+  new_repo_copy
+  herdr_with_window
+  gh_not_installed
+  give_tools apt-get sudo
+
+  # Act
+  install
+
+  # Assert
+  assert_contains "$SANDBOX/tool-calls.log" "sudo -n true"
+  assert_contains "$SANDBOX/tool-calls.log" "sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y gh"
+}
+
+test_apt_is_not_used_when_sudo_wants_a_password() {
+  # Arrange
+  new_repo_copy
+  herdr_with_window
+  gh_not_installed
+  give_tools apt-get sudo
+  touch "$SANDBOX/sudo-wants-password"
+
+  # Act
+  install
+  local code=$?
+
+  # Assert
+  assert_eq 0 "$code" "exit code"
+  assert_contains "$SANDBOX/tool-calls.log" "sudo -n true"
+  assert_lacks "$SANDBOX/tool-calls.log" "apt-get"
+  assert_contains "$OUT" "gh not installed"
+  assert_eq "main-git" "$(json_get "$HERDR/shared.json" layout)" "shown layout"
+}
+
+test_a_failed_gh_install_does_not_stop_the_panel() {
+  # Arrange
+  new_repo_copy
+  herdr_with_window
+  gh_not_installed
+  give_tools brew
+  touch "$SANDBOX/brew-fails"
+
+  # Act
+  install
+  local code=$?
+
+  # Assert
+  assert_eq 0 "$code" "exit code"
+  assert_contains "$OUT" "could not install gh"
+  assert_eq "main-git" "$(json_get "$HERDR/shared.json" layout)" "shown layout"
+}
+
+test_gh_already_there_is_left_alone() {
+  # Arrange
+  new_repo_copy
+  herdr_with_window
+  give_tools brew
+
+  # Act
+  install
+
+  # Assert
+  assert_no_file "$SANDBOX/tool-calls.log"
+}
+
+test_dry_run_shows_the_gh_install_without_doing_it() {
+  # Arrange
+  new_repo_copy
+  herdr_with_window
+  gh_not_installed
+  give_tools apt-get sudo
+
+  # Act
+  install --dry-run
+
+  # Assert
+  assert_contains "$OUT" "[dry-run] sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y gh"
+  assert_lacks "$SANDBOX/tool-calls.log" "apt-get"
+}
+
 run_all() {
   test_case "linux with no display skips herdr in one line" test_linux_with_no_display_skips_herdr_in_one_line
   test_case "wayland alone counts as a display" test_wayland_alone_counts_as_a_display
@@ -159,6 +276,13 @@ run_all() {
   test_case "a failed installer leaves the rest of the install" test_a_failed_installer_leaves_the_rest_of_the_install
   test_case "windows uses herdr's powershell installer" test_windows_uses_herdrs_powershell_installer
   test_case "dry run does not run the installer" test_dry_run_does_not_run_the_installer
+  test_case "gh is installed with brew" test_gh_is_installed_with_brew
+  test_case "gh is installed with winget" test_gh_is_installed_with_winget
+  test_case "gh is installed with apt when sudo needs no password" test_gh_is_installed_with_apt_when_sudo_needs_no_password
+  test_case "apt is not used when sudo wants a password" test_apt_is_not_used_when_sudo_wants_a_password
+  test_case "a failed gh install does not stop the panel" test_a_failed_gh_install_does_not_stop_the_panel
+  test_case "gh already there is left alone" test_gh_already_there_is_left_alone
+  test_case "dry run shows the gh install without doing it" test_dry_run_shows_the_gh_install_without_doing_it
 }
 
 run_all

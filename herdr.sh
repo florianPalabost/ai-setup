@@ -297,6 +297,29 @@ install_herdr_app() {
   return 1
 }
 
+# Install gh with the first tool that can do it without a prompt. A machine with
+# none still gets the panel: its PR sections say how to fix it.
+install_gh() {
+  command -v gh >/dev/null 2>&1 && return 0
+  local status=0
+  if command -v brew >/dev/null 2>&1; then
+    run brew install gh </dev/null || status=$?
+  elif command -v winget >/dev/null 2>&1; then
+    run winget install --id GitHub.cli --exact --silent --accept-package-agreements --accept-source-agreements </dev/null || status=$?
+  elif command -v apt-get >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+    {
+      run sudo -n apt-get update -qq &&
+        run sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y gh
+    } </dev/null || status=$?
+  else
+    info "gh not installed: no way to install it here without a prompt"
+    return 0
+  fi
+  if ((status != 0)); then
+    warn "could not install gh"
+  fi
+}
+
 # Build whatever is missing, then show the layout. Stays on the current layout
 # if a piece can't be built and has no earlier build.
 install_herdr() {
@@ -306,6 +329,7 @@ install_herdr() {
   fi
   log "Herdr Git panel ($HERDR_HOME)"
   install_herdr_app || return 0
+  install_gh
   require python3 "Git panel" || return 0
   require patch "Git panel" || return 0
 
