@@ -20,9 +20,9 @@ function checkCommit(commit) {
   }
 }
 
-export function logArgs({ all, remotes, limit }) {
+export function logArgs({ all, remotes, firstParent, limit }) {
   const scope = all ? [...(remotes ? [] : ["--exclude=refs/remotes/*"]), "--exclude=refs/stash", "--all"] : ["HEAD"];
-  return ["log", "-z", ...scope, "--date-order", "--decorate=full", `-n${limit}`, `--format=${FORMAT}`];
+  return ["log", "-z", ...scope, ...(firstParent ? ["--first-parent"] : []), "--date-order", "--decorate=full", `-n${limit}`, `--format=${FORMAT}`];
 }
 
 export function parseRefs(text) {

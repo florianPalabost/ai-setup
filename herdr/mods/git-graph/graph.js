@@ -49,7 +49,7 @@ const tilde = (path, on) => (!on && path?.startsWith(home()) ? "~" + path.slice(
 const brief = (c) => ({ hash: c.hash, subject: c.subject, parents: c.parents });
 const count = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const sameFiles = (a, b) => a.length === b.length && a.every((f, i) => f.path === b[i].path && f.status === b[i].status);
-const scopeOf = ({ all, remotes }) => `${all} ${remotes}`;
+const scopeOf = ({ all, remotes, firstParent }) => `${all} ${remotes} ${firstParent}`;
 // Folders kept as they were last read, and commits' details (a commit never changes).
 const SEEN = 24, DETAILS = 200;
 const keep = (map, key, value, max) => { map.delete(key); map.set(key, value); if (map.size > max) map.delete(map.keys().next().value); };
@@ -64,11 +64,11 @@ const folderState = () => ({
 
 // Everything the table shows for a folder, in one round of git calls: each
 // answers from any subfolder, and status names paths from the repository root.
-async function readFolder(cwd, on, { all, remotes, limit }) {
+async function readFolder(cwd, on, { all, remotes, firstParent, limit }) {
   const git = (args) => exec("git", [...READ, ...args], { cwd, on });
   const [top, log, head, current, branches, remoteNames, status] = await Promise.all([
     // One commit past the page says whether there are more, as Git Graph asks.
-    exec("git", ["rev-parse", "--show-toplevel"], { cwd, on }), git(logArgs({ all, remotes, limit: limit + 1 })),
+    exec("git", ["rev-parse", "--show-toplevel"], { cwd, on }), git(logArgs({ all, remotes, firstParent, limit: limit + 1 })),
     git(["rev-parse", "--verify", "-q", "HEAD"]), git(["symbolic-ref", "-q", "--short", "HEAD"]),
     git(["for-each-ref", "--format=%(refname)", "refs/heads"]), git(["remote"]), git(STATUS)]);
   if (top.code !== 0) return { state: "norepo", cwd, on };
@@ -81,7 +81,7 @@ async function readFolder(cwd, on, { all, remotes, limit }) {
     branches: branches.stdout.split("\n").filter(Boolean).map((r) => r.replace(/^refs\/heads\//, "")),
     remoteNames: remoteNames.stdout.split("\n").filter(Boolean),
     files: status.code === 0 ? parseStatus(status.stdout) : [],
-    signature: [log.stdout, head.stdout, current.stdout, branches.stdout, remoteNames.stdout].join("\0"), scope: scopeOf({ all, remotes }),
+    signature: [log.stdout, head.stdout, current.stdout, branches.stdout, remoteNames.stdout].join("\0"), scope: scopeOf({ all, remotes, firstParent }),
   };
 }
 
@@ -91,7 +91,7 @@ export class Graph {
     // A scrollbar finds its list by name: each copy (panel, pane) needs its own.
     this.listId = `graph-rows-${Math.random().toString(36).slice(2)}`;
     this.diffId = `${this.listId}-diff`;
-    this.all = true; this.remotes = true; this.wide = false; this.graphMax = 160; this.scale = null;
+    this.all = true; this.remotes = true; this.firstParent = false; this.wide = false; this.graphMax = 160; this.scale = null;
     this.watchToken = 0;
     this.cols = withDefaults(); this.drag = null;
     this.seen = new Map(); this.commitDetails = new Map();
@@ -142,7 +142,7 @@ export class Graph {
       try {
         for (const [key, { cwd, on }] of order) {
           const scope = scopeOf(this);
-          const read = await readFolder(cwd, on, { all: this.all, remotes: this.remotes, limit: PAGE }).catch(() => null);
+          const read = await readFolder(cwd, on, { all: this.all, remotes: this.remotes, firstParent: this.firstParent, limit: PAGE }).catch(() => null);
           if (read && key !== this.context && !this.seen.has(key) && scope === scopeOf(this)) {
             keep(this.seen, key, { ...folderState(), state: read.state ?? "ready", ...read }, SEEN);
           }
@@ -159,11 +159,11 @@ export class Graph {
     if (!cwd) { this.state = "nofolder"; return; }
     if (this.loading === context) { this.again = this.again === "full" || full ? "full" : "status"; return; }
     this.loading = context; this.again = null;
-    const { all, remotes, limit } = this, stale = () => this.key() !== context;
+    const { all, remotes, firstParent, limit } = this, stale = () => this.key() !== context;
     cx.spawn(async (cx) => {
       try {
         if (full || !this.root) {
-          const read = await readFolder(cwd, on, { all, remotes, limit });
+          const read = await readFolder(cwd, on, { all, remotes, firstParent, limit });
           if (stale()) return;
           if (read.state === "norepo") { this.reset(); Object.assign(this, read); return; }
           if (!on) this.watch(read.root, context, cx);
@@ -193,7 +193,8 @@ export class Graph {
 
   build() {
     const commits = withUncommitted(this.base, this.files.length, this.head);
-    const { rows, width } = layoutLanes(commits);
+    // First-parent logs still report merges' other parents: a lane for them would never close.
+    const { rows, width } = layoutLanes(this.firstParent ? commits.map((c) => ({ ...c, parents: c.parents.slice(0, 1) })) : commits);
     this.commits = commits; this.rows = rows; this.lanes = width;
     this.labels = new Map(commits.map((c) => [c.hash, labelsOf(c, this.remotes)]));
     this.index = new Map(commits.map((c, i) => [c.hash, i]));
@@ -238,6 +239,7 @@ export class Graph {
   loadMore(cx) { this.limit += PAGE; this.refresh(cx); cx.notify(); }
   setScope(all, cx) { if (this.all !== all) { this.all = all; this.limit = PAGE; this.refresh(cx); } cx.notify(); }
   setRemotes(cx) { this.remotes = !this.remotes; this.refresh(cx); cx.notify(); }
+  setFirstParent(cx) { this.firstParent = !this.firstParent; this.limit = PAGE; this.refresh(cx); cx.notify(); }
 
   graphWidth() { return this.cols.graph ? this.clampColumn("graph", this.cols.graph) : Math.min(Math.max(GRAPH_MIN, PAD * 2 + this.lanes * LANE), this.graphMax); }
   trailing() { return this.wide ? ["date", "author", "hash"] : ["date"]; }
@@ -442,15 +444,17 @@ export class Graph {
     const segment = (id, text, on, action) => div().id(id).h(22).px(9).flex().items_center().rounded(5).text_size(11.5).cursor_pointer()
       .bg(on ? t.raised : t.background).text_color(on ? t.foreground : t.muted).when(on, (e) => e.border_1().border_color(t.border))
       .hover((s) => s.text_color(t.foreground)).on_click(action).child(text);
+    const tick = (id, text, on, action) => h_flex().id(id).h(24).px(6).gap(6).items_center().rounded(6).cursor_pointer().text_size(11.5).text_color(t.muted)
+      .hover((s) => s.bg(t.hover).text_color(t.foreground)).on_click(action)
+      .child(div().size(13).rounded(3).border_1().border_color(on ? t.accent : t.input).when(on, (e) => e.bg(t.accent)).flex().items_center().justify_center()
+        .when(on, (e) => e.child(svg(icon("check")).size(10).text_color(t.accent_foreground))))
+      .child(text);
     return h_flex().h(34).flex_none().px(10).gap(8).items_center().border_b(1).border_color(t.border)
       .child(h_flex().p(2).gap(2).rounded(7).bg(t.background).border_1().border_color(t.border)
         .child(segment("graph-all", "All branches", this.all, (_e, cx) => this.setScope(true, cx)))
         .child(segment("graph-current", "Current", !this.all, (_e, cx) => this.setScope(false, cx))))
-      .child(h_flex().id("graph-remotes").h(24).px(6).gap(6).items_center().rounded(6).cursor_pointer().text_size(11.5).text_color(t.muted)
-        .hover((s) => s.bg(t.hover).text_color(t.foreground)).on_click((_e, cx) => this.setRemotes(cx))
-        .child(div().size(13).rounded(3).border_1().border_color(this.remotes ? t.accent : t.input).when(this.remotes, (e) => e.bg(t.accent)).flex().items_center().justify_center()
-          .when(this.remotes, (e) => e.child(svg(icon("check")).size(10).text_color(t.accent_foreground))))
-        .child("Remotes"));
+      .child(tick("graph-remotes", "Remotes", this.remotes, (_e, cx) => this.setRemotes(cx)))
+      .child(tick("graph-first-parent", "First parent", this.firstParent, (_e, cx) => this.setFirstParent(cx)));
   }
 
   columns(t, width) {

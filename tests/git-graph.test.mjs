@@ -152,3 +152,38 @@ test("the repository's history shows in the table", async () => {
   assert.equal(rows[0].elementId, `c-${merge}`);
   assert.match(textOf(rows[0]), /merge side/);
 });
+
+test("the first-parent toggle follows only the main line, on one lane", async () => {
+  // Arrange
+  const { repo, merge, two, init, s1 } = repoWithMerge();
+  git(repo, "branch", "-qD", "side");
+  const { view, cx, draw } = await openGraph(repo);
+  assert.ok(view.part.index.has(s1), "the merged commit shows before the toggle");
+
+  // Act
+  findById(draw(), "graph-first-parent").handlers.on_click({}, cx);
+  await cx.settle();
+
+  // Assert
+  draw();
+  assert.deepEqual(view.part.commits.map((c) => c.hash), [merge, two, init]);
+  assert.equal(view.part.lanes, 1);
+  assert.equal(view.part.commits[0].parents.length, 2, "the details still name both parents");
+});
+
+test("turning first-parent off brings the merged commits back", async () => {
+  // Arrange
+  const { repo, s1 } = repoWithMerge();
+  git(repo, "branch", "-qD", "side");
+  const { view, cx, draw } = await openGraph(repo);
+  findById(draw(), "graph-first-parent").handlers.on_click({}, cx);
+  await cx.settle();
+  assert.ok(!view.part.index.has(s1), "the toggle hid it");
+
+  // Act
+  findById(draw(), "graph-first-parent").handlers.on_click({}, cx);
+  await cx.settle();
+
+  // Assert
+  assert.ok(view.part.index.has(s1));
+});
