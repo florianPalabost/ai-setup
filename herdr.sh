@@ -1,4 +1,4 @@
-# shellcheck shell=bash
+# shellcheck shell=bash disable=SC1010  # `herdr-app do` is its subcommand, not the keyword
 # The herdr step of install.sh: the Git panel. Sourced by install.sh, whose run,
 # link and backup it uses.
 #
