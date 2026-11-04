@@ -22,6 +22,7 @@ HERDR_LAYOUT=main-git
 HERDR_LAYOUT_EDIT="$HERDR_SRC/patches/main-layout.json"
 HERDR_CHANGES_PATCH="$HERDR_SRC/patches/changes.patch"
 HERDR_CHANGES_JS="$HERDR_SRC/mods/git/changes.js"
+HERDR_CHANGES_LINK="$HERDR_HOME/mods/git"
 HERDR_VERSION_MARK="herdr-version:"
 
 herdr_version() {
@@ -156,6 +157,11 @@ build_changes() {
       cat "$patched"
     } >"$HERDR_CHANGES_JS.tmp"
     mv "$HERDR_CHANGES_JS.tmp" "$HERDR_CHANGES_JS"
+    # An open window reloads a linked mod when the link changes, not when a file
+    # behind it does. Before the first link there is nothing to reload.
+    if [[ -L "$HERDR_CHANGES_LINK" ]]; then
+      touch -h "$HERDR_CHANGES_LINK"
+    fi
     info "generated $HERDR_CHANGES_JS from herdr $version"
   fi
   rm -f "$patched"

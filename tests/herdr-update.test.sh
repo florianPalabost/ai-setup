@@ -75,6 +75,44 @@ assert_layout_kept() {
   assert_eq "True" "$(json_get "$HERDR/layouts/main-git.json" same_build)" "main-git kept"
 }
 
+# Date the git mod's link in the past. herdr reloads a linked mod when the link's
+# own time changes, not when a file behind it does.
+date_the_mod_link() {
+  touch -h -t 200001010000 "$HERDR/mods/git"
+  touch -t 200101010000 "$SANDBOX/after-dated-link"
+}
+
+mod_link_was_touched() {
+  [[ -n "$(find "$HERDR/mods/git" -newer "$SANDBOX/after-dated-link")" ]]
+}
+
+test_regenerated_changes_code_reaches_the_open_window() {
+  # Arrange
+  installed_on_old_herdr
+  herdr_ships_a_new_release
+  date_the_mod_link
+
+  # Act
+  FAKE_HERDR_VERSION="$NEW_VERSION" install --update
+
+  # Assert
+  mod_link_was_touched || fail "the git mod's link was not touched, so the window keeps the old code"
+}
+
+test_current_changes_code_does_not_reload_the_mod() {
+  # Arrange
+  new_repo_copy
+  herdr_with_window
+  FAKE_HERDR_VERSION="$NEW_VERSION" install
+  date_the_mod_link
+
+  # Act
+  FAKE_HERDR_VERSION="$NEW_VERSION" install --update
+
+  # Assert
+  ! mod_link_was_touched || fail "the git mod's link was touched with nothing regenerated"
+}
+
 test_a_rebuilt_layout_keeps_the_clicks_made_on_it() {
   # Arrange: a size the user set on main-git, and a different one on main
   installed_on_old_herdr
@@ -326,6 +364,8 @@ test_with_the_window_closed_nothing_is_built_from_old_shipped_files() {
 
 run_all() {
   test_case "update rebuilds what an older herdr built" test_update_rebuilds_what_an_older_herdr_built
+  test_case "regenerated Changes code reaches the open window" test_regenerated_changes_code_reaches_the_open_window
+  test_case "current Changes code does not reload the mod" test_current_changes_code_does_not_reload_the_mod
   test_case "a rebuilt layout keeps the clicks made on it" test_a_rebuilt_layout_keeps_the_clicks_made_on_it
   test_case "a rebuilt layout with no clicks does not reshow it" test_a_rebuilt_layout_with_no_clicks_does_not_reshow_it
   test_case "update leaves alone what the running herdr built" test_update_leaves_alone_what_the_running_herdr_built
