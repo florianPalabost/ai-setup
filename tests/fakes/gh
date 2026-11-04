@@ -1,0 +1,9 @@
+#!/bin/sh
+# Stands in for gh in install tests: signed in unless $FAKE_SANDBOX/gh-signed-out exists.
+# Like the real gh, any call records a device id in its state folder.
+state="${XDG_STATE_HOME:-$HOME/.local/state}/gh"
+mkdir -p "$state" && : >"$state/device-id"
+case "$*" in
+  "auth status") [ ! -e "$FAKE_SANDBOX/gh-signed-out" ] ;;
+  *) exit 1 ;;
+esac

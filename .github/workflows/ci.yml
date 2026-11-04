@@ -22,7 +22,52 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: shellcheck install.sh lib.sh snapshot.sh
+      - run: shellcheck install.sh lib.sh herdr.sh snapshot.sh tests/*.sh
+
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: bash tests/run.sh
+
+  dry-run-install:
+    name: dry-run install (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      # /bin/bash is 3.2 on macOS, which a newer one earlier on PATH would hide.
+      # DISPLAY: Linux skips the herdr step without one, and a dry run opens no window.
+      - name: Dry-run install.sh in an empty home
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          DISPLAY: ":0"
+        run: |
+          home="$RUNNER_TEMP/home"
+          mkdir -p "$home"
+          /bin/bash -c 'echo "bash $BASH_VERSION"'
+          HOME="$home" /bin/bash install.sh --dry-run | tee "$RUNNER_TEMP/out"
+          grep -F 'Herdr Git panel (' "$RUNNER_TEMP/out"
+          test -z "$(ls -A "$home")"
+      - name: Dry-run install.ps1 in an empty home
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $PSVersionTable.PSVersion.ToString()
+          $env:HOME = Join-Path $env:RUNNER_TEMP 'home'
+          New-Item -ItemType Directory -Path $env:HOME | Out-Null
+          $out = Join-Path $env:RUNNER_TEMP 'out.txt'
+          .\install.ps1 -DryRun | Tee-Object -FilePath $out
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Select-String -Path $out -SimpleMatch -Quiet 'Herdr Git panel (')) { exit 1 }
+          if (Get-ChildItem -Force -LiteralPath $env:HOME) { exit 1 }
 
   plugins:
     runs-on: ubuntu-latest

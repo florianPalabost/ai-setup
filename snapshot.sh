@@ -4,7 +4,8 @@
 #
 # Only user-scope tooling is recorded, and anything listed in
 # manifests/ignore.txt is left out. It only writes the manifests: review the
-# result with `git diff` and commit it yourself.
+# result with `git diff` and commit it yourself. herdr/ is not recorded: those
+# files are written in the repo first, like global/.
 #
 # Usage: ./snapshot.sh
 
@@ -16,7 +17,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 SKILL_LOCK="$HOME/.agents/.skill-lock.json"
 
 usage() {
-  sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 for arg in "$@"; do

@@ -1,0 +1,5 @@
+#!/bin/sh
+# Stands in for brew in install tests: logs the call, and refuses if
+# $FAKE_SANDBOX/brew-fails exists.
+echo "brew $*" >>"$FAKE_SANDBOX/tool-calls.log"
+[ ! -e "$FAKE_SANDBOX/brew-fails" ]

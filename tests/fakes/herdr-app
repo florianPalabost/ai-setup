@@ -1,0 +1,145 @@
+#!/usr/bin/env python3
+"""Stands in for herdr-app in install tests, working only on $HERDR_APP_HOME.
+
+Mirrors what the real CLI was seen doing: `status` fails with no window,
+`mod.clone` and `layout.clone` refuse an existing name, record cloned_from and
+(for mods) rewrite asset paths, and `layout.clone` shows the clone. The window
+counts as open while $HERDR_APP_HOME/fake-window exists, and a command refuses
+while $HERDR_APP_HOME/fake-<command>-fails exists. Each `do` is logged to
+$HERDR_APP_HOME/fake-calls.log.
+
+The window's version is the one update-notes.json records, as it writes that on
+each start; --version answers for the binary on disk, which may be newer.
+
+With no arguments it is a launch, logged to $HERDR_APP_HOME/fake-launches.log: a
+moment later herdr's shipped files are there and the window is open, unless
+fake-window-never-opens exists. `status` never returns while fake-status-hangs
+exists, as the real one blocks while the app starts.
+"""
+import json
+import os
+import shutil
+import sys
+import time
+from pathlib import Path
+
+EXIT_FAILED = 1
+EXIT_NO_WINDOW = 2
+LAUNCH_SECONDS = 0.3
+HANG_SECONDS = 600
+
+home = Path(os.environ["HERDR_APP_HOME"])
+binary_version = os.environ.get("FAKE_HERDR_VERSION", "0.1.12")
+
+
+def window_version():
+    return json.loads((home / "update-notes.json").read_text())["last_run"]
+
+
+def launch():
+    home.mkdir(parents=True, exist_ok=True)
+    with (home / "fake-launches.log").open("a") as log:
+        log.write("launch\n")
+    if (home / "fake-window-never-opens").exists():
+        return
+    time.sleep(LAUNCH_SECONDS)
+    shipped = Path(os.environ["FAKE_SHIPPED"])
+    shutil.copytree(shipped / "mods", home / "mods", dirs_exist_ok=True)
+    shutil.copytree(shipped / "layouts", home / "layouts", dirs_exist_ok=True)
+    if not (home / "shared.json").exists():
+        show("main")
+    (home / "update-notes.json").write_text(json.dumps({"last_run": binary_version, "presented": []}))
+    (home / "fake-window").touch()
+
+
+def show(layout):
+    (home / "shared.json").write_text(json.dumps({"layout": layout}))
+
+
+def mod_clone(name, to):
+    src, dst = home / "mods" / name, home / "mods" / to
+    if dst.exists():
+        sys.exit(f"mod {to} already exists")
+    shutil.copytree(src, dst)
+    main = dst / "main.js"
+    main.write_text(main.read_text().replace(f"mods/{name}/", f"mods/{to}/"))
+    meta = json.loads((dst / "mod.json").read_text())
+    meta["cloned_from"] = {"name": name, "version": window_version()}
+    (dst / "mod.json").write_text(json.dumps(meta, indent=2))
+
+
+def layout_clone(name, to):
+    dst = home / "layouts" / f"{to}.json"
+    if dst.exists():
+        sys.exit(f"layout {to} already exists")
+    layout = json.loads((home / "layouts" / f"{name}.json").read_text())
+    dst.write_text(json.dumps({"cloned_from": {"name": name, "version": window_version()}, **layout}))
+    # A clone takes its source's clicks, losing any recorded under its own name.
+    clicks_file(to).unlink(missing_ok=True)
+    if clicks_file(name).exists():
+        shutil.copy(clicks_file(name), clicks_file(to))
+    remember_clicks(to)
+    show(to)
+
+
+def clicks_file(layout):
+    return home / "layouts/.state" / f"{layout}.json"
+
+
+# The window keeps the shown layout's clicks in memory, read from the file only
+# when it shows the layout, and each click writes all of them back over the file.
+def remember_clicks(layout):
+    path = clicks_file(layout)
+    nodes = json.loads(path.read_text()).get("nodes", {}) if path.exists() else {}
+    (home / "fake-clicks-in-memory.json").write_text(json.dumps(nodes))
+
+
+def click_resize(node, px):
+    memory = home / "fake-clicks-in-memory.json"
+    nodes = json.loads(memory.read_text())
+    nodes[node] = {"size": {"px": px}}
+    memory.write_text(json.dumps(nodes))
+    shown = json.loads((home / "shared.json").read_text())["layout"]
+    clicks_file(shown).parent.mkdir(exist_ok=True)
+    clicks_file(shown).write_text(json.dumps({"nodes": nodes}))
+
+
+def main(args):
+    if args == ["--version"]:
+        print(f"herdr-app {binary_version}")
+        return
+    if not args:
+        launch()
+        return
+    if args == ["status"] and (home / "fake-status-hangs").exists():
+        time.sleep(HANG_SECONDS)
+    if not (home / "fake-window").exists():
+        print(f"herdr-app: no Herdr window at {home}/herdr-app.sock", file=sys.stderr)
+        sys.exit(EXIT_NO_WINDOW)
+    if args == ["status"]:
+        shown = json.loads((home / "shared.json").read_text()).get("layout", "main")
+        print(json.dumps({"layout": shown, "errors": []}, indent=2))
+        return
+    if args[0] != "do":
+        sys.exit(EXIT_FAILED)
+    with (home / "fake-calls.log").open("a") as log:
+        log.write(" ".join(args[1:]) + "\n")
+    command, params = args[1], json.loads(args[2])
+    if (home / f"fake-{command}-fails").exists():
+        sys.exit(f"{command} refused")
+    if command == "mod.clone":
+        mod_clone(params["name"], params["as"])
+    elif command == "layout.clone":
+        layout_clone(params["name"], params["as"])
+    elif command == "layout.switch":
+        # Answers ok either way, as the real one does for a missing layout.
+        if not (home / "fake-layout.switch-ignored").exists():
+            remember_clicks(params["name"])
+            show(params["name"])
+    elif command == "layout.resize":
+        click_resize(params["id"], params["px"])
+    else:
+        sys.exit(f"fake herdr-app: unknown command {command}")
+
+
+main(sys.argv[1:])
