@@ -22,6 +22,8 @@ HERDR_LAYOUT_EDIT="$HERDR_SRC/patches/main-layout.json"
 HERDR_CHANGES_PATCH="$HERDR_SRC/patches/changes.patch"
 HERDR_CHANGES_JS="$HERDR_SRC/mods/git/changes.js"
 HERDR_VERSION_MARK="herdr-version:"
+HERDR_INSTALLER_SH="https://releases.herdr.dev/app/install.sh"
+HERDR_INSTALLER_PS1="https://releases.herdr.dev/app/install.ps1"
 
 herdr_version() {
   herdr-app --version | awk '{print $NF}'
@@ -250,6 +252,51 @@ herdr_all_built() {
   done
 }
 
+# Run herdr's official installer for this platform.
+run_herdr_installer() {
+  local script status=0
+  case "$(uname -s)" in
+    MINGW* | MSYS* | CYGWIN*)
+      powershell -c "irm $HERDR_INSTALLER_PS1 | iex" </dev/null
+      ;;
+    *)
+      require curl "herdr installer" || return 1
+      # Not piped into sh: a download cut short must not run as half a script.
+      script="$(mktemp)"
+      if curl -fsSL -o "$script" "$HERDR_INSTALLER_SH"; then
+        sh "$script" </dev/null || status=$?
+      else
+        status=$?
+      fi
+      rm -f "$script"
+      return "$status"
+      ;;
+  esac
+}
+
+# Make herdr-app available to the rest of the run, installing it if it's missing.
+# Returns 1 if that fails. The installer's folders may not be on this shell's PATH.
+install_herdr_app() {
+  PATH="$PATH:$HOME/.local/bin"
+  if [[ -n "${LOCALAPPDATA:-}" ]] && command -v cygpath >/dev/null 2>&1; then
+    PATH="$PATH:$(cygpath -u "$LOCALAPPDATA")/Programs/herdr-app"
+  fi
+  command -v herdr-app >/dev/null 2>&1 && return 0
+  if ((DRY_RUN)); then
+    case "$(uname -s)" in
+      MINGW* | MSYS* | CYGWIN*) info "[dry-run] would install herdr from $HERDR_INSTALLER_PS1" ;;
+      *) info "[dry-run] would install herdr from $HERDR_INSTALLER_SH" ;;
+    esac
+    return 0
+  fi
+  if run_herdr_installer && command -v herdr-app >/dev/null 2>&1; then
+    info "installed herdr $(herdr_version)"
+    return 0
+  fi
+  warn "could not install herdr: skipping the Git panel"
+  return 1
+}
+
 # Build whatever is missing, then show the layout. Stays on the current layout
 # if a piece can't be built and has no earlier build.
 install_herdr() {
@@ -258,7 +305,7 @@ install_herdr() {
     return 0
   fi
   log "Herdr Git panel ($HERDR_HOME)"
-  require herdr-app "Git panel" || return 0
+  install_herdr_app || return 0
   require python3 "Git panel" || return 0
   require patch "Git panel" || return 0
 
