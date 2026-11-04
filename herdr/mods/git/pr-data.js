@@ -1,6 +1,6 @@
 // The PR of the shown space's branch. Local git finds the repo and branch, then
 // one GraphQL query fetches the PR and its checks. No herdr imports: exec is passed in.
-import { ghGraphql } from "./gh.js";
+import { ghGraphql, lastCommitRollup } from "./gh.js";
 
 const CHECKS_FETCHED = 100;
 const CACHE_FOR = "30s"; // Under the shortest timer, and shared by every mod copy.
@@ -80,7 +80,7 @@ function bucket(node) {
 }
 
 export function checksOf(pr) {
-  const rollup = pr.commits?.nodes?.[0]?.commit?.statusCheckRollup;
+  const rollup = lastCommitRollup(pr);
   const nodes = rollup?.contexts?.nodes ?? [];
   const list = nodes
     .map((n) => ({ name: n.name ?? n.context, url: n.detailsUrl ?? n.targetUrl ?? null, bucket: bucket(n) }))

@@ -53,6 +53,9 @@ export async function ghGraphql(exec, { query, vars = {}, cache = null, cwd }) {
   }
 }
 
+// The check rollup of a pull request's last commit, from a query's `commits(last: 1)`.
+export const lastCommitRollup = (pr) => pr.commits?.nodes?.[0]?.commit?.statusCheckRollup ?? null;
+
 // What to show instead of an empty section.
 export function ghFix({ problem, message }) {
   if (problem === GH_PROBLEM.MISSING) return "GitHub CLI (gh) isn't installed. Get it from https://cli.github.com";
