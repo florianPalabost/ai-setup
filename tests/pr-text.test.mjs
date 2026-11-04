@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { GH_PROBLEM } from "../herdr/mods/git/gh.js";
+import { LOAD_VIEW } from "../herdr/mods/git/shared-result.js";
 import { PR_VIEW } from "../herdr/mods/git/pr-data.js";
 import { checkCounts, emptyText, mergeLabel, prInterval, prSummary, reviewLabel, shownChecks, stateLabel } from "../herdr/mods/git/pr-text.js";
 
@@ -97,7 +98,7 @@ test("gh missing or signed out shows the fix, not an empty section", () => {
 });
 
 test("a load that threw still reads as an error", () => {
-  assert.equal(emptyText({ kind: "error", message: "no such folder" }), "Couldn't read this folder: no such folder");
+  assert.equal(emptyText({ kind: LOAD_VIEW.ERROR, message: "no such folder" }), "Couldn't read this folder: no such folder");
 });
 
 test("passing and skipped checks stay behind the toggle, failing and pending don't", () => {

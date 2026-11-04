@@ -3,6 +3,8 @@
 // is common to all of them (seen on herdr-app 0.1.12). Only touch it from a
 // function: herdr runs a broken save's top-level code too.
 const SLOTS = "__gitPanelSlots";
+// `kind` of the result when a load threw, beside the kinds each section's load returns.
+export const LOAD_VIEW = Object.freeze({ ERROR: "error" });
 // exec's own limit is 30 s. A copy closing mid-call may leave its promise unsettled.
 const STUCK_AFTER_MS = 35000;
 
@@ -26,7 +28,7 @@ export function startRefresh(slot, key, load, clock = Date.now) {
     try {
       value = await load();
     } catch (error) {
-      value = { kind: "error", message: String(error?.message ?? error) };
+      value = { kind: LOAD_VIEW.ERROR, message: String(error?.message ?? error) };
     }
     if (slot.pending !== run) return;
     slot.pending = null;

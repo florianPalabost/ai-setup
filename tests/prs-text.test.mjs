@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { GH_PROBLEM } from "../herdr/mods/git/gh.js";
+import { LOAD_VIEW } from "../herdr/mods/git/shared-result.js";
 import { PRS_VIEW } from "../herdr/mods/git/prs-data.js";
 import { PRS_INTERVAL_MS, ago, checksMark, listNote, prsEmptyText, prsSummary, reviewWord, since } from "../herdr/mods/git/prs-text.js";
 
@@ -46,8 +47,8 @@ test("before any answer it says it's asking, not that nothing is waiting", () =>
 });
 
 test("a load that threw reads as an error", () => {
-  assert.equal(prsEmptyText({ kind: "error", message: "boom" }, NOW, NOW), "Couldn't ask GitHub: boom");
-  assert.equal(prsSummary({ kind: "error", message: "boom" }), "Couldn't ask GitHub: boom");
+  assert.equal(prsEmptyText({ kind: LOAD_VIEW.ERROR, message: "boom" }, NOW, NOW), "Couldn't ask GitHub: boom");
+  assert.equal(prsSummary({ kind: LOAD_VIEW.ERROR, message: "boom" }), "Couldn't ask GitHub: boom");
 });
 
 test("a list cut short says so, and a whole one says nothing", () => {

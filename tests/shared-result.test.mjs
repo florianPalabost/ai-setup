@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { refreshDue, sharedSlot, startRefresh } from "../herdr/mods/git/shared-result.js";
+import { LOAD_VIEW, refreshDue, sharedSlot, startRefresh } from "../herdr/mods/git/shared-result.js";
 
 const MINUTE = 60000;
 
@@ -83,7 +83,7 @@ test("a load that throws becomes an error result", async () => {
   await startRefresh(slot, "view", async () => { throw new Error("no such folder"); });
 
   // Assert
-  assert.deepEqual(slot.value, { kind: "error", message: "no such folder" });
+  assert.deepEqual(slot.value, { kind: LOAD_VIEW.ERROR, message: "no such folder" });
 });
 
 test("the version moves only when the result changed, so a same answer causes no redraw", async () => {
