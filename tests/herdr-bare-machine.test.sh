@@ -266,6 +266,171 @@ test_dry_run_shows_the_gh_install_without_doing_it() {
   assert_lacks "$SANDBOX/tool-calls.log" "apt-get"
 }
 
+test_a_bare_machine_ends_on_the_git_panel() {
+  # Arrange: no herdr, no gh, no home, nothing ever opened
+  new_repo_copy
+  herdr_not_installed
+  gh_not_installed
+
+  # Act
+  install
+  local code=$?
+
+  # Assert
+  assert_eq 0 "$code" "exit code"
+  assert_eq "1" "$(wc -l <"$HERDR/fake-launches.log" | tr -d ' ')" "launches"
+  assert_eq "$REPO_COPY/herdr/mods/git" "$(readlink "$HERDR/mods/git")" "git mod link"
+  assert_contains "$REPO_COPY/herdr/mods/git/changes.js" "herdr-version: 0.1.12"
+  assert_contains "$HERDR/mods/tabs-git/main.js" 'panelButton("changes", "Git"'
+  assert_eq "git" "$(json_get "$HERDR/layouts/main-git.json" '#changes.content.mod')" "changes slot"
+  assert_eq "main-git" "$(json_get "$HERDR/shared.json" layout)" "shown layout"
+  assert_contains "$OUT" "main-git is active"
+}
+
+test_a_rerun_after_a_bare_install_opens_no_window() {
+  # Arrange: installed, then the window was closed
+  new_repo_copy
+  herdr_not_installed
+  install
+  rm "$HERDR/fake-window" "$HERDR/fake-launches.log" "$SANDBOX/tool-calls.log"
+
+  # Act
+  install
+  local code=$?
+
+  # Assert
+  assert_eq 0 "$code" "exit code"
+  assert_no_file "$HERDR/fake-launches.log"
+  assert_no_file "$SANDBOX/tool-calls.log"
+  assert_contains "$OUT" "main-git is active"
+}
+
+test_a_closed_window_is_started_when_the_layout_is_not_active() {
+  # Arrange
+  new_repo_copy
+  herdr_with_window
+  rm "$HERDR/fake-window"
+
+  # Act
+  install
+
+  # Assert
+  assert_file "$HERDR/fake-launches.log"
+  assert_eq "main-git" "$(json_get "$HERDR/shared.json" layout)" "shown layout"
+}
+
+test_an_open_window_is_not_started_again() {
+  # Arrange
+  new_repo_copy
+  herdr_with_window
+
+  # Act
+  install
+
+  # Assert
+  assert_no_file "$HERDR/fake-launches.log"
+  assert_eq "main-git" "$(json_get "$HERDR/shared.json" layout)" "shown layout"
+}
+
+test_missing_shipped_files_start_the_window_even_with_the_layout_active() {
+  # Arrange
+  new_repo_copy
+  herdr_not_installed
+  install
+  rm "$HERDR/fake-window" "$HERDR/fake-launches.log"
+  rm -r "$HERDR/mods/tabs"
+
+  # Act
+  install
+
+  # Assert
+  assert_file "$HERDR/fake-launches.log"
+  assert_file "$HERDR/mods/tabs/main.js"
+}
+
+test_a_window_that_never_opens_times_out_and_the_rest_installs() {
+  # Arrange
+  new_repo_copy
+  mkdir -p "$HERDR"
+  touch "$HERDR/fake-window-never-opens"
+
+  # Act
+  install
+  local code=$?
+
+  # Assert
+  assert_eq 0 "$code" "exit code"
+  assert_contains "$OUT" "herdr didn't answer"
+  assert_eq "$REPO_COPY/herdr/mods/git" "$(readlink "$HERDR/mods/git")" "git mod link"
+  assert_no_file "$HERDR/mods/tabs-git"
+  assert_contains "$OUT" "Done"
+}
+
+test_a_status_that_hangs_times_out_without_a_second_window() {
+  # Arrange: a window is up but stuck, as the real one is while it starts
+  new_repo_copy
+  herdr_with_window
+  touch "$HERDR/fake-status-hangs"
+  local started=$SECONDS
+
+  # Act
+  install
+  local code=$?
+
+  # Assert
+  assert_eq 0 "$code" "exit code"
+  assert_contains "$OUT" "herdr didn't answer"
+  assert_no_file "$HERDR/fake-launches.log"
+  ((SECONDS - started < 30)) || fail "took $((SECONDS - started))s: the hang was not cut short"
+}
+
+test_dry_run_on_a_bare_machine_shows_every_step() {
+  # Arrange
+  new_repo_copy
+  herdr_not_installed
+  gh_not_installed
+  give_tools brew
+  local before
+  before="$(tree_state)"
+
+  # Act
+  install --dry-run
+  local code=$?
+
+  # Assert
+  assert_eq 0 "$code" "exit code"
+  assert_eq "$before" "$(tree_state)" "home"
+  assert_no_file "$SANDBOX/tool-calls.log"
+  assert_no_file "$HERDR"
+  assert_no_file "$REPO_COPY/herdr/mods/git/changes.js"
+  assert_contains "$OUT" "would install herdr from https://releases.herdr.dev/app/install.sh"
+  assert_contains "$OUT" "[dry-run] brew install gh"
+  assert_contains "$OUT" "[dry-run] ln -s $REPO_COPY/herdr/mods/git $HERDR/mods/git"
+  assert_contains "$OUT" "would start herdr and poll"
+  assert_contains "$OUT" "would generate $REPO_COPY/herdr/mods/git/changes.js"
+  assert_contains "$OUT" '[dry-run] herdr-app do mod.clone {"name":"tabs","as":"tabs-git"}'
+  assert_contains "$OUT" '[dry-run] herdr-app do layout.clone {"name":"main","as":"main-git"}'
+  assert_contains "$OUT" '[dry-run] herdr-app do layout.switch {"name":"main-git"}'
+}
+
+test_dry_run_with_herdr_never_opened_starts_nothing() {
+  # Arrange: herdr is installed, but its home doesn't exist yet
+  new_repo_copy
+  local before
+  before="$(tree_state)"
+
+  # Act
+  install --dry-run
+  local code=$?
+
+  # Assert
+  assert_eq 0 "$code" "exit code"
+  assert_eq "$before" "$(tree_state)" "home"
+  assert_no_file "$HERDR"
+  assert_contains "$OUT" "would start herdr and poll"
+  assert_contains "$OUT" '[dry-run] herdr-app do layout.switch {"name":"main-git"}'
+}
+
 run_all() {
   test_case "linux with no display skips herdr in one line" test_linux_with_no_display_skips_herdr_in_one_line
   test_case "wayland alone counts as a display" test_wayland_alone_counts_as_a_display
@@ -283,6 +448,15 @@ run_all() {
   test_case "a failed gh install does not stop the panel" test_a_failed_gh_install_does_not_stop_the_panel
   test_case "gh already there is left alone" test_gh_already_there_is_left_alone
   test_case "dry run shows the gh install without doing it" test_dry_run_shows_the_gh_install_without_doing_it
+  test_case "a bare machine ends on the Git panel" test_a_bare_machine_ends_on_the_git_panel
+  test_case "a re-run after a bare install opens no window" test_a_rerun_after_a_bare_install_opens_no_window
+  test_case "a closed window is started when the layout is not active" test_a_closed_window_is_started_when_the_layout_is_not_active
+  test_case "an open window is not started again" test_an_open_window_is_not_started_again
+  test_case "missing shipped files start the window even with the layout active" test_missing_shipped_files_start_the_window_even_with_the_layout_active
+  test_case "a window that never opens times out and the rest installs" test_a_window_that_never_opens_times_out_and_the_rest_installs
+  test_case "a status that hangs times out without a second window" test_a_status_that_hangs_times_out_without_a_second_window
+  test_case "dry run on a bare machine shows every step" test_dry_run_on_a_bare_machine_shows_every_step
+  test_case "dry run with herdr never opened starts nothing" test_dry_run_with_herdr_never_opened_starts_nothing
 }
 
 run_all

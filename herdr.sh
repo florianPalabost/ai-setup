@@ -24,6 +24,11 @@ HERDR_CHANGES_JS="$HERDR_SRC/mods/git/changes.js"
 HERDR_VERSION_MARK="herdr-version:"
 HERDR_INSTALLER_SH="https://releases.herdr.dev/app/install.sh"
 HERDR_INSTALLER_PS1="https://releases.herdr.dev/app/install.ps1"
+# First answers took under a second, so these are only reached when something's wrong.
+HERDR_WINDOW_WAIT_SECS="${HERDR_WINDOW_WAIT_SECS:-60}"
+HERDR_STATUS_CALL_SECS="${HERDR_STATUS_CALL_SECS:-10}"
+# Same code as timeout(1).
+HERDR_STATUS_STUCK=124
 
 herdr_version() {
   herdr-app --version | awk '{print $NF}'
@@ -320,6 +325,83 @@ install_gh() {
   fi
 }
 
+# Whether the files herdr ships, which everything is built from, are there.
+herdr_shipped_present() {
+  local spec shipped _clone _patch
+  [[ -f "$HERDR_HOME/mods/changes/main.js" && -f "$HERDR_HOME/layouts/$HERDR_LAYOUT_SHIPPED.json" ]] || return 1
+  for spec in "${HERDR_MOD_CLONES[@]}"; do
+    read -r shipped _clone _patch <<<"$spec"
+    [[ -f "$HERDR_HOME/mods/$shipped/main.js" ]] || return 1
+  done
+}
+
+# Ask the window for its status. Returns 0 if it answers, or the failure's code:
+# HERDR_STATUS_STUCK if it didn't answer in time. status blocks while the app
+# starts, and macOS has no `timeout` command.
+herdr_status() {
+  local pid checks=0 max_checks=$((HERDR_STATUS_CALL_SECS * 10))
+  herdr-app status >/dev/null 2>&1 &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    if ((checks >= max_checks)); then
+      kill "$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+      return "$HERDR_STATUS_STUCK"
+    fi
+    checks=$((checks + 1))
+    sleep 0.1
+  done
+  wait "$pid"
+}
+
+# Make sure a window is answering, starting one unless one is already there but
+# slow. Returns 1 if none answers in time. Starts nothing on a dry run.
+herdr_window_ready() {
+  local code=0 window_log="" deadline
+  herdr_status || code=$?
+  if ((code == 0)); then
+    return 0
+  fi
+  if ((DRY_RUN)); then
+    info "[dry-run] would start herdr and poll herdr-app status for up to ${HERDR_WINDOW_WAIT_SECS}s"
+    return 0
+  fi
+  if ((code != HERDR_STATUS_STUCK)); then
+    window_log="$(mktemp)"
+    info "starting herdr"
+    nohup herdr-app >"$window_log" 2>&1 </dev/null &
+  fi
+  deadline=$((SECONDS + HERDR_WINDOW_WAIT_SECS))
+  until herdr_status; do
+    if ((SECONDS >= deadline)); then
+      warn "herdr didn't answer within ${HERDR_WINDOW_WAIT_SECS}s: open it and re-run install to finish the Git panel"
+      if [[ -n "$window_log" ]]; then
+        warn "its output is in $window_log"
+      fi
+      return 1
+    fi
+    sleep 0.2
+  done
+  if [[ -n "$window_log" ]]; then
+    rm -f "$window_log" || true
+  fi
+}
+
+# What a dry run can say before herdr has shipped anything to check patches against.
+preview_first_build() {
+  local spec shipped clone patch
+  info "[dry-run] herdr's shipped files aren't there yet, so the patches can't be checked"
+  info "[dry-run] would generate $HERDR_CHANGES_JS"
+  for spec in "${HERDR_MOD_CLONES[@]}"; do
+    read -r shipped clone patch <<<"$spec"
+    run herdr-app do mod.clone "{\"name\":\"$shipped\",\"as\":\"$clone\"}"
+    info "[dry-run] would apply herdr/patches/$patch to $HERDR_HOME/mods/$clone/main.js"
+  done
+  run herdr-app do layout.clone "{\"name\":\"$HERDR_LAYOUT_SHIPPED\",\"as\":\"$HERDR_LAYOUT\"}"
+  info "[dry-run] would apply ${HERDR_LAYOUT_EDIT#"$REPO_DIR"/} to $HERDR_HOME/layouts/$HERDR_LAYOUT.json"
+  run herdr-app do layout.switch "{\"name\":\"$HERDR_LAYOUT\"}"
+}
+
 # Build whatever is missing, then show the layout. Stays on the current layout
 # if a piece can't be built and has no earlier build.
 install_herdr() {
@@ -336,21 +418,24 @@ install_herdr() {
   link_herdr_mods
 
   local ready=1 spec shipped clone patch
-  if [[ ! -f "$HERDR_CHANGES_JS" ]]; then
+  # Generating the Changes code needs herdr's files but no window.
+  if [[ ! -f "$HERDR_CHANGES_JS" && -f "$HERDR_HOME/mods/changes/main.js" ]] && command -v herdr-app >/dev/null 2>&1; then
     build_changes || ready=0
   fi
-  if herdr_all_built && [[ "$(herdr_shown_layout)" == "$HERDR_LAYOUT" ]]; then
+  if herdr_all_built && herdr_shipped_present && [[ "$(herdr_shown_layout)" == "$HERDR_LAYOUT" ]]; then
     info "$HERDR_LAYOUT is active"
     return 0
   fi
 
-  # Everything below goes through the open window.
-  if ! herdr-app status >/dev/null 2>&1; then
-    if ((!DRY_RUN)); then
-      info "herdr isn't open: open it and re-run install to finish the Git panel"
-      return 0
-    fi
-    info "[dry-run] herdr isn't open: a real run would stop here and ask for it"
+  # Everything below goes through the open window, and herdr writes its shipped
+  # files on first launch: by the time status answers, they're there.
+  herdr_window_ready || return 0
+  if ((DRY_RUN)) && { ! command -v herdr-app >/dev/null 2>&1 || ! herdr_shipped_present; }; then
+    preview_first_build
+    return 0
+  fi
+  if ((ready && !DRY_RUN)) && [[ ! -f "$HERDR_CHANGES_JS" ]]; then
+    build_changes || ready=0
   fi
 
   for spec in "${HERDR_MOD_CLONES[@]}"; do

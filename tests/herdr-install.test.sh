@@ -79,6 +79,7 @@ test_a_rerun_with_the_layout_active_asks_nothing_of_herdr() {
   # Assert
   assert_eq 0 "$code" "exit code"
   assert_no_file "$HERDR/fake-calls.log"
+  assert_no_file "$HERDR/fake-launches.log"
   assert_eq "main-git" "$(json_get "$HERDR/shared.json" layout)" "shown layout"
 }
 
@@ -292,25 +293,6 @@ test_dry_run_reports_a_failing_patch() {
   assert_lacks "$OUT" "layout.switch"
 }
 
-test_with_herdr_closed_it_links_and_generates_but_runs_no_commands() {
-  # Arrange
-  new_repo_copy
-  herdr_with_window
-  rm "$HERDR/fake-window"
-
-  # Act
-  install
-  local code=$?
-
-  # Assert
-  assert_eq 0 "$code" "exit code"
-  assert_eq "$REPO_COPY/herdr/mods/git" "$(readlink "$HERDR/mods/git")" "git mod link"
-  assert_file "$REPO_COPY/herdr/mods/git/changes.js"
-  assert_no_file "$HERDR/mods/tabs-git"
-  assert_eq "main" "$(json_get "$HERDR/shared.json" layout)" "shown layout"
-  assert_contains "$OUT" "herdr isn't open"
-}
-
 run_all() {
   test_case "install links the mod, builds the clones and switches layout" test_install_builds_the_git_panel
   test_case "a switch that does not land is reported" test_a_switch_that_does_not_land_is_reported
@@ -326,7 +308,6 @@ run_all() {
   test_case "a refused clone puts the last good one back" test_a_refused_clone_puts_the_last_good_one_back
   test_case "dry run changes nothing" test_dry_run_changes_nothing
   test_case "dry run reports a failing patch" test_dry_run_reports_a_failing_patch
-  test_case "with herdr closed it links and generates but runs no commands" test_with_herdr_closed_it_links_and_generates_but_runs_no_commands
 }
 
 run_all
