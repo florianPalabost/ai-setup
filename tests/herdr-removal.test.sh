@@ -207,11 +207,12 @@ test_a_refused_switch_keeps_all_herdr_files() {
   assert_contains "$OUT" "herdr could not switch away from main-proto"
 }
 
-test_with_herdr_closed_a_showing_layout_is_kept() {
-  # Arrange
+test_with_no_window_a_showing_layout_is_kept() {
+  # Arrange: closed, and install's attempt to open it fails
   new_repo_copy
   herdr_with_prototypes
   rm "$HERDR/fake-window"
+  touch "$HERDR/fake-window-never-opens"
 
   # Act
   install_answering y
@@ -348,7 +349,7 @@ run_all() {
   test_case "leaving a dropped layout prefers the Git layout" test_leaving_a_dropped_layout_prefers_the_git_layout
   test_case "a switch that does not land keeps all herdr files" test_a_switch_that_does_not_land_keeps_all_herdr_files
   test_case "a refused switch keeps all herdr files" test_a_refused_switch_keeps_all_herdr_files
-  test_case "with herdr closed a showing layout is kept" test_with_herdr_closed_a_showing_layout_is_kept
+  test_case "with no window a showing layout is kept" test_with_no_window_a_showing_layout_is_kept
   test_case "with herdr closed and another layout showing they are removed" test_with_herdr_closed_and_another_layout_showing_they_are_removed
   test_case "shipped names are never listed" test_shipped_names_are_never_listed
   test_case "machine-local files are never listed" test_machine_local_files_are_never_listed

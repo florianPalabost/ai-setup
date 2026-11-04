@@ -7,18 +7,41 @@ Mirrors what the real CLI was seen doing: `status` fails with no window,
 counts as open while $HERDR_APP_HOME/fake-window exists, and a command refuses
 while $HERDR_APP_HOME/fake-<command>-fails exists. Each `do` is logged to
 $HERDR_APP_HOME/fake-calls.log.
+
+With no arguments it is a launch, logged to $HERDR_APP_HOME/fake-launches.log: a
+moment later herdr's shipped files are there and the window is open, unless
+fake-window-never-opens exists. `status` never returns while fake-status-hangs
+exists, as the real one blocks while the app starts.
 """
 import json
 import os
 import shutil
 import sys
+import time
 from pathlib import Path
 
 EXIT_FAILED = 1
 EXIT_NO_WINDOW = 2
+LAUNCH_SECONDS = 0.3
+HANG_SECONDS = 600
 
 home = Path(os.environ["HERDR_APP_HOME"])
 version = os.environ.get("FAKE_HERDR_VERSION", "0.1.12")
+
+
+def launch():
+    home.mkdir(parents=True, exist_ok=True)
+    with (home / "fake-launches.log").open("a") as log:
+        log.write("launch\n")
+    if (home / "fake-window-never-opens").exists():
+        return
+    time.sleep(LAUNCH_SECONDS)
+    shipped = Path(os.environ["FAKE_SHIPPED"])
+    shutil.copytree(shipped / "mods", home / "mods", dirs_exist_ok=True)
+    shutil.copytree(shipped / "layouts", home / "layouts", dirs_exist_ok=True)
+    if not (home / "shared.json").exists():
+        show("main")
+    (home / "fake-window").touch()
 
 
 def show(layout):
@@ -50,6 +73,11 @@ def main(args):
     if args == ["--version"]:
         print(f"herdr-app {version}")
         return
+    if not args:
+        launch()
+        return
+    if args == ["status"] and (home / "fake-status-hangs").exists():
+        time.sleep(HANG_SECONDS)
     if not (home / "fake-window").exists():
         print(f"herdr-app: no Herdr window at {home}/herdr-app.sock", file=sys.stderr)
         sys.exit(EXIT_NO_WINDOW)
