@@ -5,7 +5,8 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, beforeEach, test } from "node:test";
-import { fakeCx, findById, findList, findPressTarget, textOf, walk } from "./fakes/mod-view.mjs";
+import { runInNewContext } from "node:vm";
+import { fakeCx,findById, findList, findPressTarget, textOf, walk } from "./fakes/mod-view.mjs";
 import { resetWorld, world } from "./fakes/herdr-module.mjs";
 
 const { default: GitGraph } = await import("../herdr/mods/git-graph/main.js");
@@ -207,7 +208,7 @@ test("turning first-parent off brings the merged commits back", async () => {
   assert.ok(view.part.index.has(s1));
 });
 
-const DRAW_WAIT = 3000;
+const DRAW_WAIT = 3000, DRAW_CUT_OFF_WAIT = 300;
 
 test("a table whose rows never draw says so instead of staying blank", async () => {
   // Arrange: the list never asks for its rows, as on a repository too big for it
@@ -268,6 +269,54 @@ test("a tab hidden before the wait ends isn't blamed either", async () => {
 
   // Assert
   assert.doesNotMatch(textOf(root), /Can't draw/);
+});
+
+test("rows cut off mid-draw say so: herdr interrupts a slow list, and no catch sees it", async () => {
+  // Arrange: a vm timeout stops the code the way herdr's interrupt does
+  const { repo } = repoWithMerge();
+  const { cx, draw } = await openGraph(repo);
+  const { list } = findList(draw());
+  const paint = globalThis.window.paint_path;
+  globalThis.window.paint_path = () => { for (;;); };
+
+  // Act
+  assert.throws(() => runInNewContext("drawRows()", { drawRows: () => list.render({ start: 0, end: 4 }, cx) }, { timeout: 50 }));
+  globalThis.window.paint_path = paint;
+  cx.fire(DRAW_CUT_OFF_WAIT);
+  const root = draw();
+
+  // Assert
+  assert.match(textOf(root), /Can't draw this history/);
+  assert.match(textOf(root), /too long/);
+});
+
+test("rows that finish drawing raise nothing", async () => {
+  // Arrange
+  const { repo } = repoWithMerge();
+  const { cx, draw } = await openGraph(repo);
+
+  // Act
+  findList(draw()).list.render({ start: 0, end: 4 }, cx);
+  cx.fire(DRAW_CUT_OFF_WAIT);
+  const root = draw();
+
+  // Assert
+  assert.doesNotMatch(textOf(root), /Can't draw/);
+});
+
+test("trying again starts from the top, away from the rows that were too slow", async () => {
+  // Arrange
+  const { repo } = repoWithMerge();
+  const { cx, draw } = await openGraph(repo);
+  draw();
+  cx.fire(DRAW_WAIT);
+
+  // Act
+  findById(draw(), "graph-refresh").handlers.on_click({}, cx);
+  await cx.settle();
+
+  // Assert
+  assert.deepEqual(findList(draw()).scroll.scrolledTo.at(-1).index, 0);
 });
 
 test("a row that fails to draw says so", async () => {
