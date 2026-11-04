@@ -1,7 +1,8 @@
 // The Git panel: a header above collapsible sections, listed in section-list.js.
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { theme } from "herdr";
+import * as herdr from "herdr";
+import { openGraphTab } from "./graph-tab.js";
 import { SECTIONS } from "./section-list.js";
 import { loadOpen, toggleOpen } from "./sections.js";
 
@@ -35,10 +36,12 @@ export default class Git extends View {
   }
 
   render(cx) {
-    const t = theme();
+    const t = herdr.theme();
     return v_flex().id("git").size_full().min_h(0).bg(t.surface).text_color(t.foreground).text_size(13)
       .child(h_flex().id("git-header").h(36).flex_none().px(10).gap(6).items_center().border_b(1).border_color(t.border)
-        .child(div().font_semibold().child("Git")))
+        .child(div().flex_1().font_semibold().child("Git"))
+        .child(div().id("git-graph-open").px(6).py(2).rounded(5).text_size(12).text_color(t.muted).cursor_pointer()
+          .hover((s) => s.bg(t.hover).text_color(t.foreground)).on_click(() => openGraphTab(herdr)).child("Graph ↗")))
       .children(SECTIONS.map((section) => this.section(section, t, cx)));
   }
 }
