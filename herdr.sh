@@ -13,7 +13,10 @@ export HERDR_APP_HOME="$HERDR_HOME"
 
 HERDR_SRC="$REPO_DIR/herdr"
 # Linked as $HERDR_HOME/mods/<name>.
-HERDR_OWN_MODS=(git)
+HERDR_OWN_MODS=(git git-graph)
+# Icons of linked mods, copied as real files: herdr refuses an svg path that a link
+# leads out of its home. "<folder in herdr/mods/> <folder in the herdr home>"
+HERDR_MOD_ICONS=("git-graph/icons git-graph-icons")
 # "<shipped mod> <clone> <patch in herdr/patches/>"
 HERDR_MOD_CLONES=("tabs tabs-git tabs.patch")
 HERDR_LAYOUT_SHIPPED=main
@@ -128,6 +131,20 @@ link_herdr_mods() {
   local name
   for name in "${HERDR_OWN_MODS[@]}"; do
     link "$HERDR_SRC/mods/$name" "$HERDR_HOME/mods/$name"
+  done
+}
+
+copy_herdr_mod_icons() {
+  local spec src dst
+  for spec in "${HERDR_MOD_ICONS[@]}"; do
+    read -r src dst <<<"$spec"
+    if diff -r "$HERDR_SRC/mods/$src" "$HERDR_HOME/$dst" >/dev/null 2>&1; then
+      continue
+    fi
+    run rm -rf "${HERDR_HOME:?}/$dst"
+    run mkdir -p "$HERDR_HOME"
+    run cp -R "$HERDR_SRC/mods/$src" "$HERDR_HOME/$dst"
+    info "copied $HERDR_HOME/$dst"
   done
 }
 
@@ -254,6 +271,7 @@ install_herdr() {
   require patch "Git panel" || return 0
 
   link_herdr_mods
+  copy_herdr_mod_icons
 
   local ready=1 spec shipped clone patch
   if [[ ! -f "$HERDR_CHANGES_JS" ]]; then

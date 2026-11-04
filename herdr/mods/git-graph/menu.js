@@ -6,7 +6,9 @@ import { props, closeOverlay, notify, run, theme } from "herdr";
 import { menuFor } from "./git.js";
 
 // A glyph of this mod, or another mod's icon by its path (Herdr's own Changes icon).
-export const icon = (name) => (name.includes("/") ? name : `mods/git-graph/icons/${name}.svg`);
+// This mod's are read from where install copies them: herdr refuses an svg path
+// that a link leads out of its home, and this folder is linked from the repo.
+export const icon = (name) => (name.includes("/") ? name : `git-graph-icons/${name}.svg`);
 
 export function showChanges() {
   run("layout.select", { stack: "panel-body", child: "changes" });

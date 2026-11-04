@@ -1,11 +1,11 @@
 // The git-graph fork, run outside herdr against real throwaway repositories.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, beforeEach, test } from "node:test";
-import { fakeCx, findById, findList, findPressTarget, textOf } from "./fakes/mod-view.mjs";
+import { fakeCx, findById, findList, findPressTarget, textOf, walk } from "./fakes/mod-view.mjs";
 import { resetWorld, world } from "./fakes/herdr-module.mjs";
 
 const { default: GitGraph } = await import("../herdr/mods/git-graph/main.js");
@@ -137,6 +137,25 @@ test("opening the graph asks the network for nothing", async () => {
   // Assert
   assert.deepEqual(asked, []);
   assert.deepEqual(world.shared["git-graph.update"], undefined);
+});
+
+test("icons come from the real folder install copies them to, and each exists", async () => {
+  // Arrange: herdr refuses an svg path that a link leads out of its home
+  const { repo } = repoWithMerge();
+  const { cx, draw } = await openGraph(repo);
+  const root = draw();
+  const rows = findList(root).list.render({ start: 0, end: 4 }, cx);
+  const paths = [];
+
+  // Act
+  for (const element of [root, ...rows]) walk(element, (el) => { if ("svg" in el) paths.push(el.svg); });
+
+  // Assert
+  assert.ok(paths.length > 0, "the graph draws icons");
+  for (const path of paths) {
+    assert.match(path, /^git-graph-icons\//);
+    assert.ok(existsSync(new URL(`icons/${path.split("/").pop()}`, FORK)), `${path} exists`);
+  }
 });
 
 test("the repository's history shows in the table", async () => {

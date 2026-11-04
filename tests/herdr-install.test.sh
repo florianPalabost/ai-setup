@@ -250,6 +250,61 @@ test_a_refused_clone_puts_the_last_good_one_back() {
   assert_eq "$good_layout" "$(cksum <"$HERDR/layouts/main-git.json")" "main-git"
 }
 
+test_the_graph_fork_is_linked_and_its_icons_are_real_files() {
+  # Arrange
+  new_repo_copy
+  herdr_with_window
+
+  # Act
+  install
+  local code=$?
+
+  # Assert: herdr refuses an svg path that a link leads out of its home
+  assert_eq 0 "$code" "exit code"
+  assert_eq "$REPO_COPY/herdr/mods/git-graph" "$(readlink "$HERDR/mods/git-graph")" "fork link"
+  assert_file "$HERDR/git-graph-icons/branch.svg"
+  [[ ! -L "$HERDR/git-graph-icons" && ! -L "$HERDR/git-graph-icons/branch.svg" ]] || fail "icons should be real files"
+}
+
+test_a_rerun_refreshes_changed_graph_icons() {
+  # Arrange
+  new_repo_copy
+  herdr_with_window
+  install
+  printf '<svg id="new"/>' >"$REPO_COPY/herdr/mods/git-graph/icons/branch.svg"
+
+  # Act
+  install
+
+  # Assert
+  assert_contains "$HERDR/git-graph-icons/branch.svg" 'id="new"'
+}
+
+test_a_rerun_with_the_icons_current_touches_nothing() {
+  # Arrange
+  new_repo_copy
+  herdr_with_window
+  install
+  local before
+  before="$(tree_state)"
+
+  # Act
+  install
+
+  # Assert
+  assert_eq "$before" "$(tree_state)" "home"
+}
+
+test_the_fork_keeps_upstreams_licence_and_names_its_commit() {
+  # Arrange
+  local fork="$REPO/herdr/mods/git-graph"
+
+  # Act / Assert
+  assert_contains "$fork/LICENSE" "MIT License"
+  assert_contains "$fork/UPSTREAM" "rabeeh-ta/herdr-git-graph"
+  assert_contains "$fork/UPSTREAM" "b70e79571a8bdf3f711f054ba6be81c8ee7ea9bf"
+}
+
 test_dry_run_changes_nothing() {
   # Arrange
   new_repo_copy
@@ -340,6 +395,10 @@ run_all() {
   test_case "a failing rebuild keeps the last good Changes code" test_a_failing_rebuild_keeps_the_last_good_changes_code
   test_case "a failing rebuild keeps the last good layout clone" test_a_failing_rebuild_keeps_the_last_good_layout_clone
   test_case "a refused clone puts the last good one back" test_a_refused_clone_puts_the_last_good_one_back
+  test_case "the graph fork is linked and its icons are real files" test_the_graph_fork_is_linked_and_its_icons_are_real_files
+  test_case "a rerun refreshes changed graph icons" test_a_rerun_refreshes_changed_graph_icons
+  test_case "a rerun with the icons current touches nothing" test_a_rerun_with_the_icons_current_touches_nothing
+  test_case "the fork keeps upstream's licence and names its commit" test_the_fork_keeps_upstreams_licence_and_names_its_commit
   test_case "dry run changes nothing" test_dry_run_changes_nothing
   test_case "dry run reports a failing patch" test_dry_run_reports_a_failing_patch
   test_case "with herdr closed it links and generates but runs no commands" test_with_herdr_closed_it_links_and_generates_but_runs_no_commands
