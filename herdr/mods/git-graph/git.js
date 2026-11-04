@@ -9,7 +9,7 @@ export const STATUS = ["status", "--porcelain=v1", "-z", "--no-renames", "--untr
 export const UNCOMMITTED = "*";
 // Git's pretty fields are NUL-free strings; -z terminates each seven-field record.
 const FORMAT = "%H%x00%P%x00%an%x00%ae%x00%at%x00%D%x00%s";
-const objectId = (s) => typeof s === "string" && /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(s);
+export const objectId = (s) => typeof s === "string" && /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(s);
 const refName = (s) => typeof s === "string" && s.length > 0 && !/^[-/]/.test(s)
   && !/[\x00-\x20\x7f~^:?*\[\\]/.test(s) && !s.includes("..") && !s.includes("@{")
   && s !== "@" && !s.endsWith(".") && s.split("/").every((p) => p && !p.startsWith(".") && !p.endsWith(".lock"));

@@ -2,11 +2,11 @@
 // commit) for the focused pane's repository, or `props.folder` when opened as
 // a pane. Read-only: rows take clicks (details) and right-clicks (copy menus).
 import { div, svg, PathBuilder } from "gpui-kit";
-import { v_flex, h_flex, Scrollbar, v_virtual_list } from "gpui-base";
+import { v_flex, h_flex, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { spaces, panes, focused, exec, watchFolder, readTextFile, theme, settings, props, shared, setShared, openOverlay, home } from "herdr";
 import { layoutLanes } from "./lanes.js";
 import { READ, STATUS, UNCOMMITTED, LABEL, logArgs, parseLog, parseStatus, withUncommitted, labelsOf, hitLabel,
-  menuFor, menuHeight, fileArgs, joinFiles, diffArgs, diffRows } from "./git.js";
+  menuFor, menuHeight, fileArgs, joinFiles, diffArgs, diffRows, objectId } from "./git.js";
 import { icon, showChanges } from "./menu.js";
 
 function location(folder) {
@@ -18,6 +18,10 @@ function location(folder) {
 }
 
 const PAGE = 300, ROW = 24, LANE = 12, PAD = 6, DIFF_ROW = 20;
+// What the Git panel asks of this tab: { [space]: { seq, folder, commit } }. See git/graph-tab.js.
+const OPEN_KEY = "git-graph.open";
+// How far back to read for a commit asked for by hash.
+const COMMIT_SEARCH_LIMIT = PAGE * 16;
 // The graph column's default keeps room for its "Graph" heading (and a lane or two) in narrow repos.
 const GRAPH_MIN = 56;
 // side: which way a drag widens it. Graph's handle is on its right edge, the others' on their left.
@@ -88,6 +92,10 @@ async function readFolder(cwd, on, { all, remotes, firstParent, limit }) {
 export class Graph {
   init(cx) {
     this.folder = props()?.folder ?? null;
+    this.space = props()?.space ?? null;
+    this.seenRequest = null; this.want = null; this.notice = null;
+    this.scroll = VirtualListScrollHandle.new();
+    this.takeRequest();
     // A scrollbar finds its list by name: each copy (panel, pane) needs its own.
     this.listId = `graph-rows-${Math.random().toString(36).slice(2)}`;
     this.diffId = `${this.listId}-diff`;
@@ -308,6 +316,36 @@ export class Graph {
     openOverlay({ mod: "git-graph", kind: "popup", at: "pointer", width: 268, height: menuHeight(items), props: { role: "menu", target, ctx: this.ctx } });
   }
 
+  // The panel's latest ask, once: a folder to show, a commit to select.
+  takeRequest() {
+    const request = this.space ? shared(OPEN_KEY)?.[this.space] : null;
+    if (!request || request.seq === this.seenRequest) return;
+    this.seenRequest = request.seq;
+    this.folder = request.folder ?? this.folder ?? (spaces().find((s) => s.id === this.space)?.folder || null);
+    this.want = null; this.notice = null;
+    if (objectId(request.commit)) this.want = request.commit;
+    else if (request.commit) this.notice = `${request.commit} isn't a full commit hash.`;
+  }
+
+  // Once the table is up to date: select the asked commit, reading further back if it isn't there yet.
+  findWanted(cx) {
+    if (!this.want || this.loading || this.key() !== this.context || this.state === "loading") return;
+    const hash = this.want, at = this.state === "ready" ? this.index.get(hash) : undefined;
+    if (at !== undefined) {
+      this.want = null;
+      if (this.selected !== hash) { this.selected = hash; this.details = null; this.diff = null; this.loadDetails(this.commits[at], cx); }
+      this.scroll.scroll_to_item(at, "center");
+    } else if (this.state === "ready" && this.hasMore && this.limit < COMMIT_SEARCH_LIMIT) {
+      this.limit = Math.min(this.limit * 2, COMMIT_SEARCH_LIMIT);
+      this.refresh(cx);
+    } else {
+      this.want = null;
+      if (this.state === "ready") this.notice = this.hasMore
+        ? `Commit ${hash.slice(0, 8)} isn't among the newest ${this.limit} commits here.`
+        : `Commit ${hash.slice(0, 8)} isn't in this view. Try All branches, with First parent off.`;
+    }
+  }
+
   pick(commit, cx) {
     if (this.selected === commit.hash) { this.selected = null; this.details = null; this.diff = null; cx.notify(); return; }
     this.selected = commit.hash; this.details = null; this.diff = null;
@@ -486,6 +524,7 @@ export class Graph {
             : div().id("graph-more").h(this.rowH()).flex_none().px(14).flex().items_center().text_color(t.accent).hover((s) => s.bg(t.hover))
               .child(this.loading ? "Loading more commits…" : `Load ${PAGE} more commits`));
         })
+        .track_scroll(this.scroll)
         // Rows of a virtual list can't hold their own handlers: the list reports the row's key.
         .on_item_click((key, cx) => this.clicked(key, cx))
         .on_item_secondary_click((key, e, cx) => this.contextMenu(key, e, cx))
@@ -572,8 +611,16 @@ export class Graph {
       .when(Boolean(body), (e) => e.child(div().max_w(280).text_center().text_size(12).text_color(t.muted).child(body)));
   }
 
+  noticeBar(t) {
+    return h_flex().id("graph-notice").h(26).flex_none().px(14).items_center().border_b(1).border_color(t.border).text_size(11.5).text_color(t.ansi3)
+      .cursor_pointer().on_click((_e, cx) => { this.notice = null; cx.notify(); })
+      .child(div().flex_1().min_w(0).truncate().child(this.notice)).child(div().text_color(t.dim).child("×"));
+  }
+
   render(cx) {
+    this.takeRequest();
     if (this.key() !== this.context) this.refresh(cx);
+    this.findWanted(cx);
     const savedCols = shared("git-graph.columns"), seen = JSON.stringify(savedCols ?? null);
     if (!this.drag && seen !== this.seenCols) { this.seenCols = seen; this.cols = withDefaults(savedCols); }
     const t = theme(), mono = settings().font_family ?? "JetBrains Mono", ready = this.state === "ready";
@@ -593,6 +640,7 @@ export class Graph {
         if (wide !== this.wide || graphMax !== this.graphMax) { this.wide = wide; this.graphMax = graphMax; cx.notify(); }
       })
       .child(this.header(t))
+      .when(Boolean(this.notice), (e) => e.child(this.noticeBar(t)))
       .when(ready, (e) => e.child(this.toolbar(t)).child(this.columns(t, this.graphWidth())).child(this.list(t, mono))
         .when(Boolean(this.selected), (el) => el.child(this.detailsPane(t, mono))))
       .when(!ready, (e) => e.child(this.empty(t)));
