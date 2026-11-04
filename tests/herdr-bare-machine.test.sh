@@ -431,6 +431,74 @@ test_dry_run_with_herdr_never_opened_starts_nothing() {
   assert_contains "$OUT" '[dry-run] herdr-app do layout.switch {"name":"main-git"}'
 }
 
+test_the_run_ends_with_gh_auth_login_when_signed_out() {
+  # Arrange
+  new_repo_copy
+  herdr_with_window
+  touch "$SANDBOX/gh-signed-out"
+
+  # Act
+  install
+  local code=$?
+
+  # Assert
+  assert_eq 0 "$code" "exit code"
+  assert_contains <(tail -n 1 "$OUT") 'run `gh auth login`'
+}
+
+test_nothing_is_said_about_gh_when_signed_in() {
+  # Arrange
+  new_repo_copy
+  herdr_with_window
+
+  # Act
+  install
+
+  # Assert
+  assert_lacks "$OUT" "gh auth login"
+}
+
+test_gh_that_could_not_be_installed_is_named_at_the_end() {
+  # Arrange
+  new_repo_copy
+  herdr_with_window
+  gh_not_installed
+
+  # Act
+  install
+  local code=$?
+
+  # Assert
+  assert_eq 0 "$code" "exit code"
+  assert_contains <(tail -n 1 "$OUT") 'run `gh auth login`'
+  assert_contains <(tail -n 1 "$OUT") "install gh"
+}
+
+test_dry_run_ends_with_gh_auth_login_too() {
+  # Arrange
+  new_repo_copy
+  herdr_not_installed
+  gh_not_installed
+
+  # Act
+  install --dry-run
+
+  # Assert
+  assert_contains <(tail -n 1 "$OUT") 'run `gh auth login`'
+}
+
+test_a_machine_with_no_display_is_not_told_about_gh() {
+  # Arrange: the sign-in only serves the panel, which this machine doesn't get
+  new_repo_copy
+  gh_not_installed
+
+  # Act
+  FAKE_DISPLAY="" install
+
+  # Assert
+  assert_lacks "$OUT" "gh auth login"
+}
+
 run_all() {
   test_case "linux with no display skips herdr in one line" test_linux_with_no_display_skips_herdr_in_one_line
   test_case "wayland alone counts as a display" test_wayland_alone_counts_as_a_display
@@ -457,6 +525,11 @@ run_all() {
   test_case "a status that hangs times out without a second window" test_a_status_that_hangs_times_out_without_a_second_window
   test_case "dry run on a bare machine shows every step" test_dry_run_on_a_bare_machine_shows_every_step
   test_case "dry run with herdr never opened starts nothing" test_dry_run_with_herdr_never_opened_starts_nothing
+  test_case "the run ends with gh auth login when signed out" test_the_run_ends_with_gh_auth_login_when_signed_out
+  test_case "nothing is said about gh when signed in" test_nothing_is_said_about_gh_when_signed_in
+  test_case "gh that could not be installed is named at the end" test_gh_that_could_not_be_installed_is_named_at_the_end
+  test_case "dry run ends with gh auth login too" test_dry_run_ends_with_gh_auth_login_too
+  test_case "a machine with no display is not told about gh" test_a_machine_with_no_display_is_not_told_about_gh
 }
 
 run_all

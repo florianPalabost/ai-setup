@@ -29,6 +29,8 @@ HERDR_WINDOW_WAIT_SECS="${HERDR_WINDOW_WAIT_SECS:-60}"
 HERDR_STATUS_CALL_SECS="${HERDR_STATUS_CALL_SECS:-10}"
 # Same code as timeout(1).
 HERDR_STATUS_STUCK=124
+# Set once the herdr step goes ahead on this machine.
+HERDR_PANEL_WANTED=0
 
 herdr_version() {
   herdr-app --version | awk '{print $NF}'
@@ -402,6 +404,21 @@ preview_first_build() {
   run herdr-app do layout.switch "{\"name\":\"$HERDR_LAYOUT\"}"
 }
 
+# The last thing a run says: the one step install can't do for the person. Only
+# when this machine gets the panel, the only thing here that needs gh.
+remind_gh_sign_in() {
+  ((HERDR_PANEL_WANTED)) || return 0
+  if ! command -v gh >/dev/null 2>&1; then
+    if ((DRY_RUN)); then
+      info "[dry-run] once gh is installed, run \`gh auth login\`"
+    else
+      warn "for the PR sections, install gh (https://cli.github.com), then run \`gh auth login\`"
+    fi
+  elif ! gh auth status >/dev/null 2>&1; then
+    warn "for the PR sections, run \`gh auth login\`"
+  fi
+}
+
 # Build whatever is missing, then show the layout. Stays on the current layout
 # if a piece can't be built and has no earlier build.
 install_herdr() {
@@ -411,6 +428,7 @@ install_herdr() {
   fi
   log "Herdr Git panel ($HERDR_HOME)"
   install_herdr_app || return 0
+  HERDR_PANEL_WANTED=1
   install_gh
   require python3 "Git panel" || return 0
   require patch "Git panel" || return 0

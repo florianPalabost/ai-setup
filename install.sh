@@ -10,7 +10,7 @@
 # --update also pulls this repo, then moves every user-scope plugin,
 # marketplace and third-party skill to its latest upstream version.
 #
-# With herdr open, it also sets up the Git panel (see herdr.sh).
+# Where there's a display, it also installs herdr and sets up its Git panel (see herdr.sh).
 #
 # Usage: ./install.sh [--update] [--dry-run]
 
@@ -684,6 +684,7 @@ main() {
   [[ -d "$BACKUP_DIR" ]] && log "Backups saved in $BACKUP_DIR"
   log "Done"
   ((PLUGINS_CHANGED)) && warn "plugins were updated: restart Claude Code to apply"
+  remind_gh_sign_in
   return 0
 }
 
