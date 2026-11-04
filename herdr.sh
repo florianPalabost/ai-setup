@@ -201,11 +201,21 @@ build_mod_clone() {
   info "built $clone from $shipped"
 }
 
+# Show the layout $1, reading its clicks from disk. The window only reads them
+# when it switches to a layout, and until then the next click overwrites the file
+# with what it holds in memory.
+show_layout_afresh() {
+  herdr-app do layout.switch "{\"name\":\"$HERDR_LAYOUT_SHIPPED\"}" >/dev/null || true
+  herdr-app do layout.switch "{\"name\":\"$1\"}" >/dev/null || true
+}
+
 # Build the layout clone. layout.clone also shows it, so when the edit fails, go
 # back to the layout that was showing. If anything fails, a clone already there
-# stays as it was.
+# stays as it was. layout.clone drops the clicks made on a layout of that name, so
+# they're put back and read again.
 build_layout() {
   local shipped="$HERDR_HOME/layouts/$HERDR_LAYOUT_SHIPPED.json" file="$HERDR_HOME/layouts/$HERDR_LAYOUT.json" before
+  local clicks="$HERDR_HOME/layouts/.state/$HERDR_LAYOUT.json" saved_clicks=""
   local args="{\"name\":\"$HERDR_LAYOUT_SHIPPED\",\"as\":\"$HERDR_LAYOUT\"}"
   if [[ ! -f "$shipped" ]]; then
     warn "$shipped not found: start herdr once, then re-run install"
@@ -222,16 +232,28 @@ build_layout() {
     return 0
   fi
   before="$(herdr_shown_layout)"
+  if [[ -f "$clicks" ]]; then
+    saved_clicks="$(mktemp)"
+    cp "$clicks" "$saved_clicks"
+  fi
   if ! herdr-app do layout.clone "$args" >/dev/null; then
     restore_backup "$file"
+    rm -f "$saved_clicks"
     warn "herdr could not clone $HERDR_LAYOUT_SHIPPED as $HERDR_LAYOUT"
     return 1
   fi
+  if [[ -n "$saved_clicks" ]]; then
+    cp "$saved_clicks" "$clicks"
+    rm -f "$saved_clicks"
+  fi
   if ! edited_layout "$file" "$HERDR_LAYOUT_EDIT" "$file" 2>/dev/null; then
-    herdr-app do layout.switch "{\"name\":\"$before\"}" >/dev/null || true
     restore_backup "$file"
+    show_layout_afresh "$before"
     warn_build_failed "$HERDR_LAYOUT_EDIT" "$HERDR_LAYOUT" "$file"
     return 1
+  fi
+  if [[ -n "$saved_clicks" ]]; then
+    show_layout_afresh "$HERDR_LAYOUT"
   fi
   info "built $HERDR_LAYOUT from $HERDR_LAYOUT_SHIPPED"
 }

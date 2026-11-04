@@ -75,6 +75,39 @@ assert_layout_kept() {
   assert_eq "True" "$(json_get "$HERDR/layouts/main-git.json" same_build)" "main-git kept"
 }
 
+test_a_rebuilt_layout_keeps_the_clicks_made_on_it() {
+  # Arrange: a size the user set on main-git, and a different one on main
+  installed_on_old_herdr
+  herdr_ships_a_new_release
+  mkdir -p "$HERDR/layouts/.state"
+  printf '{"nodes":{"sidebar":{"size":{"px":400}}}}' >"$HERDR/layouts/.state/main-git.json"
+  printf '{"nodes":{"sidebar":{"size":{"px":200}}}}' >"$HERDR/layouts/.state/main.json"
+
+  # Act: the next click writes back whatever the window holds in memory
+  FAKE_HERDR_VERSION="$NEW_VERSION" install --update
+  in_sandbox HERDR_APP_HOME="$HERDR" herdr-app do layout.resize '{"id":"panel","px":333}'
+
+  # Assert
+  assert_eq "$NEW_VERSION" "$(json_get "$HERDR/layouts/main-git.json" cloned_from.version)" "main-git version"
+  assert_eq "main-git" "$(json_get "$HERDR/shared.json" layout)" "shown layout"
+  assert_eq "400" "$(json_get "$HERDR/layouts/.state/main-git.json" nodes.sidebar.size.px)" "earlier click"
+  assert_eq "333" "$(json_get "$HERDR/layouts/.state/main-git.json" nodes.panel.size.px)" "later click"
+}
+
+test_a_rebuilt_layout_with_no_clicks_does_not_reshow_it() {
+  # Arrange
+  installed_on_old_herdr
+  herdr_ships_a_new_release
+  rm "$HERDR/fake-calls.log"
+
+  # Act
+  FAKE_HERDR_VERSION="$NEW_VERSION" install --update
+
+  # Assert
+  assert_lacks "$HERDR/fake-calls.log" "layout.switch"
+  assert_eq "main-git" "$(json_get "$HERDR/shared.json" layout)" "shown layout"
+}
+
 test_update_leaves_alone_what_the_running_herdr_built() {
   # Arrange
   new_repo_copy
@@ -293,6 +326,8 @@ test_with_the_window_closed_nothing_is_built_from_old_shipped_files() {
 
 run_all() {
   test_case "update rebuilds what an older herdr built" test_update_rebuilds_what_an_older_herdr_built
+  test_case "a rebuilt layout keeps the clicks made on it" test_a_rebuilt_layout_keeps_the_clicks_made_on_it
+  test_case "a rebuilt layout with no clicks does not reshow it" test_a_rebuilt_layout_with_no_clicks_does_not_reshow_it
   test_case "update leaves alone what the running herdr built" test_update_leaves_alone_what_the_running_herdr_built
   test_case "update rebuilds only the clone from another version" test_update_rebuilds_only_the_clone_from_another_version
   test_case "a clone with no recorded version is rebuilt" test_a_clone_with_no_recorded_version_is_rebuilt
