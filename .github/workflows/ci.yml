@@ -22,7 +22,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: shellcheck install.sh lib.sh snapshot.sh
+      - run: shellcheck install.sh lib.sh herdr.sh snapshot.sh tests/*.sh
+
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: bash tests/run.sh
 
   plugins:
     runs-on: ubuntu-latest
