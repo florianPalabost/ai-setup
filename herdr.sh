@@ -457,23 +457,20 @@ herdr_all_built() {
 # Run herdr's official installer for this platform.
 run_herdr_installer() {
   local script status=0
-  case "$(uname -s)" in
-    MINGW* | MSYS* | CYGWIN*)
-      powershell -c "irm $HERDR_INSTALLER_PS1 | iex" </dev/null
-      ;;
-    *)
-      require curl "herdr installer" || return 1
-      # Not piped into sh: a download cut short must not run as half a script.
-      script="$(mktemp)"
-      if curl -fsSL -o "$script" "$HERDR_INSTALLER_SH"; then
-        sh "$script" </dev/null || status=$?
-      else
-        status=$?
-      fi
-      rm -f "$script"
-      return "$status"
-      ;;
-  esac
+  if is_windows; then
+    powershell -c "irm $HERDR_INSTALLER_PS1 | iex" </dev/null
+    return
+  fi
+  require curl "herdr installer" || return 1
+  # Not piped into sh: a download cut short must not run as half a script.
+  script="$(mktemp)"
+  if curl -fsSL -o "$script" "$HERDR_INSTALLER_SH"; then
+    sh "$script" </dev/null || status=$?
+  else
+    status=$?
+  fi
+  rm -f "$script"
+  return "$status"
 }
 
 # Make herdr-app available to the rest of the run, installing it if it's missing.
@@ -485,10 +482,11 @@ install_herdr_app() {
   fi
   command -v herdr-app >/dev/null 2>&1 && return 0
   if ((DRY_RUN)); then
-    case "$(uname -s)" in
-      MINGW* | MSYS* | CYGWIN*) info "[dry-run] would install herdr from $HERDR_INSTALLER_PS1" ;;
-      *) info "[dry-run] would install herdr from $HERDR_INSTALLER_SH" ;;
-    esac
+    if is_windows; then
+      info "[dry-run] would install herdr from $HERDR_INSTALLER_PS1"
+    else
+      info "[dry-run] would install herdr from $HERDR_INSTALLER_SH"
+    fi
     return 0
   fi
   if run_herdr_installer && command -v herdr-app >/dev/null 2>&1; then
