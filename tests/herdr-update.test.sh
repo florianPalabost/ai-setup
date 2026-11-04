@@ -123,6 +123,7 @@ test_a_rebuilt_layout_keeps_the_clicks_made_on_it() {
 
   # Act: the next click writes back whatever the window holds in memory
   FAKE_HERDR_VERSION="$NEW_VERSION" install --update
+  # shellcheck disable=SC1010  # `herdr-app do` is its subcommand, not the keyword
   in_sandbox HERDR_APP_HOME="$HERDR" herdr-app do layout.resize '{"id":"panel","px":333}'
 
   # Assert
@@ -144,6 +145,7 @@ test_put_back_clicks_keep_their_file_permissions() {
   FAKE_HERDR_VERSION="$NEW_VERSION" install --update
 
   # Assert
+  # shellcheck disable=SC2012  # the mode string is what's being compared
   assert_eq "-rw-r--r--" "$(ls -l "$HERDR/layouts/.state/main-git.json" | cut -c1-10)" "permissions"
 }
 

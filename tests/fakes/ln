@@ -1,0 +1,9 @@
+#!/bin/sh
+# Stands in for ln under Git Bash, where native symlinks need Developer Mode or
+# admin: refused while $FAKE_SANDBOX/symlinks-refused exists.
+echo "ln MSYS=$MSYS $*" >>"$FAKE_SANDBOX/tool-calls.log"
+if [ -e "$FAKE_SANDBOX/symlinks-refused" ]; then
+  echo "ln: failed to create symbolic link: Operation not permitted" >&2
+  exit 1
+fi
+exec /bin/ln "$@"

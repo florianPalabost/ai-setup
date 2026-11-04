@@ -95,6 +95,14 @@ install_function() {
     _ "$REPO_COPY" "$@" </dev/null >"$OUT" 2>&1
 }
 
+# Like install_function, on a dry run.
+install_function_dry_run() {
+  OUT="$SANDBOX/out"
+  # shellcheck disable=SC2016
+  in_sandbox bash -c 'repo="$1"; shift; step=("$@"); set -- --dry-run; source "$repo/install.sh"; "${step[@]}"' \
+    _ "$REPO_COPY" "$@" </dev/null >"$OUT" 2>&1
+}
+
 # Every path under the sandbox's home with its link target or content hash.
 tree_state() {
   (cd "$SANDBOX_HOME" && find . | LC_ALL=C sort | while IFS= read -r path; do
