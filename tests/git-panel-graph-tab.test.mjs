@@ -14,6 +14,7 @@ const { openGraphTab } = await import("../herdr/mods/git/graph-tab.js");
 
 const GIT_ENV = { ...process.env, GIT_AUTHOR_NAME: "T", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "T", GIT_COMMITTER_EMAIL: "t@t", GIT_CONFIG_GLOBAL: "/dev/null" };
 const SPACE = "sp1", OTHER_SPACE = "sp2", FIRST_TAB = "tb1", GRAPH_TAB = "tbGraph";
+const NOW = 1000000, TAB_APPEAR_WAIT = 2000;
 
 const base = mkdtempSync(join(tmpdir(), "graph-tab-test-"));
 after(() => rmSync(base, { recursive: true, force: true }));
@@ -100,6 +101,46 @@ test("opening again selects the same tab instead of making another", () => {
 
   // Assert
   assert.deepEqual(world.runs, [{ name: "tab.select", args: { id: GRAPH_TAB } }]);
+});
+
+test("opening twice before herdr reports the new tab still makes one tab", () => {
+  // Arrange: herdr lists a new tab a moment after tab.new, as a quick double-click finds
+  windowWithOneTerminal("/work/repo");
+  openGraphTab(herdr, {}, NOW);
+
+  // Act
+  openGraphTab(herdr, {}, NOW + 150);
+
+  // Assert
+  assert.deepEqual(world.runs.map(({ name }) => name), ["tab.new"]);
+});
+
+test("a tab that never appeared can be asked for again", () => {
+  // Arrange
+  windowWithOneTerminal("/work/repo");
+  openGraphTab(herdr, {}, NOW);
+
+  // Act
+  openGraphTab(herdr, {}, NOW + TAB_APPEAR_WAIT);
+
+  // Assert
+  assert.deepEqual(world.runs.map(({ name }) => name), ["tab.new", "tab.new"]);
+});
+
+test("a second ask while the tab is on its way still reaches it", async () => {
+  // Arrange
+  const { repo, hashes } = repoOf(3);
+  windowWithOneTerminal(repo);
+  openGraphTab(herdr, { commit: hashes[0] }, NOW);
+
+  // Act
+  openGraphTab(herdr, { commit: hashes[1] }, NOW + 150);
+  applyRuns();
+  const graph = await openedGraph();
+  await settled(graph);
+
+  // Assert
+  assert.equal(graph.view.part.selected, hashes[1]);
 });
 
 test("each space gets its own Graph tab", () => {
