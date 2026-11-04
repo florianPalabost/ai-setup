@@ -443,7 +443,7 @@ test_the_run_ends_with_gh_auth_login_when_signed_out() {
 
   # Assert
   assert_eq 0 "$code" "exit code"
-  assert_contains <(tail -n 1 "$OUT") 'run `gh auth login`'
+  assert_contains <(tail -n 1 "$OUT") "run \`gh auth login\`"
 }
 
 test_nothing_is_said_about_gh_when_signed_in() {
@@ -470,7 +470,7 @@ test_gh_that_could_not_be_installed_is_named_at_the_end() {
 
   # Assert
   assert_eq 0 "$code" "exit code"
-  assert_contains <(tail -n 1 "$OUT") 'run `gh auth login`'
+  assert_contains <(tail -n 1 "$OUT") "run \`gh auth login\`"
   assert_contains <(tail -n 1 "$OUT") "install gh"
 }
 
@@ -484,7 +484,7 @@ test_dry_run_ends_with_gh_auth_login_too() {
   install --dry-run
 
   # Assert
-  assert_contains <(tail -n 1 "$OUT") 'run `gh auth login`'
+  assert_contains <(tail -n 1 "$OUT") "run \`gh auth login\`"
 }
 
 test_a_machine_with_no_display_is_not_told_about_gh() {
