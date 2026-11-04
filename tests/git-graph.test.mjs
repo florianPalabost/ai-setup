@@ -187,3 +187,132 @@ test("turning first-parent off brings the merged commits back", async () => {
   // Assert
   assert.ok(view.part.index.has(s1));
 });
+
+const DRAW_WAIT = 3000;
+
+test("a table whose rows never draw says so instead of staying blank", async () => {
+  // Arrange: the list never asks for its rows, as on a repository too big for it
+  const { repo } = repoWithMerge();
+  const { cx, draw } = await openGraph(repo);
+  draw();
+
+  // Act
+  cx.fire(DRAW_WAIT);
+  const root = draw();
+
+  // Assert
+  assert.match(textOf(root), /Can't draw this history/);
+  assert.match(textOf(root), /4 commits on 2 lanes/);
+  assert.equal(findList(root), null);
+});
+
+test("a table whose rows drew stays as it is", async () => {
+  // Arrange
+  const { repo } = repoWithMerge();
+  const { cx, draw } = await openGraph(repo);
+  findList(draw()).list.render({ start: 0, end: 4 }, cx);
+
+  // Act
+  cx.fire(DRAW_WAIT);
+  const root = draw();
+
+  // Assert
+  assert.doesNotMatch(textOf(root), /Can't draw/);
+  assert.ok(findList(root));
+});
+
+test("a hidden tab isn't blamed for rows it had no reason to draw", async () => {
+  // Arrange: the graph's tab is in the background
+  const { repo } = repoWithMerge();
+  const { cx, draw } = await openGraph(repo);
+  world.spaces[0].tabs = [{ id: "t1", active: false }, { id: "t2", active: true }];
+  draw();
+
+  // Act
+  cx.fire(DRAW_WAIT);
+  const root = draw();
+
+  // Assert
+  assert.doesNotMatch(textOf(root), /Can't draw/);
+});
+
+test("a tab hidden before the wait ends isn't blamed either", async () => {
+  // Arrange
+  const { repo } = repoWithMerge();
+  const { cx, draw } = await openGraph(repo);
+  draw();
+  world.spaces[0].tabs = [{ id: "t1", active: false }, { id: "t2", active: true }];
+
+  // Act
+  cx.fire(DRAW_WAIT);
+  const root = draw();
+
+  // Assert
+  assert.doesNotMatch(textOf(root), /Can't draw/);
+});
+
+test("a row that fails to draw says so", async () => {
+  // Arrange
+  const { repo } = repoWithMerge();
+  const { cx, draw } = await openGraph(repo);
+  const paint = globalThis.window.paint_path;
+  globalThis.window.paint_path = () => { throw new Error("no paint"); };
+
+  // Act
+  findList(draw()).list.render({ start: 0, end: 4 }, cx);
+  await cx.settle();
+  globalThis.window.paint_path = paint;
+  const root = draw();
+
+  // Assert
+  assert.match(textOf(root), /Can't draw this history/);
+  assert.match(textOf(root), /no paint/);
+});
+
+test("from the error, First parent is still there and tries again", async () => {
+  // Arrange
+  const { repo } = repoWithMerge();
+  const { cx, draw } = await openGraph(repo);
+  draw();
+  cx.fire(DRAW_WAIT);
+
+  // Act
+  findById(draw(), "graph-first-parent").handlers.on_click({}, cx);
+  await cx.settle();
+  const root = draw();
+
+  // Assert
+  assert.doesNotMatch(textOf(root), /Can't draw/);
+  assert.ok(findList(root));
+});
+
+test("from the error, Refresh tries again", async () => {
+  // Arrange
+  const { repo } = repoWithMerge();
+  const { cx, draw } = await openGraph(repo);
+  draw();
+  cx.fire(DRAW_WAIT);
+
+  // Act
+  findById(draw(), "graph-refresh").handlers.on_click({}, cx);
+  await cx.settle();
+  const root = draw();
+
+  // Assert
+  assert.doesNotMatch(textOf(root), /Can't draw/);
+  assert.ok(findList(root));
+});
+
+test("a history git can't read shows git's error", async () => {
+  // Arrange: the newest commit's object is gone, while HEAD still names it
+  const { repo, merge } = repoWithMerge();
+  rmSync(join(repo, ".git", "objects", merge.slice(0, 2), merge.slice(2)));
+
+  // Act
+  const { draw } = await openGraph(repo);
+  const root = draw();
+
+  // Assert
+  assert.match(textOf(root), /Can't read the history/);
+  assert.match(textOf(root), /bad object/);
+});

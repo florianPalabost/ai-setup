@@ -22,6 +22,9 @@ const PAGE = 300, ROW = 24, LANE = 12, PAD = 6, DIFF_ROW = 20;
 const OPEN_KEY = "git-graph.open";
 // How far back to read for a commit asked for by hash.
 const COMMIT_SEARCH_LIMIT = PAGE * 16;
+// How long a shown table may go without its rows before it says it can't draw them.
+const DRAW_WAIT = 3000;
+const GRAPH_MOD = "git-graph";
 // The graph column's default keeps room for its "Graph" heading (and a lane or two) in narrow repos.
 const GRAPH_MIN = 56;
 // side: which way a drag widens it. Graph's handle is on its right edge, the others' on their left.
@@ -116,6 +119,7 @@ export class Graph {
   reset() {
     Object.assign(this, folderState());
     this.watchToken++; this.watching = null;
+    this.drew = false; this.drawError = null;
   }
 
   // Leaving a folder keeps it as it was; coming back shows that at once, while refresh reads it again.
@@ -208,6 +212,7 @@ export class Graph {
     this.index = new Map(commits.map((c, i) => [c.hash, i]));
     this.ctx = { root: this.root, on: this.on, current: this.current, head: this.head, branches: this.branches, remotes: this.remoteNames };
     this.state = commits.length ? "ready" : "empty"; this.error = null;
+    this.drew = false; this.drawError = null;
     if (this.selected && !this.index.has(this.selected)) { this.selected = null; this.details = null; this.diff = null; }
   }
 
@@ -475,7 +480,7 @@ export class Graph {
       .when(ready && Boolean(where), (e) => e.child(h_flex().h(22).px(7).gap(5).min_w(0).items_center().rounded(6).bg(t.accent + "26").text_color(t.accent)
         .child(svg(icon(this.current ? "branch" : "commit")).size(12).flex_none()).child(div().min_w(0).truncate().text_size(11.5).font_semibold().child(where))))
       .child(div().flex_1())
-      .when(this.state !== "nofolder", (e) => e.child(this.iconButton("graph-refresh", "refresh", null, false, (_e, cx) => this.refresh(cx), t)));
+      .when(this.state !== "nofolder", (e) => e.child(this.iconButton("graph-refresh", "refresh", null, false, (_e, cx) => { this.drawError = null; this.drew = false; this.refresh(cx); }, t)));
   }
 
   toolbar(t) {
@@ -519,10 +524,18 @@ export class Graph {
             this.moreAsked = this.limit;
             cx.spawn(async (cx) => this.loadMore(cx));
           }
-          return Array.from({ length: range.end - range.start }, (_x, k) => range.start + k).map((i) => i < this.commits.length
-            ? this.row(i, t, colors, mono, width)
-            : div().id("graph-more").h(this.rowH()).flex_none().px(14).flex().items_center().text_color(t.accent).hover((s) => s.bg(t.hover))
-              .child(this.loading ? "Loading more commits…" : `Load ${PAGE} more commits`));
+          try {
+            const rows = Array.from({ length: range.end - range.start }, (_x, k) => range.start + k).map((i) => i < this.commits.length
+              ? this.row(i, t, colors, mono, width)
+              : div().id("graph-more").h(this.rowH()).flex_none().px(14).flex().items_center().text_color(t.accent).hover((s) => s.bg(t.hover))
+                .child(this.loading ? "Loading more commits…" : `Load ${PAGE} more commits`));
+            if (rows.length) this.drew = true;
+            return rows;
+          } catch (e) {
+            this.drawError = String(e?.message ?? e);
+            cx.spawn(async (cx) => cx.notify());
+            return [];
+          }
         })
         .track_scroll(this.scroll)
         // Rows of a virtual list can't hold their own handlers: the list reports the row's key.
@@ -611,6 +624,33 @@ export class Graph {
       .when(Boolean(body), (e) => e.child(div().max_w(280).text_center().text_size(12).text_color(t.muted).child(body)));
   }
 
+  // Whether this copy's tab is the one on screen: a hidden list asks for no rows.
+  shown() {
+    const tab = spaces().find((s) => s.active)?.tabs.find((candidate) => candidate.active);
+    return panes().some((p) => p.mod === GRAPH_MOD && p.tab === tab?.id);
+  }
+
+  // A table that drew its header and columns but no rows looks like an empty
+  // history, with no error anywhere. Upstream did that on a repository the size of
+  // git's own, cause unknown, so this watches for the symptom rather than a cause.
+  watchDraw(cx) {
+    if (this.state !== "ready" || this.drew || this.drawError || this.drawWatch || !this.shown()) return;
+    this.drawWatch = true;
+    cx.timer.after(DRAW_WAIT, (cx) => {
+      this.drawWatch = false;
+      if (this.state !== "ready" || this.drew || !this.shown()) return;
+      this.drawError = "The list asked for no rows.";
+      cx.notify();
+    });
+  }
+
+  drawProblem(t) {
+    return v_flex().flex_1().min_h(0).items_center().justify_center().gap(10).px(28).pb(40)
+      .child(div().text_size(14).font_semibold().text_color(t.ansi1).child("Can't draw this history"))
+      .child(div().max_w(420).text_center().text_size(12).text_color(t.muted)
+        .child(`${count(this.commits.length, "commit")} on ${count(this.lanes, "lane")} didn't draw: ${this.drawError} First parent draws far fewer lanes, and git log in a terminal shows the same history.`));
+  }
+
   noticeBar(t) {
     return h_flex().id("graph-notice").h(26).flex_none().px(14).items_center().border_b(1).border_color(t.border).text_size(11.5).text_color(t.ansi3)
       .cursor_pointer().on_click((_e, cx) => { this.notice = null; cx.notify(); })
@@ -621,6 +661,7 @@ export class Graph {
     this.takeRequest();
     if (this.key() !== this.context) this.refresh(cx);
     this.findWanted(cx);
+    this.watchDraw(cx);
     const savedCols = shared("git-graph.columns"), seen = JSON.stringify(savedCols ?? null);
     if (!this.drag && seen !== this.seenCols) { this.seenCols = seen; this.cols = withDefaults(savedCols); }
     const t = theme(), mono = settings().font_family ?? "JetBrains Mono", ready = this.state === "ready";
@@ -641,8 +682,10 @@ export class Graph {
       })
       .child(this.header(t))
       .when(Boolean(this.notice), (e) => e.child(this.noticeBar(t)))
-      .when(ready, (e) => e.child(this.toolbar(t)).child(this.columns(t, this.graphWidth())).child(this.list(t, mono))
-        .when(Boolean(this.selected), (el) => el.child(this.detailsPane(t, mono))))
+      .when(ready, (e) => e.child(this.toolbar(t))
+        .when(Boolean(this.drawError), (el) => el.child(this.drawProblem(t)))
+        .when(!this.drawError, (el) => el.child(this.columns(t, this.graphWidth())).child(this.list(t, mono))
+          .when(Boolean(this.selected), (sel) => sel.child(this.detailsPane(t, mono)))))
       .when(!ready, (e) => e.child(this.empty(t)));
   }
 }
