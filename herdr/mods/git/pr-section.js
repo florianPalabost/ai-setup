@@ -13,6 +13,8 @@ const SLOT = "pr";
 const TICK_MS = 15000;
 const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
+const checkTones = (t) => ({ fail: t.ansi1, pending: t.ansi3, pass: t.ansi2, skip: t.dim });
+
 class PullRequest {
   constructor(cx) {
     this.slot = sharedSlot(SLOT);
@@ -57,7 +59,7 @@ class PullRequest {
   }
 
   counts(t, checks) {
-    const tones = { fail: t.ansi1, pending: t.ansi3, pass: t.ansi2, skip: t.dim };
+    const tones = checkTones(t);
     if (!checks.total) return div().text_size(12).text_color(t.dim).child("No checks on the last commit");
     return h_flex().gap(10).flex_wrap().text_size(12)
       .children(checkCounts(checks).map(({ bucket, text }) => h_flex().gap(4).text_color(checks[bucket] ? tones[bucket] : t.dim)
@@ -66,7 +68,7 @@ class PullRequest {
   }
 
   row(t, check, index) {
-    const tones = { fail: t.ansi1, pending: t.ansi3, pass: t.ansi2, skip: t.dim };
+    const tones = checkTones(t);
     return h_flex().id(`pr-check-${index}`).gap(6).px(4).py(2).rounded(4).items_center().text_size(12)
       .when(Boolean(check.url), (el) => el.cursor_pointer().hover((s) => s.bg(t.hover)).on_click(() => openUrl(check.url)))
       .child(div().w(14).flex_none().text_color(tones[check.bucket])
