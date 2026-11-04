@@ -13,6 +13,7 @@
 import { Changes, key } from "./changes.js";
 import { commits } from "./commits-section.js";
 import { pullRequest } from "./pr-section.js";
+import { myPrs } from "./prs-section.js";
 import { changesSummary } from "./sections.js";
 
 const changes = {
@@ -32,4 +33,4 @@ const changes = {
   },
 };
 
-export const SECTIONS = [changes, pullRequest, commits];
+export const SECTIONS = [changes, pullRequest, myPrs, commits];

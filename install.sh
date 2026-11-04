@@ -72,14 +72,51 @@ backup() {
   info "backed up $target"
 }
 
+# Whether $2 already is what place_link makes for $1. A copy from its Windows
+# fallback counts as long as it matches, so only a change gets a backup and a warning.
+link_is_current() {
+  local src="$1" dst="$2"
+  if [[ -L "$dst" ]]; then
+    [[ "$(readlink "$dst")" == "$src" ]]
+  else
+    is_windows && [[ -f "$src" && -f "$dst" ]] && cmp -s "$src" "$dst"
+  fi
+}
+
+# Make $2 point at $1. Native Windows symlinks need Developer Mode or admin, and
+# without nativestrict Git Bash's ln quietly copies, so refusal has to be asked
+# for. Git Bash reports a junction as a symlink, so link_is_current sees it too.
+place_link() {
+  local src="$1" dst="$2"
+  if ((DRY_RUN)) || ! is_windows; then
+    run ln -s "$src" "$dst"
+    return
+  fi
+  if MSYS=winsymlinks:nativestrict ln -s "$src" "$dst" 2>/dev/null; then
+    return 0
+  fi
+  if [[ -d "$src" ]]; then
+    cmd //c mklink //J "$(cygpath -w "$dst")" "$(cygpath -w "$src")" >/dev/null
+  else
+    cp "$src" "$dst" && warn "symlinks aren't permitted here, so $dst is a copy: re-run install to refresh it"
+  fi
+}
+
 link() {
   local src="$1" dst="$2"
-  if [[ -L "$dst" && "$(readlink "$dst")" == "$src" ]]; then
+  if link_is_current "$src" "$dst"; then
     return 0
   fi
   backup "$dst"
   run mkdir -p "$(dirname "$dst")"
-  run ln -s "$src" "$dst"
+  if is_windows; then
+    if ! place_link "$src" "$dst"; then
+      warn "could not link $dst -> $src"
+      return 0
+    fi
+  else
+    place_link "$src" "$dst"
+  fi
   info "linked $dst -> $src"
 }
 
@@ -93,9 +130,9 @@ link_global() {
 # into it, and those must never end up in the repo.
 merge_settings() {
   log "Settings (merge global/settings.json into $CLAUDE_DIR/settings.json)"
-  require python3 "settings merge" || return 0
+  require_python "settings merge" || return 0
 
-  python3 - "$REPO_DIR/global/settings.json" "$CLAUDE_DIR/settings.json" "$BACKUP_DIR" "$DRY_RUN" <<'PY'
+  py3 - "$REPO_DIR/global/settings.json" "$CLAUDE_DIR/settings.json" "$BACKUP_DIR" "$DRY_RUN" <<'PY'
 import json, shutil, sys
 from pathlib import Path
 
@@ -149,11 +186,11 @@ link_own_plugins() {
 install_plugins() {
   log "Plugins (manifests/plugins.txt)"
   require claude "plugins" || return 0
-  require python3 "plugins" || return 0
+  require_python "plugins" || return 0
 
   local marketplaces installed
-  marketplaces="$(claude plugin marketplace list --json | python3 -c 'import json,sys; print("\n".join(m["name"] for m in json.load(sys.stdin)))')"
-  installed="$(claude plugin list --json | python3 -c 'import json,sys; print("\n".join(p["id"] for p in json.load(sys.stdin) if p["scope"] == "user"))')"
+  marketplaces="$(claude plugin marketplace list --json | py3 -c 'import json,sys; print("\n".join(m["name"] for m in json.load(sys.stdin)))')"
+  installed="$(claude plugin list --json | py3 -c 'import json,sys; print("\n".join(p["id"] for p in json.load(sys.stdin) if p["scope"] == "user"))')"
 
   local plugin repo state marketplace
   while read -r plugin repo state; do
@@ -181,13 +218,13 @@ SKILL_NAME_PATTERN='^[a-z0-9-]+$'
 # Point the mirror entry $2 at $1.
 mirror_link() {
   local src="$1" dst="$2"
-  if [[ -L "$dst" && "$(readlink "$dst")" == "$src" ]]; then
+  if link_is_current "$src" "$dst"; then
     return 0
   fi
   if [[ -e "$dst" || -L "$dst" ]]; then
     run rm "$dst"
   fi
-  run ln -s "$src" "$dst"
+  place_link "$src" "$dst"
 }
 
 # A vendored skill is linked through its skill mirror (see GLOSSARY.md) in
@@ -420,11 +457,12 @@ install_skills() {
 #   skill                  skill from manifests/skills.txt
 #   link                   symlink into this repo or the vendor dir whose target is gone
 stale_entries() {
-  python3 - "$REPO_DIR" "$CLAUDE_DIR" "$VENDOR_DIR" <<'PY'
-import json, os, re, subprocess, sys
+  py3 - "$REPO_DIR" "$CLAUDE_DIR" "$VENDOR_DIR" "$BASH" <<'PY'
+import json, os, re, shutil, subprocess, sys
 from pathlib import Path
 
-repo, claude_dir, vendor_dir = sys.argv[1], Path(sys.argv[2]), sys.argv[3]
+# bash by path: on Windows the bare name finds WSL's launcher in System32 first.
+repo, claude_dir, vendor_dir, bash = sys.argv[1], Path(sys.argv[2]), sys.argv[3], sys.argv[4]
 
 def git(*args):
     return subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True).stdout
@@ -466,8 +504,10 @@ for kind, rules in stale.items():
 
 # Plugins
 installed = set()
-if subprocess.run(["sh", "-c", "command -v claude"], capture_output=True).returncode == 0:
-    out = subprocess.run(["claude", "plugin", "list", "--json"], capture_output=True, text=True).stdout
+# By full path: on Windows the bare name doesn't find an npm install's claude.cmd.
+claude = shutil.which("claude")
+if claude:
+    out = subprocess.run([claude, "plugin", "list", "--json"], capture_output=True, text=True).stdout
     installed = {p["id"] for p in json.loads(out or "[]") if p["scope"] == "user"}
 old, now = versions("manifests/plugins.txt")
 first = lambda f: {f[0]}
@@ -482,7 +522,7 @@ def plugin_skill_names(url, renames):
     if not (checkout / ".claude-plugin" / "plugin.json").is_file():
         return set()
     paths = subprocess.run(
-        ["bash", "-c", 'source "$1/lib.sh" && plugin_skill_paths "$2"', "_", repo, str(checkout)],
+        [bash, "-c", 'source "$1/lib.sh" && plugin_skill_paths "$2"', "_", repo, str(checkout)],
         capture_output=True, text=True,
     ).stdout.split()
     renamed = dict(rename.split("=", 1) for rename in renames)
@@ -517,7 +557,7 @@ PY
 
 # $1: "rule:<kind>\t<rule>" lines from stale_entries.
 remove_rules() {
-  python3 - "$CLAUDE_DIR/settings.json" "$BACKUP_DIR" "$1" <<'PY'
+  py3 - "$CLAUDE_DIR/settings.json" "$BACKUP_DIR" "$1" <<'PY'
 import json, shutil, sys
 from pathlib import Path
 
@@ -536,11 +576,27 @@ dst.write_text(json.dumps(settings, indent=2) + "\n")
 PY
 }
 
+# The stale_entries lines $1, with their file paths in this shell's form: Python
+# on Windows prints C:\ paths, and everything here compares and moves /c/ ones.
+posix_entries() {
+  local kind entry
+  if ! is_windows; then
+    printf '%s\n' "$1"
+    return 0
+  fi
+  while IFS=$'\t' read -r kind entry; do
+    case "$kind" in
+      skill | link | herdr-mod | herdr-layout) entry="$(cygpath -u "$entry")" ;;
+    esac
+    printf '%s\t%s\n' "$kind" "$entry"
+  done <<<"$1"
+}
+
 # install.sh only adds, so whatever the repo stops listing stays behind.
 # List it, then remove it only if the user says yes.
 prune_stale() {
   log "Leftovers from earlier versions of this repo"
-  require python3 "leftover check" || return 0
+  require_python "leftover check" || return 0
   require git "leftover check" || return 0
 
   local entries
@@ -549,6 +605,7 @@ prune_stale() {
     info "none"
     return 0
   fi
+  entries="$(posix_entries "$entries")"
   while IFS=$'\t' read -r kind entry; do
     info "$kind  $entry"
   done <<<"$entries"
@@ -624,7 +681,7 @@ self_update() {
 # "<id> <version>" for each user-scope plugin. Skills-dir entries are skills
 # that Claude Code shows as plugins; they are updated with the skills.
 user_plugin_versions() {
-  claude plugin list --json | python3 -c '
+  claude plugin list --json | py3 -c '
 import json, sys
 for p in json.load(sys.stdin):
     if p["scope"] == "user" and not p["id"].endswith("@skills-dir"):
@@ -634,7 +691,7 @@ for p in json.load(sys.stdin):
 update_plugins() {
   log "Update plugins (all user scope)"
   require claude "plugin update" || return 0
-  require python3 "plugin update" || return 0
+  require_python "plugin update" || return 0
 
   run claude plugin marketplace update
 

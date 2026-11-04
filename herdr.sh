@@ -1,4 +1,4 @@
-# shellcheck shell=bash
+# shellcheck shell=bash disable=SC1010  # `herdr-app do` is its subcommand, not the keyword
 # The herdr step of install.sh: the Git panel. Sourced by install.sh, whose run,
 # link and backup it uses.
 #
@@ -53,7 +53,7 @@ herdr_has_no_display() {
 
 # The layout herdr is showing, "main" if it hasn't recorded one.
 herdr_shown_layout() {
-  python3 - "$HERDR_HOME/shared.json" <<'PY'
+  py3 - "$HERDR_HOME/shared.json" <<'PY'
 import json, sys
 from pathlib import Path
 
@@ -67,7 +67,7 @@ PY
 
 # The layout the open window reports showing. Unlike shared.json, it can't lag.
 herdr_window_layout() {
-  herdr-app status | python3 -c 'import json, sys; print(json.load(sys.stdin).get("layout"))'
+  herdr-app status | py3 -c 'import json, sys; print(json.load(sys.stdin).get("layout"))'
 }
 
 # Write to $3 the file $1 with the patch $2 applied. If it doesn't apply, return
@@ -99,7 +99,7 @@ patch_applies() {
 # it holds. If the edit doesn't apply, return 1 and leave $3 alone. The layout is
 # edited as JSON because herdr may reorder its keys, which a text patch can't follow.
 edited_layout() {
-  python3 - "$@" <<'PY'
+  py3 - "$@" <<'PY'
 import json, sys
 from pathlib import Path
 
@@ -302,7 +302,7 @@ build_layout() {
 
 # The version the clone's JSON file $1 records, empty if it records none.
 cloned_from_version() {
-  python3 - "$1" <<'PY'
+  py3 - "$1" <<'PY'
 import json, sys
 
 try:
@@ -344,7 +344,7 @@ layout_outdated() {
 # Only those named above qualify, so mods and layouts of the user's own never do,
 # and neither does anything installed.json records as shipped.
 herdr_stale_entries() {
-  python3 - "$HERDR_HOME" "$REPO_DIR" "${HERDR_DROPPED_MODS[*]}" "${HERDR_DROPPED_LAYOUTS[*]}" <<'PY'
+  py3 - "$HERDR_HOME" "$REPO_DIR" "${HERDR_DROPPED_MODS[*]}" "${HERDR_DROPPED_LAYOUTS[*]}" <<'PY'
 import json, os, sys
 from pathlib import Path
 
@@ -597,7 +597,7 @@ install_herdr() {
   install_herdr_app || return 0
   HERDR_PANEL_WANTED=1
   install_gh
-  require python3 "Git panel" || return 0
+  require_python "Git panel" || return 0
   require patch "Git panel" || return 0
 
   link_herdr_mods

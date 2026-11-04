@@ -1,0 +1,11 @@
+#!/bin/sh
+# Stands in for cmd.exe, only for: cmd //c mklink //J <link> <target>. A symlink
+# plays the junction, as Git Bash reports one. Refused while
+# $FAKE_SANDBOX/junctions-refused exists.
+echo "cmd $*" >>"$FAKE_SANDBOX/tool-calls.log"
+if [ -e "$FAKE_SANDBOX/junctions-refused" ]; then
+  echo "Access is denied." >&2
+  exit 1
+fi
+/bin/ln -s "$5" "$4"
+echo "Junction created for $4 <<===>> $5"
