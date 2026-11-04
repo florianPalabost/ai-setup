@@ -1,5 +1,9 @@
 --- a/main.js
 +++ b/main.js
-@@ -98 +98 @@
+@@ -80 +80,2 @@
+-    const enabled = shared("workspace.panels") ?? ["files", "changes"];
++    // The Git button always shows: the welcome can empty this list.
++    const enabled = [...(shared("workspace.panels") ?? ["files"]), "changes"];
+@@ -98 +99 @@
 -      .when(enabled.includes("changes"), el => el.child(panelButton("changes", "Changes", "mods/changes/changes.svg")))
 +      .when(enabled.includes("changes"), el => el.child(panelButton("changes", "Git", "mods/workspace-chrome/git-branch.svg")))

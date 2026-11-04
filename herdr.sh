@@ -41,6 +41,11 @@ except (OSError, ValueError):
 PY
 }
 
+# The layout the open window reports showing. Unlike shared.json, it can't lag.
+herdr_window_layout() {
+  herdr-app status | python3 -c 'import json, sys; print(json.load(sys.stdin).get("layout"))'
+}
+
 # Write to $3 the file $1 with the patch $2 applied. If it doesn't apply, return
 # 1 and leave $3 alone. $1 and $3 can be the same file.
 patched_copy() {
@@ -283,7 +288,15 @@ install_herdr() {
   if [[ "$(herdr_shown_layout)" != "$HERDR_LAYOUT" ]]; then
     run herdr-app do layout.switch "{\"name\":\"$HERDR_LAYOUT\"}"
   fi
-  if ((!DRY_RUN)); then
+  if ((DRY_RUN)); then
+    return 0
+  fi
+  # layout.switch answers ok even when it didn't switch, so ask what's showing.
+  local shown
+  shown="$(herdr_window_layout)"
+  if [[ "$shown" == "$HERDR_LAYOUT" ]]; then
     info "$HERDR_LAYOUT is active"
+  else
+    warn "herdr still shows $shown, not $HERDR_LAYOUT"
   fi
 }

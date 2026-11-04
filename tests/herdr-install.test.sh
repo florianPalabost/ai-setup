@@ -17,6 +17,7 @@ test_install_builds_the_git_panel() {
   assert_eq 0 "$code" "exit code"
   assert_eq "$REPO_COPY/herdr/mods/git" "$(readlink "$HERDR/mods/git")" "git mod link"
   assert_contains "$HERDR/mods/tabs-git/main.js" 'panelButton("changes", "Git", "mods/workspace-chrome/git-branch.svg")'
+  assert_contains "$HERDR/mods/tabs-git/main.js" 'const enabled = [...(shared("workspace.panels") ?? ["files"]), "changes"];'
   assert_contains "$HERDR/mods/tabs-git/main.js" 'panelButton("files", "Files", "mods/files/file.svg")'
   assert_contains "$HERDR/mods/tabs-git/main.js" 'mods/tabs-git/win-min.svg'
   assert_eq "tabs" "$(json_get "$HERDR/mods/tabs-git/mod.json" cloned_from.name)" "tabs-git cloned_from"
@@ -27,7 +28,26 @@ test_install_builds_the_git_panel() {
   assert_eq "main-git" "$(json_get "$HERDR/shared.json" layout)" "shown layout"
   assert_contains "$REPO_COPY/herdr/mods/git/changes.js" "herdr-version: 0.1.12"
   assert_contains "$REPO_COPY/herdr/mods/git/changes.js" "export class Changes {"
+  assert_contains "$REPO_COPY/herdr/mods/git/changes.js" "export const key = "
   assert_contains "$REPO_COPY/herdr/mods/git/changes.js" ".when(!this.embedded, (el) => el.child(h_flex().h(42)"
+}
+
+test_a_switch_that_does_not_land_is_reported() {
+  # Arrange: herdr answers ok to layout.switch whether or not it switched
+  new_repo_copy
+  herdr_with_window
+  install
+  printf '{"layout":"main"}' >"$HERDR/shared.json"
+  touch "$HERDR/fake-layout.switch-ignored"
+
+  # Act
+  install
+  local code=$?
+
+  # Assert
+  assert_eq 0 "$code" "exit code"
+  assert_contains "$OUT" "herdr still shows main, not main-git"
+  assert_lacks "$OUT" "main-git is active"
 }
 
 test_shipped_files_are_left_alone() {
@@ -309,6 +329,7 @@ test_without_herdr_the_rest_still_installs() {
 
 run_all() {
   test_case "install links the mod, builds the clones and switches layout" test_install_builds_the_git_panel
+  test_case "a switch that does not land is reported" test_a_switch_that_does_not_land_is_reported
   test_case "shipped files are left alone" test_shipped_files_are_left_alone
   test_case "a re-run with the layout active asks nothing of herdr" test_a_rerun_with_the_layout_active_asks_nothing_of_herdr
   test_case "tabs patch failing with no clone stays on main" test_tabs_patch_failing_with_no_clone_stays_on_main
