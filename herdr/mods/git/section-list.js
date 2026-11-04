@@ -11,6 +11,7 @@
 //                render(cx) only runs while open: use it to follow the space
 //                so the collapsed summary stays true
 import { Changes, key } from "./changes.js";
+import { commits } from "./commits-section.js";
 import { pullRequest } from "./pr-section.js";
 import { changesSummary } from "./sections.js";
 
@@ -31,4 +32,4 @@ const changes = {
   },
 };
 
-export const SECTIONS = [changes, pullRequest];
+export const SECTIONS = [changes, pullRequest, commits];
