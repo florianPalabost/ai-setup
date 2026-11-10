@@ -1,0 +1,13 @@
+{
+  "name": "review",
+  "version": "0.1.0",
+  "description": "Comment sweep (/no-comments) and the Comment Sicko agent, adapted from poteto's pstack.",
+  "author": {
+    "name": "Florian Palabost",
+    "url": "https://github.com/florianPalabost"
+  },
+  "homepage": "https://github.com/florianPalabost/ai-setup",
+  "repository": "https://github.com/florianPalabost/ai-setup",
+  "license": "MIT",
+  "keywords": ["review", "comments", "pstack"]
+}

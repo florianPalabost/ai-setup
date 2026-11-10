@@ -13,6 +13,12 @@
       "source": "./plugins/laravel",
       "description": "Laravel debugging workflow built on the Laravel Boost MCP tools.",
       "category": "development"
+    },
+    {
+      "name": "review",
+      "source": "./plugins/review",
+      "description": "Comment sweep (/no-comments) and the Comment Sicko agent, adapted from poteto's pstack.",
+      "category": "development"
     }
   ]
 }

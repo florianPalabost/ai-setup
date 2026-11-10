@@ -19,6 +19,7 @@ It works two ways:
 | Plugin | Contents |
 | --- | --- |
 | [`laravel`](plugins/laravel) | `debug-laravel`: root-cause-first debugging workflow built on the [Laravel Boost](https://github.com/laravel/boost) MCP tools |
+| [`review`](plugins/review) | `no-comments` + `comment-sicko` agent: deletes narration comments and flags the code they excuse, adapted from [pstack](https://github.com/cursor/plugins/tree/main/pstack) |
 
 ### Full setup (dotfiles)
 
