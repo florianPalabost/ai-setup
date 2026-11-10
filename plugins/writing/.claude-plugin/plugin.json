@@ -1,0 +1,13 @@
+{
+  "name": "writing",
+  "version": "0.1.0",
+  "description": "Prose clean-up (/unslop), adapted from poteto's pstack.",
+  "author": {
+    "name": "Florian Palabost",
+    "url": "https://github.com/florianPalabost"
+  },
+  "homepage": "https://github.com/florianPalabost/ai-setup",
+  "repository": "https://github.com/florianPalabost/ai-setup",
+  "license": "MIT",
+  "keywords": ["writing", "prose", "pstack"]
+}

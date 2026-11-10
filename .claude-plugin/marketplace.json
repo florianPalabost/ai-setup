@@ -19,6 +19,12 @@
       "source": "./plugins/review",
       "description": "Comment sweep (/no-comments) and the Comment Sicko agent, adapted from poteto's pstack.",
       "category": "development"
+    },
+    {
+      "name": "writing",
+      "source": "./plugins/writing",
+      "description": "Prose clean-up (/unslop), adapted from poteto's pstack.",
+      "category": "productivity"
     }
   ]
 }
