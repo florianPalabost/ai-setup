@@ -15,6 +15,7 @@
 ### Laravel
 
 - Define & use an action for each controller.
+- Use a backed enum for any column or parameter with a fixed set of values (type, status): cast it on the model, validate it with the enum rule, and compare against its cases instead of string literals.
 
 ### React
 
