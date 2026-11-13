@@ -44,19 +44,22 @@ function orchestration(args) {
     })
 }
 
-function parseJsonList(value) {
-    if (Array.isArray(value)) {
-        return value
+function parseJson(value, fallback) {
+    if (typeof value !== 'string') {
+        return value ?? fallback
     }
-
-    return value ? JSON.parse(value) : []
+    try {
+        return JSON.parse(value) ?? fallback
+    } catch {
+        return fallback
+    }
 }
 
 async function loadGraph({ runId } = {}) {
     const runs = (await orchestration(['run-list'])).runs.filter((run) => run.id !== LEGACY_RUN_ID && !run.legacy)
     const summary = [...runs.map(({ id, objective }) => ({ id, objective })), DEMO_RUN]
     if (runId === DEMO_RUN_ID) {
-        return { runs: summary, ...demoGraph() }
+        return { runs: summary, ...demoGraph(Date.now()) }
     }
     const run = runs.find((candidate) => candidate.id === runId) ?? runs[0]
     if (!run) {
@@ -65,7 +68,7 @@ async function loadGraph({ runId } = {}) {
 
     const [taskResult, gateResult, workerResult] = await Promise.all([
         orchestration(['task-list', '--run', run.id]),
-        orchestration(['gate-list', '--run', run.id, '--status', 'pending']),
+        orchestration(['gate-list', '--run', run.id]),
         orchestration(['worker-list', '--run', run.id]),
     ])
 
@@ -84,7 +87,9 @@ async function loadGraph({ runId } = {}) {
             name: task.display_name || task.task_title || task.id,
             spec: task.spec ?? '',
             status: task.status,
-            deps: parseJsonList(task.deps),
+            deps: parseJson(task.deps, []),
+            parentId: parseJson(task.parent_id, null),
+            outcome: parseJson(task.result, {})?.outcome ?? null,
             createdAt: task.created_at,
             completedAt: task.completed_at,
             agent: worker?.projection?.provider?.id ?? null,
@@ -92,9 +97,15 @@ async function loadGraph({ runId } = {}) {
             worktreeId: worker?.resource?.worktreeId ?? worker?.projection?.workspace?.id ?? null,
         }
     })
-    const gates = gateResult.gates.map((gate) => ({ id: gate.id, taskId: gate.task_id, question: gate.question }))
+    const gates = gateResult.gates.map((gate) => ({
+        id: gate.id,
+        taskId: gate.task_id,
+        question: gate.question,
+        status: gate.status ?? 'pending',
+        resolution: gate.resolution ?? null,
+    }))
 
-    return { runs: summary, run: { id: run.id, objective: run.objective }, tasks, gates }
+    return { runs: summary, run: { id: run.id, objective: run.objective, createdAt: run.created_at }, tasks, gates }
 }
 
 async function openTask(orca, { terminal, worktreeId }) {

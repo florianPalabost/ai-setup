@@ -1,7 +1,10 @@
 const POLL_INTERVAL_MS = 5000
+const AGE_INTERVAL_MS = 30000
 const CARD_WIDTH = 240
+const GATE_WIDTH = 200
 const MIN_SCALE = 0.3
 const MAX_SCALE = 2
+const TERMINAL_STATUSES = new Set(['completed', 'failed'])
 
 const runSelect = document.getElementById('run-select')
 const statusLine = document.getElementById('status-line')
@@ -14,8 +17,12 @@ const cards = document.getElementById('cards')
 const view = { x: 16, y: 16, scale: 1 }
 let selectedRunId = null
 let shownRunId = null
-let lastSignature = ''
+let runsSignature = ''
+let layoutSignature = ''
+let shownTasks = []
 let inFlight = false
+/** @type {Map<string, { element: HTMLElement, signature: string }>} */
+const shownNodes = new Map()
 
 function setStatus(text, isError = false) {
     statusLine.textContent = text
@@ -78,6 +85,11 @@ function fitToWidth(graphWidth) {
 }
 
 function renderRunOptions(runs, currentRunId) {
+    const signature = JSON.stringify([runs, currentRunId])
+    if (signature === runsSignature) {
+        return
+    }
+    runsSignature = signature
     runSelect.replaceChildren(
         ...runs.map((run) => {
             const option = element('option', '', run.objective || run.id)
@@ -90,8 +102,15 @@ function renderRunOptions(runs, currentRunId) {
     runSelect.disabled = runs.length === 0
 }
 
-function renderEmpty(message) {
+function clearGraph() {
+    shownNodes.clear()
+    shownTasks = []
+    layoutSignature = ''
     edgePaths.replaceChildren()
+}
+
+function renderEmpty(message) {
+    clearGraph()
     cards.replaceChildren(element('div', 'empty', message))
     cards.firstChild.style.width = `${viewport.clientWidth - 32}px`
     view.x = 16
@@ -100,20 +119,140 @@ function renderEmpty(message) {
     applyView()
 }
 
-function layout(tasks, heightByTaskId) {
-    const graph = new dagre.graphlib.Graph()
+/**
+ * Turns a run into graph nodes and edges. Besides the tasks, the run itself is
+ * the root, every gate is a node pointing at the task it blocks, and a task's
+ * parent points at it with a dashed "contains" edge.
+ */
+function buildGraph({ run, tasks, gates }) {
+    const runNodeId = `run:${run.id}`
+    const taskIds = new Set(tasks.map((task) => task.id))
+    const doneCount = tasks.filter((task) => task.status === 'completed').length
+    const nodes = [{ id: runNodeId, kind: 'run', width: CARD_WIDTH, run, doneCount, taskCount: tasks.length }]
+    const edges = []
+
+    for (const task of tasks) {
+        nodes.push({ id: task.id, kind: 'task', width: CARD_WIDTH, task })
+        const deps = task.deps.filter((depId) => taskIds.has(depId))
+        const hasParent = task.parentId && taskIds.has(task.parentId)
+        for (const depId of deps) {
+            edges.push({ from: depId, to: task.id, kind: 'dep' })
+        }
+        if (hasParent) {
+            edges.push({ from: task.parentId, to: task.id, kind: 'child' })
+        }
+        if (deps.length === 0 && !hasParent) {
+            edges.push({ from: runNodeId, to: task.id, kind: 'root' })
+        }
+    }
+    for (const gate of gates) {
+        if (!taskIds.has(gate.taskId)) {
+            continue
+        }
+        const gateNodeId = `gate:${gate.id}`
+        nodes.push({ id: gateNodeId, kind: 'gate', width: GATE_WIDTH, gate })
+        edges.push({ from: gateNodeId, to: gate.taskId, kind: 'gate' })
+    }
+
+    return { nodes, edges }
+}
+
+function nodeSignature(node) {
+    if (node.kind === 'task') {
+        const { createdAt, ...stable } = node.task
+
+        return JSON.stringify(['task', stable])
+    }
+    if (node.kind === 'gate') {
+        return JSON.stringify(['gate', node.gate])
+    }
+
+    return JSON.stringify(['run', node.run.objective, node.doneCount, node.taskCount])
+}
+
+function fillTaskCard(card, task) {
+    card.className = `card status-${task.status}`
+    card.title = task.spec || task.name
+    const meta = element('div', 'meta')
+    meta.append(element('span', 'chip', task.status))
+    if (task.outcome && task.outcome !== 'succeeded') {
+        meta.append(element('span', 'agent', task.outcome))
+    }
+    if (task.agent) {
+        meta.append(element('span', 'agent', task.agent))
+    }
+    meta.append(element('span', 'age', ageLabel(task)))
+    card.replaceChildren(element('div', 'name', task.name), meta)
+    card.onclick = () => openTask(task)
+}
+
+function fillGateCard(card, gate) {
+    const isOpen = gate.status === 'pending'
+    card.className = `card gate-node ${isOpen ? 'gate-open' : 'gate-resolved'}`
+    card.title = gate.question
+    const children = [element('div', 'gate-label', isOpen ? '⚠ Gate · waiting for you' : '✓ Gate · resolved'), element('div', 'name', gate.question)]
+    if (gate.resolution) {
+        children.push(element('div', 'resolution', `→ ${gate.resolution}`))
+    }
+    card.replaceChildren(...children)
+    card.onclick = null
+}
+
+function fillRunCard(card, node) {
+    const isDone = node.taskCount > 0 && node.doneCount === node.taskCount
+    card.className = `card run-node ${isDone ? 'status-completed' : 'status-run'}`
+    card.title = node.run.objective || node.run.id
+    const meta = element('div', 'meta')
+    meta.append(element('span', 'chip', isDone ? 'done' : 'run'), element('span', 'age', `${node.doneCount}/${node.taskCount} tasks done`))
+    card.replaceChildren(element('div', 'name', node.run.objective || node.run.id), meta)
+    card.onclick = null
+}
+
+function fillCard(card, node) {
+    if (node.kind === 'task') {
+        fillTaskCard(card, node.task)
+    } else if (node.kind === 'gate') {
+        fillGateCard(card, node.gate)
+    } else {
+        fillRunCard(card, node)
+    }
+}
+
+/** Updates cards in place: unchanged cards keep their DOM, so a poll that changes nothing repaints nothing. */
+function syncCards(nodes) {
+    const wantedIds = new Set(nodes.map((node) => node.id))
+    for (const [id, shown] of shownNodes) {
+        if (!wantedIds.has(id)) {
+            shown.element.remove()
+            shownNodes.delete(id)
+        }
+    }
+    cards.querySelector('.empty')?.remove()
+    for (const node of nodes) {
+        const signature = nodeSignature(node)
+        const shown = shownNodes.get(node.id)
+        if (shown?.signature === signature) {
+            continue
+        }
+        const card = shown?.element ?? element('div')
+        fillCard(card, node)
+        card.style.width = `${node.width}px`
+        if (!shown) {
+            cards.append(card)
+        }
+        shownNodes.set(node.id, { element: card, signature })
+    }
+}
+
+function layout(nodes, edges) {
+    const graph = new dagre.graphlib.Graph({ multigraph: true })
     graph.setGraph({ rankdir: 'TB', nodesep: 28, ranksep: 56, marginx: 0, marginy: 0 })
     graph.setDefaultEdgeLabel(() => ({}))
-    for (const task of tasks) {
-        graph.setNode(task.id, { width: CARD_WIDTH, height: heightByTaskId.get(task.id) })
+    for (const node of nodes) {
+        graph.setNode(node.id, { width: node.width, height: shownNodes.get(node.id).element.offsetHeight })
     }
-    const taskIds = new Set(tasks.map((task) => task.id))
-    for (const task of tasks) {
-        for (const depId of task.deps) {
-            if (taskIds.has(depId)) {
-                graph.setEdge(depId, task.id)
-            }
-        }
+    for (const edge of edges) {
+        graph.setEdge(edge.from, edge.to, { kind: edge.kind }, `${edge.kind}:${edge.from}:${edge.to}`)
     }
     dagre.layout(graph)
 
@@ -136,61 +275,66 @@ function edgePath(points) {
     return path
 }
 
-function taskCard(task, gate) {
-    const card = element('div', `card status-${task.status}`)
-    card.title = task.spec || task.name
-    card.append(element('div', 'name', task.name))
-    const meta = element('div', 'meta')
-    meta.append(element('span', 'chip', task.status))
-    if (task.agent) {
-        meta.append(element('span', 'agent', task.agent))
-    }
-    meta.append(element('span', 'age', ageLabel(task)))
-    card.append(meta)
-    if (gate) {
-        card.append(element('div', 'gate', `⚠ gate: ${gate.question}`))
-    }
-    card.addEventListener('click', () => openTask(task))
-
-    return card
-}
-
-function renderGraph(data) {
-    const { tasks, gates } = data
-    if (tasks.length === 0) {
-        renderEmpty('This run has no tasks yet.')
-        return
-    }
-    const gateByTaskId = new Map(gates.map((gate) => [gate.taskId, gate]))
-    const cardByTaskId = new Map(tasks.map((task) => [task.id, taskCard(task, gateByTaskId.get(task.id))]))
-    for (const card of cardByTaskId.values()) {
-        card.style.width = `${CARD_WIDTH}px`
-    }
-    cards.replaceChildren(...cardByTaskId.values())
-    const heightByTaskId = new Map([...cardByTaskId].map(([taskId, card]) => [taskId, card.offsetHeight]))
-    const graph = layout(tasks, heightByTaskId)
-
+function placeGraph(graph) {
     edgePaths.replaceChildren(
         ...graph.edges().map((edge) => {
+            const { points, kind } = graph.edge(edge)
             const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-            path.setAttribute('d', edgePath(graph.edge(edge).points))
-            path.setAttribute('marker-end', 'url(#arrow)')
+            path.setAttribute('d', edgePath(points))
+            path.setAttribute('class', `edge-${kind}`)
+            path.setAttribute('marker-end', kind === 'gate' ? 'url(#arrow-gate)' : 'url(#arrow)')
 
             return path
         }),
     )
-    for (const [taskId, card] of cardByTaskId) {
-        const node = graph.node(taskId)
+    for (const nodeId of graph.nodes()) {
+        const node = graph.node(nodeId)
+        const card = shownNodes.get(nodeId).element
         card.style.left = `${node.x - node.width / 2}px`
         card.style.top = `${node.y - node.height / 2}px`
     }
-
     const { width, height } = graph.graph()
     edgesSvg.setAttribute('width', width)
     edgesSvg.setAttribute('height', height)
+
+    return width
+}
+
+function renderGraph(data) {
+    if (data.tasks.length === 0) {
+        renderEmpty('This run has no tasks yet.')
+        return
+    }
+    if (shownRunId !== data.run.id) {
+        clearGraph()
+        cards.replaceChildren()
+    }
+    const { nodes, edges } = buildGraph(data)
+    syncCards(nodes)
+    shownTasks = data.tasks
+
+    const signature = JSON.stringify([edges, [...shownNodes].map(([id, shown]) => [id, shown.signature])])
+    if (signature === layoutSignature) {
+        return
+    }
+    layoutSignature = signature
+    const width = placeGraph(layout(nodes, edges))
     if (shownRunId !== data.run.id) {
         shownRunId = data.run.id
         fitToWidth(width)
+    }
+}
+
+/** Ages are the only part of a card that changes with time alone; once every task has ended they are fixed. */
+function refreshAges() {
+    if (shownTasks.every((task) => TERMINAL_STATUSES.has(task.status))) {
+        return
+    }
+    for (const task of shownTasks) {
+        const age = shownNodes.get(task.id)?.element.querySelector('.age')
+        if (age) {
+            age.textContent = ageLabel(task)
+        }
     }
 }
 
@@ -202,17 +346,13 @@ async function refresh({ force = false } = {}) {
     try {
         const data = await orca.plugin.request('graph.get', { runId: selectedRunId }, { timeoutMs: 60000 })
         renderRunOptions(data.runs, data.run?.id)
-        const signature = JSON.stringify([data.run?.id, data.tasks, data.gates, Math.floor(Date.now() / 60000)])
-        if (signature !== lastSignature) {
-            lastSignature = signature
-            if (data.run) {
-                renderGraph(data)
-            } else {
-                shownRunId = null
-                renderEmpty('No orchestration runs yet.')
-            }
+        if (data.run) {
+            renderGraph(data)
+        } else if (shownRunId !== null || !cards.querySelector('.empty')) {
+            shownRunId = null
+            renderEmpty('No orchestration runs yet.')
         }
-        setStatus(data.run ? `${data.tasks.length} tasks · updated ${new Date().toLocaleTimeString()}` : '')
+        setStatus(data.run ? `${data.tasks.length} tasks · checked ${new Date().toLocaleTimeString()}` : '')
     } catch (error) {
         setStatus(`${error.code ?? 'error'}: ${error.message}`, true)
     } finally {
@@ -237,7 +377,6 @@ async function openTask(task) {
 
 runSelect.addEventListener('change', () => {
     selectedRunId = runSelect.value
-    lastSignature = ''
     void refresh({ force: true })
 })
 
@@ -307,6 +446,7 @@ function runIdFromDocument() {
 orca.on('agent.status.changed', () => void refresh())
 document.addEventListener('visibilitychange', () => void refresh())
 setInterval(() => void refresh(), POLL_INTERVAL_MS)
+setInterval(refreshAges, AGE_INTERVAL_MS)
 runIdFromDocument().then((runId) => {
     selectedRunId = runId
     void refresh({ force: true })

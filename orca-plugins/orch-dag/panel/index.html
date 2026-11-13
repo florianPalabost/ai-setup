@@ -11,6 +11,7 @@
         --s-failed: #dc2626;
         --s-blocked: #7c3aed;
         --gate: #ea580c;
+        --s-run: #0891b2;
       }
       html.dark {
         --s-pending: #9ca3af;
@@ -20,6 +21,7 @@
         --s-failed: #f87171;
         --s-blocked: #a78bfa;
         --gate: #fb923c;
+        --s-run: #22d3ee;
       }
       * { box-sizing: border-box; }
       html, body { height: 100%; }
@@ -57,6 +59,10 @@
       #edges { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
       #edges path { fill: none; stroke: var(--orca-muted-foreground); stroke-width: 1.5; opacity: 0.7; }
       #edges marker path { fill: var(--orca-muted-foreground); stroke: none; }
+      #edges marker#arrow-gate path { fill: var(--gate); }
+      #edges path.edge-root { opacity: 0.35; }
+      #edges path.edge-child { stroke-dasharray: 4 4; }
+      #edges path.edge-gate { stroke: var(--gate); stroke-dasharray: 6 3; opacity: 0.9; }
       .card {
         position: absolute;
         display: flex;
@@ -70,6 +76,7 @@
         border-radius: var(--orca-radius);
         box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
         cursor: pointer;
+        transition: left 0.25s ease, top 0.25s ease;
       }
       .card:hover { border-color: var(--status); }
       .name {
@@ -95,16 +102,18 @@
         color: var(--orca-muted-foreground);
       }
       .age { margin-left: auto; color: var(--orca-muted-foreground); }
-      .gate {
-        padding: 4px 8px;
-        font-size: 11px;
-        border-radius: 4px;
-        color: var(--gate);
-        background: color-mix(in srgb, var(--gate) 12%, transparent);
-        overflow: hidden;
-        white-space: nowrap;
-        text-overflow: ellipsis;
+      .run-node, .gate-node { cursor: default; }
+      .run-node { border-left-width: 1px; border-top: 4px solid var(--status); }
+      .gate-node {
+        --status: var(--gate);
+        gap: 4px;
+        border-style: dashed;
+        border-left-style: solid;
+        background: color-mix(in srgb, var(--gate) 8%, var(--orca-card));
       }
+      .gate-node.gate-resolved { opacity: 0.7; }
+      .gate-label { font-size: 11px; font-weight: 600; color: var(--gate); }
+      .resolution { font-size: 11px; color: var(--orca-muted-foreground); }
       .empty { padding: 24px 16px; color: var(--orca-muted-foreground); text-align: center; }
       .status-pending { --status: var(--s-pending); }
       .status-ready { --status: var(--s-ready); }
@@ -112,6 +121,7 @@
       .status-completed { --status: var(--s-completed); }
       .status-failed { --status: var(--s-failed); }
       .status-blocked { --status: var(--s-blocked); }
+      .status-run { --status: var(--s-run); }
     </style>
   </head>
   <body>
@@ -124,6 +134,9 @@
         <svg id="edges">
           <defs>
             <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" />
+            </marker>
+            <marker id="arrow-gate" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
               <path d="M0,0 L10,5 L0,10 z" />
             </marker>
           </defs>
