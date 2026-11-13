@@ -1,0 +1,138 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root {
+        --s-pending: #6b7280;
+        --s-ready: #2563eb;
+        --s-dispatched: #d97706;
+        --s-completed: #16a34a;
+        --s-failed: #dc2626;
+        --s-blocked: #7c3aed;
+        --gate: #ea580c;
+      }
+      html.dark {
+        --s-pending: #9ca3af;
+        --s-ready: #60a5fa;
+        --s-dispatched: #fbbf24;
+        --s-completed: #4ade80;
+        --s-failed: #f87171;
+        --s-blocked: #a78bfa;
+        --gate: #fb923c;
+      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        font: 13px/1.4 system-ui, sans-serif;
+        color: var(--orca-foreground);
+        background: var(--orca-background);
+      }
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--orca-border);
+      }
+      select {
+        flex: 1 1 160px;
+        min-width: 0;
+        padding: 4px 6px;
+        font: inherit;
+        color: var(--orca-foreground);
+        background: var(--orca-card);
+        border: 1px solid var(--orca-input);
+        border-radius: var(--orca-radius);
+      }
+      .status-line { font-size: 11px; color: var(--orca-muted-foreground); }
+      .status-line.error { color: var(--orca-destructive); }
+      #viewport { position: relative; flex: 1; overflow: hidden; cursor: grab; }
+      #viewport.panning { cursor: grabbing; }
+      #stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+      #edges { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+      #edges path { fill: none; stroke: var(--orca-muted-foreground); stroke-width: 1.5; opacity: 0.7; }
+      #edges marker path { fill: var(--orca-muted-foreground); stroke: none; }
+      .card {
+        position: absolute;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 12px 14px;
+        color: var(--orca-card-foreground);
+        background: var(--orca-card);
+        border: 1px solid var(--orca-border);
+        border-left: 4px solid var(--status);
+        border-radius: var(--orca-radius);
+        box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+        cursor: pointer;
+      }
+      .card:hover { border-color: var(--status); }
+      .name {
+        flex-shrink: 0;
+        font-weight: 600;
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+      }
+      .meta { flex-shrink: 0; display: flex; align-items: center; gap: 6px; font-size: 11px; }
+      .chip {
+        padding: 1px 8px;
+        border-radius: 999px;
+        color: var(--status);
+        background: color-mix(in srgb, var(--status) 14%, transparent);
+        font-weight: 600;
+      }
+      .agent {
+        padding: 1px 6px;
+        border: 1px solid var(--orca-border);
+        border-radius: 4px;
+        color: var(--orca-muted-foreground);
+      }
+      .age { margin-left: auto; color: var(--orca-muted-foreground); }
+      .gate {
+        padding: 4px 8px;
+        font-size: 11px;
+        border-radius: 4px;
+        color: var(--gate);
+        background: color-mix(in srgb, var(--gate) 12%, transparent);
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      .empty { padding: 24px 16px; color: var(--orca-muted-foreground); text-align: center; }
+      .status-pending { --status: var(--s-pending); }
+      .status-ready { --status: var(--s-ready); }
+      .status-dispatched { --status: var(--s-dispatched); }
+      .status-completed { --status: var(--s-completed); }
+      .status-failed { --status: var(--s-failed); }
+      .status-blocked { --status: var(--s-blocked); }
+    </style>
+  </head>
+  <body>
+    <header>
+      <select id="run-select" aria-label="Orchestration run"></select>
+      <span id="status-line" class="status-line">Loading…</span>
+    </header>
+    <div id="viewport">
+      <div id="stage">
+        <svg id="edges">
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" />
+            </marker>
+          </defs>
+          <g id="edge-paths"></g>
+        </svg>
+        <div id="cards"></div>
+      </div>
+    </div>
+    <script src="./vendor/dagre.min.js"></script>
+    <script src="./main.js"></script>
+  </body>
+</html>
