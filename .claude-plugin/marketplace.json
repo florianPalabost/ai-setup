@@ -15,6 +15,12 @@
       "category": "development"
     },
     {
+      "name": "orca",
+      "source": "./plugins/orca",
+      "description": "Orca coordinator workflows: /coordinate-ticket shapes a ticket as an orchestration task graph.",
+      "category": "development"
+    },
+    {
       "name": "review",
       "source": "./plugins/review",
       "description": "Comment sweep (/no-comments) and the Comment Sicko agent, adapted from poteto's pstack.",
