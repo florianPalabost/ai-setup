@@ -1,6 +1,6 @@
 # Coding Standards
 
-Read during review. Shellcheck, gitleaks, the test suite and `claude plugin validate` run in CI; this file holds the judgement calls.
+Read during review. Shellcheck, gitleaks, the test suite, `claude plugin validate` and a syntax check of `orca-plugins/` run in CI; this file holds the judgement calls.
 
 ## Comments
 
