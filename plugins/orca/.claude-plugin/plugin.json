@@ -1,0 +1,13 @@
+{
+  "name": "orca",
+  "version": "0.1.0",
+  "description": "Orca coordinator workflows: /coordinate-ticket shapes a ticket as an orchestration task graph.",
+  "author": {
+    "name": "Florian Palabost",
+    "url": "https://github.com/florianPalabost"
+  },
+  "homepage": "https://github.com/florianPalabost/ai-setup",
+  "repository": "https://github.com/florianPalabost/ai-setup",
+  "license": "MIT",
+  "keywords": ["orca", "orchestration", "coordinator"]
+}
