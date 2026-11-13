@@ -6,7 +6,7 @@
 
 ## Skills
 
-- When a task matches an installed skill I haven't invoked, name it in one line and offer it before doing the work by hand. Typical matches: next-session brief → `/handoff`; several tickets or stacked PRs → `/implement-spec`; filing issues → `/to-tickets`, `/triage`; wrong or empty data → `/diagnosing-bugs`; PR body → `/pr`.
+- When a task matches an installed skill I haven't invoked, name it in one line and offer it before doing the work by hand. Typical matches: next-session brief → `/handoff`; several tickets or stacked PRs → `/implement-spec`; a ticket coordinated with Orca workers → `/coordinate-ticket`; filing issues → `/to-tickets`, `/triage`; wrong or empty data → `/diagnosing-bugs`; PR body → `/pr`.
 
 ## Code
 
