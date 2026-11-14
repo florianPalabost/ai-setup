@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { runClaude, sandboxSettings, writeSandboxSettings } from './agent.mjs'
+import { agentLogName, runClaude, sandboxSettings, writeSandboxSettings } from './agent.mjs'
 import { ERROR_CODES, FactoryError, LABELS, REVIEW_VERDICTS, branchForIssue } from './constants.mjs'
 import { commentOnIssue, createDraftPr, editPrBody, findOpenPrForBranch, swapLabels, viewIssue } from './github.mjs'
 import { PR_BODY_ALLOWED_TOOLS, PR_BODY_SCHEMA, REVIEW_ALLOWED_TOOLS, REVIEW_SCHEMA, implementPrompt, prBodyPrompt, reviewPrompt, reworkPrompt } from './prompts.mjs'
@@ -113,7 +113,7 @@ export async function runTicket({ repo, issueNumber, config, options, log }) {
             await writeSandboxSettings(settingsPath, settings)
         }
         log(`run logs in ${runDir}`)
-        const agentRun = (name, fields) => runClaude({ cwd: worktreePath, settingsPath, timeoutMinutes: config.agentTimeoutMinutes, logPath: join(runDir, `${name}.json`), ...fields })
+        const agentRun = (name, fields) => runClaude({ cwd: worktreePath, settingsPath, timeoutMinutes: config.agentTimeoutMinutes, logPath: join(runDir, agentLogName(name)), ...fields })
 
         log(`implementing with ${config.models.implement}…`)
         const implementation = await agentRun('implement', { prompt: implementPrompt({ issue, base, checks: config.checks }), model: config.models.implement, permissionMode: config.permissionMode })
@@ -143,7 +143,7 @@ export async function runTicket({ repo, issueNumber, config, options, log }) {
                     allowedTools: REVIEW_ALLOWED_TOOLS,
                     jsonSchema: REVIEW_SCHEMA,
                 })
-                review = parseReview(reviewRun.structuredOutput, join(runDir, `${logName}.json`))
+                review = parseReview(reviewRun.structuredOutput, join(runDir, agentLogName(logName)))
                 log(`review: ${review.verdict}${review.findings.length ? ` (${review.findings.length} finding(s))` : ''}`)
             }
             if (review.verdict === REVIEW_VERDICTS.pass || reworks === config.maxReworks) {
@@ -165,7 +165,7 @@ export async function runTicket({ repo, issueNumber, config, options, log }) {
             allowedTools: PR_BODY_ALLOWED_TOOLS,
             jsonSchema: PR_BODY_SCHEMA,
         })
-        const body = prBody({ issue, body: parsePrBody(prBodyRun.structuredOutput, join(runDir, 'pr-body.json')), review, reworks, implementationReport: implementation.result })
+        const body = prBody({ issue, body: parsePrBody(prBodyRun.structuredOutput, join(runDir, agentLogName('pr-body'))), review, reworks, implementationReport: implementation.result })
         const existingPr = await findOpenPrForBranch(branch, { cwd })
         if (existingPr) {
             await editPrBody(existingPr.number, body, { cwd })
