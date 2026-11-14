@@ -42,8 +42,17 @@ const parseJsonLine = (line) => {
     }
 }
 
-/** The last `result` event of a stream-json transcript, or null when the run never finished one. */
-const resultEvent = (stdout) => stdout.trimEnd().split('\n').reverse().map(parseJsonLine).find((event) => event?.type === 'result') ?? null
+/**
+ * The `result` event of a stream-json transcript, or null when the run never finished one.
+ * A session woken by background work emits one result per wake-up, and the last may carry no
+ * structured output; with a schema, the last result that has one is the answer.
+ */
+const resultEvent = (stdout, { wantsStructuredOutput }) => {
+    const results = stdout.trimEnd().split('\n').map(parseJsonLine).filter((event) => event?.type === 'result')
+    const structured = wantsStructuredOutput ? results.findLast((event) => event.structured_output != null) : undefined
+
+    return structured ?? results.at(-1) ?? null
+}
 
 /** An agent step's transcript file in the run directory. */
 export const agentLogName = (step) => `${step}.jsonl`
@@ -78,7 +87,7 @@ export async function runClaude({ cwd, prompt, model, permissionMode, allowedToo
     }
     await closeStream(log)
 
-    const output = resultEvent(stdout)
+    const output = resultEvent(stdout, { wantsStructuredOutput: Boolean(jsonSchema) })
     if (!output) {
         throw new FactoryError(ERROR_CODES.agentFailed, `claude returned no result event (log: ${logPath})`)
     }
