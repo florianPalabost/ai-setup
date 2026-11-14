@@ -14,7 +14,23 @@ export const STEP_STATUSES = Object.freeze({
 
 export const RUN_STEP = 'run'
 
+/** The names a run gives its steps, in the order it runs them. */
+export const STEP_NAMES = Object.freeze({
+    setup: 'setup',
+    implement: 'implement',
+    checks: (attempt) => `checks ${attempt}`,
+    review: (attempt) => `review ${attempt}`,
+    rework: (rework, maxReworks) => `rework ${rework}/${maxReworks}`,
+    push: 'push',
+    prBody: 'PR body',
+    draftPr: 'draft PR',
+})
+
+/** Steps whose agent edits the code: the session to resume to carry on the work. */
+export const isCodingStep = (name) => name === STEP_NAMES.implement || name.startsWith('rework ')
+
 const TRANSCRIPT_TAIL_BYTES = 64 * 1024
+const TRANSCRIPT_HEAD_BYTES = 64 * 1024
 const ACTIVITY_MAX_LENGTH = 120
 
 export const issueRunsDir = (gitDir, issueNumber) => join(gitDir, 'factory', `issue-${issueNumber}`)
@@ -43,7 +59,7 @@ export function progressRecorder(runDir) {
     return { record, track }
 }
 
-const parseJsonLine = (line) => {
+export const parseJsonLine = (line) => {
     try {
         return JSON.parse(line)
     } catch {
@@ -51,21 +67,38 @@ const parseJsonLine = (line) => {
     }
 }
 
-function describeToolUse({ name, input = {} }) {
+export function describeToolUse({ name, input = {} }) {
     const target = input.file_path ?? input.path ?? input.command ?? input.pattern ?? input.description ?? ''
 
     return `${name} ${String(target).split('\n')[0]}`.trim()
+}
+
+async function readSlice(path, position, length) {
+    const file = await open(path)
+    try {
+        const { buffer, bytesRead } = await file.read({ buffer: Buffer.alloc(length), position })
+
+        return buffer.subarray(0, bytesRead).toString('utf8')
+    } finally {
+        await file.close()
+    }
+}
+
+/** The Claude session behind a step, from the init event at the top of its stream-json transcript. */
+async function sessionIdOf(transcriptPath) {
+    if (!existsSync(transcriptPath)) {
+        return null
+    }
+    const head = await readSlice(transcriptPath, 0, TRANSCRIPT_HEAD_BYTES)
+
+    return head.split('\n').map(parseJsonLine).find((event) => event?.type === 'system' && event.subtype === 'init')?.session_id ?? null
 }
 
 /** What an agent step is doing now: its newest tool call or message, read from the end of its stream-json transcript. */
 async function latestActivity(transcriptPath) {
     const { size } = await stat(transcriptPath)
     const start = Math.max(0, size - TRANSCRIPT_TAIL_BYTES)
-    const file = await open(transcriptPath)
-    const { buffer, bytesRead } = await file.read({ buffer: Buffer.alloc(size - start), position: start })
-    await file.close()
-
-    const events = buffer.subarray(0, bytesRead).toString('utf8').split('\n').reverse().map(parseJsonLine)
+    const events = (await readSlice(transcriptPath, start, size - start)).split('\n').reverse().map(parseJsonLine)
     for (const event of events) {
         const content = event?.type === 'assistant' ? event.message?.content ?? [] : []
         const toolUse = content.findLast((part) => part.type === 'tool_use')
@@ -97,7 +130,7 @@ function foldSteps(entries) {
 
 /**
  * The newest run on a ticket that recorded progress, with log paths relative to the repo root.
- * @returns {Promise<null | { dir: string, startedAt: string, finishedAt: string|null, outcome: string|null, steps: { name: string, status: string, log: string|null, detail: string|null, startedAt: string, updatedAt: string }[], activity: string|null, updatedAt: string }>}
+ * @returns {Promise<null | { dir: string, startedAt: string, finishedAt: string|null, outcome: string|null, steps: { name: string, status: string, log: string|null, sessionId: string|null, detail: string|null, startedAt: string, updatedAt: string }[], activity: string|null, updatedAt: string }>}
  */
 export async function latestRun({ root, gitDir, issueNumber }) {
     const runsDir = issueRunsDir(gitDir, issueNumber)
@@ -123,7 +156,9 @@ export async function latestRun({ root, gitDir, issueNumber }) {
         startedAt: entries[0]?.at ?? null,
         finishedAt: finish?.at ?? null,
         outcome: finish?.status ?? null,
-        steps: steps.map((step) => ({ ...step, log: step.log ? relativeToRoot(step.log) : null })),
+        steps: await Promise.all(
+            steps.map(async (step) => ({ ...step, log: step.log ? relativeToRoot(step.log) : null, sessionId: step.log ? await sessionIdOf(join(runDir, step.log)) : null })),
+        ),
         activity: transcriptStats ? await latestActivity(runningTranscript) : running?.detail ?? null,
         updatedAt: transcriptStats?.mtime.toISOString() ?? entries.at(-1)?.at ?? null,
     }

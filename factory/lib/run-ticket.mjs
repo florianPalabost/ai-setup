@@ -2,7 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { agentLogName, runClaude, sandboxSettings, writeSandboxSettings } from './agent.mjs'
 import { ERROR_CODES, FactoryError, LABELS, REVIEW_VERDICTS, branchForIssue } from './constants.mjs'
-import { RUN_STEP, STEP_STATUSES, progressRecorder } from './progress.mjs'
+import { RUN_STEP, STEP_NAMES, STEP_STATUSES, progressRecorder } from './progress.mjs'
 import { commentOnIssue, createDraftPr, editPrBody, findOpenPrForBranch, swapLabels, viewIssue } from './github.mjs'
 import { PR_BODY_ALLOWED_TOOLS, PR_BODY_SCHEMA, REVIEW_ALLOWED_TOOLS, REVIEW_SCHEMA, implementPrompt, prBodyPrompt, reviewPrompt, reworkPrompt } from './prompts.mjs'
 import { runCheckCommand, runShellCommand } from './shell.mjs'
@@ -103,10 +103,10 @@ export async function runTicket({ repo, issueNumber, config, options, log }) {
     try {
         const { created } = await prepareWorktree({ root: repo.root, path: worktreePath, branch, base })
         if (created) {
-            await progress.track('setup', async () => {
+            await progress.track(STEP_NAMES.setup, async () => {
                 for (const command of config.setup) {
                     log(`setup: ${command}`)
-                    await progress.record({ step: 'setup', status: STEP_STATUSES.running, detail: command })
+                    await progress.record({ step: STEP_NAMES.setup, status: STEP_STATUSES.running, detail: command })
                     await runShellCommand(command, { cwd: worktreePath })
                 }
             })
@@ -124,7 +124,7 @@ export async function runTicket({ repo, issueNumber, config, options, log }) {
 
         log(`implementing with ${config.models.implement}…`)
         const implementation = await progress.track(
-            'implement',
+            STEP_NAMES.implement,
             () => agentRun('implement', { prompt: implementPrompt({ issue, base, checks: config.checks }), model: config.models.implement, permissionMode: config.permissionMode }),
             { log: agentLogName('implement') },
         )
@@ -141,7 +141,7 @@ export async function runTicket({ repo, issueNumber, config, options, log }) {
         let review
         let reworks = 0
         for (let attempt = 1; ; attempt++) {
-            const checksStep = `checks ${attempt}`
+            const checksStep = STEP_NAMES.checks(attempt)
             const checkFailures = await progress.track(checksStep, () => failingChecks({ checks: config.checks, cwd: worktreePath, runDir, attempt, log, progress, step: checksStep }), {
                 statusOf: (failures) => (failures.length > 0 ? STEP_STATUSES.fail : STEP_STATUSES.pass),
             })
@@ -152,7 +152,7 @@ export async function runTicket({ repo, issueNumber, config, options, log }) {
                 log(`reviewing with /matt-code-review on ${config.models.review} (attempt ${attempt})…`)
                 const logName = `review-${attempt}`
                 review = await progress.track(
-                    `review ${attempt}`,
+                    STEP_NAMES.review(attempt),
                     async () => {
                         const reviewRun = await agentRun(logName, {
                             prompt: reviewPrompt({ issue, base }),
@@ -175,17 +175,17 @@ export async function runTicket({ repo, issueNumber, config, options, log }) {
             reworks++
             log(`rework ${reworks}/${config.maxReworks} with ${config.models.implement}…`)
             await progress.track(
-                `rework ${reworks}/${config.maxReworks}`,
+                STEP_NAMES.rework(reworks, config.maxReworks),
                 () => agentRun(`rework-${reworks}`, { prompt: reworkPrompt({ issue, findings: review.findings, checks: config.checks }), model: config.models.implement, permissionMode: config.permissionMode }),
                 { log: agentLogName(`rework-${reworks}`) },
             )
         }
 
         log(`pushing ${branch}`)
-        await progress.track('push', () => pushBranch({ root: repo.root, branch }))
+        await progress.track(STEP_NAMES.push, () => pushBranch({ root: repo.root, branch }))
         log(`writing the PR body with /pr on ${config.models.pr}…`)
         const prBodyRun = await progress.track(
-            'PR body',
+            STEP_NAMES.prBody,
             () =>
                 agentRun('pr-body', {
                     prompt: prBodyPrompt({ issue, base, implementationReport: implementation.result, reviewReport: review.report || review.findings.join('\n') }),
@@ -197,7 +197,7 @@ export async function runTicket({ repo, issueNumber, config, options, log }) {
             { log: agentLogName('pr-body') },
         )
         const body = prBody({ issue, body: parsePrBody(prBodyRun.structuredOutput, join(runDir, agentLogName('pr-body'))), review, reworks, implementationReport: implementation.result })
-        const prUrl = await progress.track('draft PR', async () => {
+        const prUrl = await progress.track(STEP_NAMES.draftPr, async () => {
             const existingPr = await findOpenPrForBranch(branch, { cwd })
             if (existingPr) {
                 await editPrBody(existingPr.number, body, { cwd })
