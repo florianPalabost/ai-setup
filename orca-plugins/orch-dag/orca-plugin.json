@@ -56,9 +56,6 @@
     },
     {
       "kind": "workspace:write"
-    },
-    {
-      "kind": "terminal:send"
     }
   ],
   "icon": "icon.png"
