@@ -4,8 +4,9 @@ import { ERROR_CODES, FactoryError } from './constants.mjs'
 /**
  * Runs a program without a shell and resolves with its stdout.
  * Rejects with a FactoryError carrying stderr when it exits non-zero or times out.
+ * `onStdout` sees each chunk as it arrives, for logs that must be readable while the program runs.
  */
-export function run(command, args, { cwd, input, timeoutMs } = {}) {
+export function run(command, args, { cwd, input, timeoutMs, onStdout } = {}) {
     return new Promise((resolve, reject) => {
         const child = spawn(command, args, { cwd, stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'] })
         let stdout = ''
@@ -20,6 +21,7 @@ export function run(command, args, { cwd, input, timeoutMs } = {}) {
 
         child.stdout.on('data', (chunk) => {
             stdout += chunk
+            onStdout?.(chunk)
         })
         child.stderr.on('data', (chunk) => {
             stderr += chunk
