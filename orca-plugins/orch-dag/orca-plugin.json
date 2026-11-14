@@ -3,7 +3,7 @@
   "id": "orch-dag",
   "name": "Orchestration Graph",
   "version": "0.1.0",
-  "description": "Read-only graph of an orchestration run's tasks.",
+  "description": "Read-only graphs of an orchestration run's tasks and of the factory's tickets.",
   "engines": {
     "orca": ">=1.4.248"
   },
@@ -17,6 +17,13 @@
         "title": "Run graph",
         "icon": "agent",
         "entry": "panel/index.html",
+        "ui": "html"
+      },
+      {
+        "id": "factory",
+        "title": "Factory",
+        "icon": "agent",
+        "entry": "panel/factory.html",
         "ui": "html"
       }
     ],
