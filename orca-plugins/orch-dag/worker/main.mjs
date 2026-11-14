@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { DEMO_RUN, DEMO_RUN_ID, demoGraph } from './demo.mjs'
+import { createFactorySource } from './factory.mjs'
 
 const LEGACY_RUN_ID = 'run_legacy_local'
 const CLI_TIMEOUT_MS = 20000
@@ -126,4 +127,9 @@ async function openTask(orca, { terminal, worktreeId }) {
 export default function activate(orca) {
     orca.panels.handle('graph.get', (input) => loadGraph(input))
     orca.panels.handle('task.open', (input) => openTask(orca, input))
+
+    const factory = createFactorySource(orca)
+    orca.panels.handle('factory.get', (input) => factory.getFactory(input))
+    orca.panels.handle('factory.openWorktree', (input) => factory.openWorktree(input))
+    orca.panels.handle('factory.openLog', (input) => factory.openLog(input))
 }

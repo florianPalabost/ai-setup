@@ -1,6 +1,10 @@
 # Orchestration Graph
 
-A read-only Orca plugin that draws an orchestration run as a graph: a root card for the run, one card per task coloured by status with the agent working on it, a card per decision gate (dashed, pointing at the task it blocks, showing the answer once resolved), arrows from each dependency to the task waiting on it, and dashed edges from a parent task to its `--parent` children.
+A read-only Orca plugin with two views: the orchestration run graph and the factory board.
+
+## Run graph
+
+It draws an orchestration run as a graph: a root card for the run, one card per task coloured by status with the agent working on it, a card per decision gate (dashed, pointing at the task it blocks, showing the answer once resolved), arrows from each dependency to the task waiting on it, and dashed edges from a parent task to its `--parent` children.
 
 - **Sidebar:** the "Run graph" panel in the right sidebar.
 - **Main area:** any `.orcagraph` file opens as a graph tab. `{}` follows the newest run; `{ "runId": "<run id>" }` pins one. The tab bar **+** menu has "Orchestration run graph".
@@ -8,9 +12,17 @@ A read-only Orca plugin that draws an orchestration run as a graph: a root card 
 
 Clicking a card opens the worktree of the task's worker. Orca 1.4.259+ focuses its terminal instead.
 
+## Factory
+
+The "Factory" panel shows the tickets of [`factory`](../../factory) in lanes: Needs you, Working, Done · draft PR, Ready. A blocked ticket sits under the ticket blocking it, and the oldest unblocked ready ticket (the one `factory next` picks) is marked "next up". A working ticket lists its run steps and the agent's newest tool call. The buttons open the ticket's worktree in Orca, the issue or PR in the browser, and the current step's log in an editor tab.
+
+Any Orca workspace in WSL with a `.factory.json` counts as a factory repo; with several, a dropdown picks one.
+
 ## How it works
 
-Plugins have no orchestration API, so the worker (`worker/main.mjs`) runs `orca.exe orchestration run-list | task-list | gate-list | worker-list --json --full` and hands the result to the panel. The panel (`panel/`) lays it out with a vendored copy of [dagre](https://github.com/dagrejs/dagre) 1.1.4 (MIT, `panel/vendor/dagre.LICENSE`). It polls on `agent.status.changed` and every 5 s while visible, but only repaints cards whose data changed and only re-lays out when a card or edge changed. Age labels tick every 30 s and stop once every task has ended.
+**Run graph.** Plugins have no orchestration API, so the worker (`worker/main.mjs`) runs `orca.exe orchestration run-list | task-list | gate-list | worker-list --json --full` and hands the result to the panel. The panel (`panel/`) lays it out with a vendored copy of [dagre](https://github.com/dagrejs/dagre) 1.1.4 (MIT, `panel/vendor/dagre.LICENSE`). It polls on `agent.status.changed` and every 5 s while visible, but only repaints cards whose data changed and only re-lays out when a card or edge changed. Age labels tick every 30 s and stop once every task has ended.
+
+**Factory.** The worker (`worker/factory.mjs`) runs this repo's `factory/bin/factory.mjs status --json` inside WSL through `wsl.exe`, so the plugin must be loaded from its WSL folder. nvm puts node on PATH only in an interactive shell, so the worker asks one for node's path once and calls it directly after. GitHub is read at most once a minute; `status --json --local` reads the runs in `.git/factory` on every 5 s poll.
 
 ## Develop
 
