@@ -74,27 +74,41 @@ export async function ensureFactoryLabels({ cwd }) {
     }
 }
 
+/** Open issues that block this one, from GitHub's native issue dependencies. */
+async function openBlockers(issueNumber, { cwd }) {
+    const blockers = await ghJson(['api', `repos/{owner}/{repo}/issues/${issueNumber}/dependencies/blocked_by`], { cwd })
+
+    return blockers.filter((blocker) => blocker.state === 'open').map((blocker) => blocker.number)
+}
+
 /**
- * Every open issue carrying a factory label, joined with the open PR on its agent branch.
- * This is the factory's whole state: GitHub is the only store.
+ * Every open issue carrying a factory label, joined with the open PR on its agent branch and the open issues blocking it.
+ * This is the factory's whole state on GitHub; run progress lives in .git/factory.
+ * @returns {Promise<{ number: number, title: string, url: string, state: string, pr: { number: number, url: string, isDraft: boolean } | null, blockedBy: number[] }[]>}
  */
 export async function factoryState({ cwd }) {
     const trackedLabels = Object.values(LABELS)
-    const [issues, prs] = await Promise.all([
-        ghJson(['issue', 'list', '--state', 'open', '--limit', '200', '--json', 'number,title,url,labels'], { cwd }),
-        ghJson(['pr', 'list', '--state', 'open', '--limit', '200', '--json', 'number,url,isDraft,headRefName,reviewDecision'], { cwd }),
+    const [issuePages, prs] = await Promise.all([
+        ghJson(['api', '--paginate', '--slurp', '-X', 'GET', 'repos/{owner}/{repo}/issues', '-f', 'state=open', '-f', 'per_page=100'], { cwd }),
+        ghJson(['pr', 'list', '--state', 'open', '--limit', '200', '--json', 'number,url,isDraft,headRefName'], { cwd }),
     ])
-    const prsByBranch = new Map(prs.map((pr) => [pr.headRefName, pr]))
-
-    return issues
+    const prsByBranch = new Map(prs.map(({ headRefName, ...pr }) => [headRefName, pr]))
+    const tracked = issuePages
+        .flat()
+        .filter((issue) => !issue.pull_request)
         .map((issue) => ({ ...issue, labels: issue.labels.map((label) => label.name) }))
         .filter((issue) => issue.labels.some((label) => trackedLabels.includes(label)))
-        .map((issue) => ({
+
+    const tickets = await Promise.all(
+        tracked.map(async (issue) => ({
             number: issue.number,
             title: issue.title,
-            url: issue.url,
+            url: issue.html_url,
             state: trackedLabels.find((label) => issue.labels.includes(label)),
             pr: prsByBranch.get(branchForIssue(issue.number)) ?? null,
-        }))
-        .sort((left, right) => left.number - right.number)
+            blockedBy: issue.issue_dependencies_summary?.blocked_by > 0 ? await openBlockers(issue.number, { cwd }) : [],
+        })),
+    )
+
+    return tickets.sort((left, right) => left.number - right.number)
 }

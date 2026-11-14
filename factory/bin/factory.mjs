@@ -4,8 +4,10 @@ import { basename, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { loadConfig } from '../lib/config.mjs'
 import { ERROR_CODES, FACTORY_LABELS, FactoryError, LABELS } from '../lib/constants.mjs'
-import { ensureFactoryLabels, factoryState, listReadyIssues } from '../lib/github.mjs'
+import { ensureFactoryLabels, listReadyIssues } from '../lib/github.mjs'
+import { STEP_STATUSES } from '../lib/progress.mjs'
 import { runTicket } from '../lib/run-ticket.mjs'
+import { factoryStatus } from '../lib/status.mjs'
 import { hasCommand, succeeds } from '../lib/shell.mjs'
 import { locateRepo } from '../lib/worktree.mjs'
 
@@ -14,7 +16,7 @@ const USAGE = `factory: run agent tickets from GitHub, one at a time
 Usage:
   factory doctor                  check tools, gh login and the repo's .factory.json
   factory init                    create the ${FACTORY_LABELS.map((label) => label.name).join(' / ')} labels
-  factory status [--json]         tickets the factory tracks, with their PRs
+  factory status [--json]         tickets the factory tracks, with their PRs and latest run
   factory run <issue> [options]   implement → review → draft PR for one ticket
   factory next [options]          run the oldest unblocked ${LABELS.ready} ticket
 
@@ -22,7 +24,8 @@ Options:
   --repo <path>     repository to work on (default: current directory)
   --dry-run         show what would happen; no GitHub writes, no agents
   --no-sandbox      run claude without srt (worktree isolation only)
-  --force           take over a ticket already labelled ${LABELS.working}`
+  --force           take over a ticket already labelled ${LABELS.working}
+  --local           with status --json: only the runs in .git/factory, no GitHub calls`
 
 const REQUIRED_TOOLS = ['git', 'gh', 'claude']
 const SANDBOX_TOOLS = ['srt', 'bwrap', 'socat', 'rg']
@@ -43,19 +46,21 @@ async function doctor(repo) {
     }
 }
 
-async function status(repo, { json }) {
-    const tickets = await factoryState({ cwd: repo.root })
+async function status(repo, { json, local }) {
+    const state = await factoryStatus(repo, { local: json && local })
     if (json) {
-        console.log(JSON.stringify(tickets, null, 2))
+        console.log(JSON.stringify(state, null, 2))
         return
     }
-    if (tickets.length === 0) {
+    if (state.tickets.length === 0) {
         console.log('No open tickets carry a factory label.')
         return
     }
-    tickets.forEach((ticket) => {
+    state.tickets.forEach((ticket) => {
         const pr = ticket.pr ? `PR #${ticket.pr.number}${ticket.pr.isDraft ? ' (draft)' : ''}` : ''
-        console.log(`#${String(ticket.number).padEnd(5)} ${ticket.state.padEnd(16)} ${pr.padEnd(16)} ${ticket.title}`)
+        const running = ticket.run?.steps.findLast((step) => step.status === STEP_STATUSES.running)
+        const blocked = ticket.blockedBy.length > 0 ? ` (blocked by ${ticket.blockedBy.map((number) => `#${number}`).join(', ')})` : ''
+        console.log(`#${String(ticket.number).padEnd(5)} ${ticket.state.padEnd(16)} ${pr.padEnd(16)} ${ticket.title}${blocked}${running ? `  ▸ ${running.name}` : ''}`)
     })
 }
 
@@ -79,6 +84,7 @@ async function main() {
             'no-sandbox': { type: 'boolean', default: false },
             force: { type: 'boolean', default: false },
             json: { type: 'boolean', default: false },
+            local: { type: 'boolean', default: false },
             help: { type: 'boolean', short: 'h', default: false },
         },
     })
@@ -111,7 +117,7 @@ async function main() {
             log(`labels ready. To see the factory's worktrees in Orca: orca-ide repo set --repo name:${basename(repo.root)} --external-worktree-visibility show`)
             return
         case 'status':
-            return status(repo, { json: values.json })
+            return status(repo, { json: values.json, local: values.local })
         case 'run': {
             const issueNumber = Number(issueArgument)
             if (!Number.isInteger(issueNumber) || issueNumber <= 0) {
