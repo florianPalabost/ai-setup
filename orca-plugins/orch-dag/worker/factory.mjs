@@ -78,12 +78,13 @@ export function createFactorySource(orca) {
         return nodeByDistro.get(distro)
     }
 
-    async function factoryStatus(repo, extraArgs) {
-        const cli = factoryCli()
-        const output = await wsl(repo.distro, [await nodePath(repo.distro), cli.path, 'status', '--json', '--repo', repo.root, ...extraArgs])
+    async function factoryJson(repo, args) {
+        const output = await wsl(repo.distro, [await nodePath(repo.distro), factoryCli().path, ...args, '--json', '--repo', repo.root])
 
         return JSON.parse(output)
     }
+
+    const factoryStatus = (repo, extraArgs) => factoryJson(repo, ['status', ...extraArgs])
 
     async function workspaces() {
         return (await orca.host.call('workspace.list', {})).workspaces
@@ -151,11 +152,14 @@ export function createFactorySource(orca) {
         return { opened: workspace.name }
     }
 
-    async function openLog({ root, log }) {
+    /** Writes the ticket's latest run as Markdown with `factory log` and opens it in an editor tab. */
+    async function openLog({ root, issueNumber }) {
+        const repo = (await factoryRepos()).find((candidate) => candidate.root === root)
         const workspace = await workspaceAt(root)
-        await orca.host.call('editor.open', { workspaceId: workspace.id, path: log })
+        const { path } = await factoryJson(repo ?? { root, distro: factoryCli().distro }, ['log', String(issueNumber)])
+        await orca.host.call('editor.open', { workspaceId: workspace.id, path })
 
-        return { opened: log }
+        return { opened: path }
     }
 
     /**
