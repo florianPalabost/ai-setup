@@ -7,6 +7,7 @@ import { ERROR_CODES, FACTORY_LABELS, FactoryError, LABELS } from '../lib/consta
 import { ensureFactoryLabels, listReadyIssues } from '../lib/github.mjs'
 import { STEP_STATUSES } from '../lib/progress.mjs'
 import { runTicket } from '../lib/run-ticket.mjs'
+import { resumeSession, watchRun } from '../lib/session.mjs'
 import { factoryStatus } from '../lib/status.mjs'
 import { hasCommand, succeeds } from '../lib/shell.mjs'
 import { locateRepo } from '../lib/worktree.mjs'
@@ -19,12 +20,15 @@ Usage:
   factory status [--json]         tickets the factory tracks, with their PRs and latest run
   factory run <issue> [options]   implement → review → draft PR for one ticket
   factory next [options]          run the oldest unblocked ${LABELS.ready} ticket
+  factory watch <issue>           follow the ticket's latest run: steps and the agent's transcript
+  factory resume <issue>          open Claude on the run's last coding session, in the worktree
 
 Options:
   --repo <path>     repository to work on (default: current directory)
   --dry-run         show what would happen; no GitHub writes, no agents
   --no-sandbox      run claude without srt (worktree isolation only)
-  --force           take over a ticket already labelled ${LABELS.working}
+  --force           take over a ticket already labelled ${LABELS.working}; with resume: resume while the run goes on
+  --step <name>     with resume: the step whose session to open (e.g. "review 1")
   --local           with status --json: only the runs in .git/factory, no GitHub calls`
 
 const REQUIRED_TOOLS = ['git', 'gh', 'claude']
@@ -75,6 +79,15 @@ async function next(repo, runOptions) {
     await runTicket({ repo, issueNumber: unblocked[0].number, ...runOptions })
 }
 
+function issueNumberFrom(argument, command) {
+    const issueNumber = Number(argument)
+    if (!Number.isInteger(issueNumber) || issueNumber <= 0) {
+        throw new FactoryError(ERROR_CODES.usage, `factory ${command} needs an issue number`)
+    }
+
+    return issueNumber
+}
+
 async function main() {
     const { values, positionals } = parseArgs({
         allowPositionals: true,
@@ -84,6 +97,7 @@ async function main() {
             'no-sandbox': { type: 'boolean', default: false },
             force: { type: 'boolean', default: false },
             json: { type: 'boolean', default: false },
+            step: { type: 'string' },
             local: { type: 'boolean', default: false },
             help: { type: 'boolean', short: 'h', default: false },
         },
@@ -118,14 +132,18 @@ async function main() {
             return
         case 'status':
             return status(repo, { json: values.json, local: values.local })
-        case 'run': {
-            const issueNumber = Number(issueArgument)
-            if (!Number.isInteger(issueNumber) || issueNumber <= 0) {
-                throw new FactoryError(ERROR_CODES.usage, 'factory run needs an issue number')
-            }
-            await runTicket({ repo, issueNumber, ...runOptions })
+        case 'watch':
+            process.stdout.on('error', (error) => {
+                if (error.code === 'EPIPE') {
+                    process.exit(0)
+                }
+            })
+            return watchRun({ repo, issueNumber: issueNumberFrom(issueArgument, command) })
+        case 'resume':
+            return resumeSession({ repo, issueNumber: issueNumberFrom(issueArgument, command), stepName: values.step, force: values.force })
+        case 'run':
+            await runTicket({ repo, issueNumber: issueNumberFrom(issueArgument, command), ...runOptions })
             return
-        }
         case 'next':
             return next(repo, runOptions)
         default:
