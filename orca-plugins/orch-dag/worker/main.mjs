@@ -1,48 +1,10 @@
-import { execFile } from 'node:child_process'
-import { existsSync } from 'node:fs'
-import { dirname, join } from 'node:path'
 import { DEMO_RUN, DEMO_RUN_ID, demoGraph } from './demo.mjs'
+import { createFactorySource } from './factory.mjs'
+import { orcaCli } from './orca-cli.mjs'
 
 const LEGACY_RUN_ID = 'run_legacy_local'
-const CLI_TIMEOUT_MS = 20000
 
-function orcaCliPath() {
-    const candidates = [
-        join(dirname(process.execPath), 'resources', 'bin', 'orca.exe'),
-        process.env.USERPROFILE && join(process.env.USERPROFILE, 'AppData', 'Local', 'Programs', 'orca', 'resources', 'bin', 'orca.exe'),
-    ].filter(Boolean)
-
-    return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0]
-}
-
-/** The worker's environment is filtered and drops APPDATA, which the CLI needs to find the runtime. */
-function cliEnv() {
-    const env = { ...process.env }
-    if (!env.APPDATA && env.USERPROFILE) {
-        env.APPDATA = join(env.USERPROFILE, 'AppData', 'Roaming')
-    }
-
-    return env
-}
-
-function orchestration(args) {
-    return new Promise((resolve, reject) => {
-        execFile(orcaCliPath(), ['orchestration', ...args, '--json', '--full'], { env: cliEnv(), windowsHide: true, timeout: CLI_TIMEOUT_MS }, (error, stdout, stderr) => {
-            let response
-            try {
-                response = JSON.parse(stdout)
-            } catch {
-                reject(Object.assign(new Error(stderr || error?.message || 'orca CLI returned no JSON'), { code: 'cli_failed' }))
-                return
-            }
-            if (!response.ok) {
-                reject(Object.assign(new Error(response.error?.message ?? 'orca CLI failed'), { code: response.error?.code ?? 'cli_failed' }))
-                return
-            }
-            resolve(response.result)
-        })
-    })
-}
+const orchestration = (args) => orcaCli(['orchestration', ...args, '--full'])
 
 function parseJson(value, fallback) {
     if (typeof value !== 'string') {
@@ -126,4 +88,10 @@ async function openTask(orca, { terminal, worktreeId }) {
 export default function activate(orca) {
     orca.panels.handle('graph.get', (input) => loadGraph(input))
     orca.panels.handle('task.open', (input) => openTask(orca, input))
+
+    const factory = createFactorySource(orca)
+    orca.panels.handle('factory.get', (input) => factory.getFactory(input))
+    orca.panels.handle('factory.openWorktree', (input) => factory.openWorktree(input))
+    orca.panels.handle('factory.openLog', (input) => factory.openLog(input))
+    orca.panels.handle('factory.openTerminal', (input) => factory.openTerminal(input))
 }

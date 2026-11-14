@@ -1,0 +1,145 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root {
+        --ready: #2563eb;
+        --working: #d97706;
+        --done: #16a34a;
+        --human: #dc2626;
+        --muted: var(--orca-muted-foreground);
+      }
+      html.dark {
+        --ready: #60a5fa;
+        --working: #fbbf24;
+        --done: #4ade80;
+        --human: #f87171;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font: 13px/1.4 system-ui, sans-serif;
+        color: var(--orca-foreground);
+        background: var(--orca-background);
+      }
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--orca-border);
+        background: var(--orca-background);
+      }
+      h1 { margin: 0; font-size: 13px; }
+      select {
+        min-width: 0;
+        padding: 2px 6px;
+        font: inherit;
+        color: var(--orca-foreground);
+        background: var(--orca-card);
+        border: 1px solid var(--orca-input);
+        border-radius: var(--orca-radius);
+      }
+      .status-line { margin-left: auto; font-size: 11px; color: var(--muted); }
+      .status-line.error { color: var(--orca-destructive); }
+      #lanes {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 12px;
+        padding: 12px;
+        align-items: start;
+      }
+      .lane { --lane: var(--muted); display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+      .lane-head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding-bottom: 4px;
+        border-bottom: 2px solid var(--lane);
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--lane);
+      }
+      .count { margin-left: auto; color: var(--muted); font-weight: 400; }
+      .lane-empty { font-size: 11px; color: var(--muted); padding: 4px 0; }
+      .lane-body { display: flex; flex-direction: column; gap: 6px; }
+      .lane-human { --lane: var(--human); }
+      .lane-working { --lane: var(--working); }
+      .lane-ready { --lane: var(--ready); }
+      .lane-done { --lane: var(--done); }
+      .ticket {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 8px 10px;
+        background: var(--orca-card);
+        color: var(--orca-card-foreground);
+        border: 1px solid var(--orca-border);
+        border-left: 3px solid var(--lane);
+        border-radius: var(--orca-radius);
+        cursor: pointer;
+      }
+      .ticket:hover { border-color: var(--lane); }
+      .ticket.blocked { opacity: 0.6; border-left-style: dashed; }
+      .ticket.child { margin-left: 16px; position: relative; }
+      .ticket.child::before {
+        content: '';
+        position: absolute;
+        left: -11px;
+        top: -7px;
+        width: 9px;
+        height: 22px;
+        border-left: 1px solid var(--muted);
+        border-bottom: 1px solid var(--muted);
+      }
+      .title { display: flex; gap: 6px; }
+      .number { color: var(--muted); font-variant-numeric: tabular-nums; }
+      .tags { display: flex; flex-wrap: wrap; gap: 4px; font-size: 11px; }
+      .tag { padding: 0 6px; border: 1px solid var(--orca-border); border-radius: 4px; color: var(--muted); }
+      .tag.next { border-color: var(--ready); color: var(--ready); font-weight: 600; }
+      ol.steps { margin: 4px 0 0; padding: 0; list-style: none; font-size: 12px; }
+      ol.steps li { display: flex; gap: 6px; padding: 1px 0; color: var(--muted); }
+      ol.steps li.done, ol.steps li.pass { color: var(--done); }
+      ol.steps li.fail { color: var(--human); }
+      ol.steps li.running { color: var(--working); font-weight: 600; }
+      ol.steps li.error { color: var(--human); }
+      ol.steps li.activity {
+        display: block;
+        padding-left: 18px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-family: ui-monospace, monospace;
+        font-size: 11px;
+      }
+      .mark { width: 12px; text-align: center; }
+      .actions { display: flex; flex-wrap: wrap; gap: 4px; }
+      .action {
+        padding: 1px 8px;
+        font: inherit;
+        font-size: 11px;
+        color: var(--orca-foreground);
+        background: transparent;
+        border: 1px solid var(--orca-border);
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .action:hover { border-color: var(--lane); color: var(--lane); }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Factory</h1>
+      <select id="repo-select" aria-label="Repository" hidden></select>
+      <span id="status-line" class="status-line">Loading…</span>
+    </header>
+    <div id="lanes"></div>
+    <script src="./factory.js"></script>
+  </body>
+</html>
