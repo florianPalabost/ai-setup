@@ -76,7 +76,7 @@ function runSteps(run) {
         list.append(item)
     }
     if (run.activity) {
-        list.append(element('li', 'activity', `${run.activity} · ${sinceLabel(run.updatedAt)}`))
+        list.append(element('li', 'activity', `${sinceLabel(run.updatedAt)} · ${run.activity}`))
     }
 
     return list
