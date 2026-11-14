@@ -22,6 +22,10 @@ export const ERROR_CODES = Object.freeze({
     invalidReview: 'invalid_review',
     invalidPrBody: 'invalid_pr_body',
     unsafeConfig: 'unsafe_config',
+    noRun: 'no_run',
+    runInProgress: 'run_in_progress',
+    noSession: 'no_session',
+    noWorktree: 'no_worktree',
 })
 
 export const REVIEW_VERDICTS = Object.freeze({
