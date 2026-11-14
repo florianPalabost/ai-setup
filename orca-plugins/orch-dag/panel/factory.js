@@ -12,7 +12,12 @@ const lanesElement = document.getElementById('lanes')
 const statusLine = document.getElementById('status-line')
 const repoSelect = document.getElementById('repo-select')
 let selectedRoot = null
-let lastSignature = ''
+let shownRoot = null
+let reposSignature = ''
+/** @type {Map<string, { count: HTMLElement, empty: HTMLElement, body: HTMLElement }>} */
+const shownLanes = new Map()
+/** @type {Map<number, { element: HTMLElement, signature: string }>} */
+const shownCards = new Map()
 let inFlight = false
 
 function setStatus(text, isError = false) {
@@ -81,12 +86,12 @@ function runSteps(run) {
     return list
 }
 
-function ticketCard(ticket, { root, isChild, isNext }) {
-    const card = element('div', `ticket${ticket.blockedBy.length ? ' blocked' : ''}${isChild ? ' child' : ''}`)
+function fillTicketCard(card, ticket, { root, isChild, isNext }) {
+    card.className = `ticket${ticket.blockedBy.length ? ' blocked' : ''}${isChild ? ' child' : ''}`
     card.title = ticket.worktree ? `Open the worktree of #${ticket.number}` : ticket.url
     const title = element('div', 'title')
     title.append(element('span', 'number', `#${ticket.number}`), element('span', '', ticket.title))
-    card.append(title)
+    card.replaceChildren(title)
 
     const tags = element('div', 'tags')
     if (isNext) {
@@ -123,9 +128,7 @@ function ticketCard(ticket, { root, isChild, isNext }) {
         actions.append(actionButton('Log', () => openLog(root, ticket)))
     }
     card.append(actions)
-    card.addEventListener('click', () => void (ticket.worktree ? openWorktree(ticket) : openExternal(ticket.url)))
-
-    return card
+    card.onclick = () => void (ticket.worktree ? openWorktree(ticket) : openExternal(ticket.url))
 }
 
 /** Orders a lane so each ticket sits right under the ticket blocking it (chains read top to bottom). */
@@ -154,6 +157,11 @@ function chainOrder(tickets) {
 }
 
 function renderRepos(repos, current) {
+    const signature = JSON.stringify([repos, current?.root])
+    if (signature === reposSignature) {
+        return
+    }
+    reposSignature = signature
     repoSelect.hidden = repos.length < 2
     repoSelect.replaceChildren(
         ...repos.map((repo) => {
@@ -166,31 +174,77 @@ function renderRepos(repos, current) {
     )
 }
 
-function renderLanes({ repo, tickets }) {
-    const signature = JSON.stringify([repo, tickets])
-    if (signature === lastSignature) {
-        return
+/** The lane sections, built once; only their count, empty note and cards change after. */
+function laneViews() {
+    if (shownLanes.size === 0) {
+        lanesElement.replaceChildren(
+            ...LANES.map((lane) => {
+                const section = element('section', `lane lane-${lane.key}`)
+                const head = element('div', 'lane-head', lane.title)
+                const count = element('span', 'count')
+                const empty = element('div', 'lane-empty', 'None')
+                const body = element('div', 'lane-body')
+                head.append(count)
+                section.append(head, empty, body)
+                shownLanes.set(lane.state, { count, empty, body })
+
+                return section
+            }),
+        )
     }
-    lastSignature = signature
+
+    return shownLanes
+}
+
+/** Keeps the children of `parent` equal to `wanted`, in order, moving only the nodes that are out of place. */
+function syncChildren(parent, wanted) {
+    wanted.forEach((node, index) => {
+        if (parent.children[index] !== node) {
+            parent.insertBefore(node, parent.children[index] ?? null)
+        }
+    })
+    while (parent.children.length > wanted.length) {
+        parent.lastElementChild.remove()
+    }
+}
+
+/** Updates the lanes in place: a card is rebuilt only when its ticket changed, so polls don't redraw the panel. */
+function renderLanes({ repo, tickets }) {
     const nextUp = tickets.filter((ticket) => ticket.state === 'ready-for-agent' && ticket.blockedBy.length === 0).sort((left, right) => left.number - right.number)[0]
+    const lanes = laneViews()
+    const seen = new Set()
 
-    lanesElement.replaceChildren(
-        ...LANES.map((lane) => {
-            const laneTickets = tickets.filter((ticket) => ticket.state === lane.state)
-            const section = element('section', `lane lane-${lane.key}`)
-            const head = element('div', 'lane-head', lane.title)
-            head.append(element('span', 'count', String(laneTickets.length)))
-            section.append(head)
-            if (laneTickets.length === 0) {
-                section.append(element('div', 'lane-empty', 'None'))
+    for (const lane of LANES) {
+        const view = lanes.get(lane.state)
+        const ordered = chainOrder(tickets.filter((ticket) => ticket.state === lane.state))
+        view.count.textContent = String(ordered.length)
+        view.empty.hidden = ordered.length > 0
+        const cards = ordered.map(({ ticket, depth }) => {
+            const options = { root: repo.root, isChild: depth > 0, isNext: ticket === nextUp }
+            const signature = JSON.stringify([ticket, options])
+            const shown = shownCards.get(ticket.number) ?? { element: element('div'), signature: '' }
+            if (shown.signature !== signature) {
+                fillTicketCard(shown.element, ticket, options)
+                shown.signature = signature
             }
-            for (const { ticket, depth } of chainOrder(laneTickets)) {
-                section.append(ticketCard(ticket, { root: repo.root, isChild: depth > 0, isNext: ticket === nextUp }))
-            }
+            shownCards.set(ticket.number, shown)
+            seen.add(ticket.number)
 
-            return section
-        }),
-    )
+            return shown.element
+        })
+        syncChildren(view.body, cards)
+    }
+    for (const number of shownCards.keys()) {
+        if (!seen.has(number)) {
+            shownCards.delete(number)
+        }
+    }
+}
+
+function clearLanes(message) {
+    shownLanes.clear()
+    shownCards.clear()
+    lanesElement.replaceChildren(element('div', 'lane-empty', message))
 }
 
 async function refresh({ force = false } = {}) {
@@ -202,10 +256,14 @@ async function refresh({ force = false } = {}) {
         const data = await orca.plugin.request('factory.get', { root: selectedRoot }, { timeoutMs: 90000 })
         renderRepos(data.repos, data.repo)
         if (!data.repo) {
-            lastSignature = ''
-            lanesElement.replaceChildren(element('div', 'lane-empty', 'No Orca workspace has a .factory.json.'))
+            shownRoot = null
+            clearLanes('No Orca workspace has a .factory.json.')
             setStatus('')
             return
+        }
+        if (shownRoot !== data.repo.root) {
+            shownRoot = data.repo.root
+            clearLanes('')
         }
         renderLanes(data)
         setStatus(`${data.tickets.length} tickets · GitHub ${sinceLabel(data.githubCheckedAt)}`)
