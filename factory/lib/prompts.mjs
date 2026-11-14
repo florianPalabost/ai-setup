@@ -82,6 +82,7 @@ ${ticketSection(issue)}
 # Factory rules
 - You are running unattended and must not edit any file. Do not ask anything: the fixed point and the spec are above.
 - Always spawn the Standards and Spec sub-agents in parallel, however small the diff: the separation is the point of this review.
+- Spawn both in one message with \`run_in_background: false\`, and give the structured output only once both reports are back. A backgrounded sub-agent ends your turn before it reports, and the factory reads only your final output.
 - Do not run tests or linters: the factory already ran its checks and they pass.
 - After aggregating the two axes, decide the verdict:
   - "${REVIEW_VERDICTS.fail}" if the Standards axis found a hard violation of a documented standard, or the Spec axis found a missing or partial requirement or a wrong implementation.
