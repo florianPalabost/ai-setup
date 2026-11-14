@@ -7,6 +7,13 @@ export const FACTORY_ERROR_CODES = Object.freeze({
     notInWsl: 'factory_not_in_wsl',
     cliFailed: 'factory_cli_failed',
     workspaceNotFound: 'factory_workspace_not_found',
+    unknownTerminalCommand: 'factory_unknown_terminal_command',
+})
+
+/** The `factory` commands a ticket's terminal can run, and the terminal title for each. */
+const TERMINAL_COMMANDS = Object.freeze({
+    watch: (issueNumber) => `watch #${issueNumber}`,
+    resume: (issueNumber) => `resume #${issueNumber}`,
 })
 
 const CONFIG_FILE = '.factory.json'
@@ -17,6 +24,7 @@ const GITHUB_REFRESH_MS = 60000
 const REPOS_REFRESH_MS = 5 * 60000
 
 const factoryError = (code, message) => Object.assign(new Error(message), { code })
+const shellQuote = (value) => `'${String(value).replaceAll("'", "'\\''")}'`
 
 /** `\\wsl.localhost\<distro>\home\…` → `{ distro, path: '/home/…' }`, or null for a Windows path. */
 function wslLocation(uncPath) {
@@ -149,5 +157,23 @@ export function createFactorySource(orca) {
         return { opened: log }
     }
 
-    return { getFactory, openWorktree, openLog }
+    /** Opens a terminal in the ticket's worktree running `factory watch` or `factory resume`, and brings it to the front. */
+    async function openTerminal({ root, worktree, issueNumber, command }) {
+        const title = TERMINAL_COMMANDS[command]?.(issueNumber)
+        if (!title) {
+            throw factoryError(FACTORY_ERROR_CODES.unknownTerminalCommand, `No factory terminal command "${command}"`)
+        }
+        const repo = (await factoryRepos()).find((candidate) => candidate.root === root)
+        const workspace = await workspaceAt(worktree)
+        const commandLine = [await nodePath(repo?.distro ?? factoryCli().distro), factoryCli().path, command, issueNumber, '--repo', root].map(shellQuote).join(' ')
+        const { terminalId } = await orca.host.call('terminal.create', { workspaceId: workspace.id, title, command: commandLine })
+        await orca.host.call('workspace.open', { workspaceId: workspace.id })
+        if (orca.host.has('terminal.focus')) {
+            await orca.host.call('terminal.focus', { terminalId })
+        }
+
+        return { terminalId }
+    }
+
+    return { getFactory, openWorktree, openLog, openTerminal }
 }

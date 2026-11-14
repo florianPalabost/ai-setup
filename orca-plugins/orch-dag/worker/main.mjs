@@ -132,4 +132,5 @@ export default function activate(orca) {
     orca.panels.handle('factory.get', (input) => factory.getFactory(input))
     orca.panels.handle('factory.openWorktree', (input) => factory.openWorktree(input))
     orca.panels.handle('factory.openLog', (input) => factory.openLog(input))
+    orca.panels.handle('factory.openTerminal', (input) => factory.openTerminal(input))
 }

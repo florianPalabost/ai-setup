@@ -54,6 +54,7 @@ async function request(name, data) {
 const openExternal = (url) => orca.shell.openExternal(url)
 const openWorktree = (ticket) => request('factory.openWorktree', { worktree: ticket.worktree })
 const openLog = (root, log) => request('factory.openLog', { root, log })
+const openTerminal = (root, ticket, command) => request('factory.openTerminal', { root, worktree: ticket.worktree, issueNumber: ticket.number, command })
 
 /** The log worth opening: the running step's, else the newest step that wrote one. */
 const currentLog = (run) => run?.steps.findLast((step) => step.status === 'running' && step.log)?.log ?? run?.steps.findLast((step) => step.log)?.log ?? null
@@ -109,6 +110,12 @@ function ticketCard(ticket, { root, isChild, isNext }) {
     const actions = element('div', 'actions')
     if (ticket.worktree) {
         actions.append(actionButton('Worktree', () => openWorktree(ticket)))
+        if (ticket.run && !ticket.run.finishedAt) {
+            actions.append(actionButton('Watch', () => openTerminal(root, ticket, 'watch')))
+        }
+        if (ticket.run?.finishedAt && ticket.run.steps.some((step) => step.sessionId)) {
+            actions.append(actionButton('Resume', () => openTerminal(root, ticket, 'resume')))
+        }
     }
     actions.append(actionButton('Issue', () => openExternal(ticket.url)))
     if (ticket.pr) {
