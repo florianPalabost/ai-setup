@@ -2,6 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { agentLogName, runClaude, sandboxSettings, writeSandboxSettings } from './agent.mjs'
 import { ERROR_CODES, FactoryError, LABELS, REVIEW_VERDICTS, branchForIssue } from './constants.mjs'
+import { RUN_STEP, STEP_STATUSES, progressRecorder } from './progress.mjs'
 import { commentOnIssue, createDraftPr, editPrBody, findOpenPrForBranch, swapLabels, viewIssue } from './github.mjs'
 import { PR_BODY_ALLOWED_TOOLS, PR_BODY_SCHEMA, REVIEW_ALLOWED_TOOLS, REVIEW_SCHEMA, implementPrompt, prBodyPrompt, reviewPrompt, reworkPrompt } from './prompts.mjs'
 import { runCheckCommand, runShellCommand } from './shell.mjs'
@@ -33,10 +34,11 @@ const tail = (text, lines) => text.trimEnd().split('\n').slice(-lines).join('\n'
  * Runs the repo's checks on the host, so the factory never takes an agent's word that they pass.
  * @returns {Promise<string[]>} one finding per failing check
  */
-async function failingChecks({ checks, cwd, runDir, attempt, log }) {
+async function failingChecks({ checks, cwd, runDir, attempt, log, progress, step }) {
     const failures = []
     for (const [index, command] of checks.entries()) {
         log(`check: ${command}`)
+        await progress.record({ step, status: STEP_STATUSES.running, detail: command })
         const { passed, output } = await runCheckCommand(command, { cwd })
         await writeFile(join(runDir, `checks-${attempt}-${index + 1}.log`), `$ ${command}\n\n${output}`)
         if (!passed) {
@@ -94,15 +96,20 @@ export async function runTicket({ repo, issueNumber, config, options, log }) {
     }
 
     await mkdir(runDir, { recursive: true })
+    const progress = progressRecorder(runDir)
+    const finishRun = (status, detail) => progress.record({ step: RUN_STEP, status, detail })
     await swapLabels(issue, { add: [LABELS.working], remove: [LABELS.ready, LABELS.done, LABELS.human] }, { cwd })
 
     try {
         const { created } = await prepareWorktree({ root: repo.root, path: worktreePath, branch, base })
         if (created) {
-            for (const command of config.setup) {
-                log(`setup: ${command}`)
-                await runShellCommand(command, { cwd: worktreePath })
-            }
+            await progress.track('setup', async () => {
+                for (const command of config.setup) {
+                    log(`setup: ${command}`)
+                    await progress.record({ step: 'setup', status: STEP_STATUSES.running, detail: command })
+                    await runShellCommand(command, { cwd: worktreePath })
+                }
+            })
         } else {
             log('reusing the existing worktree')
         }
@@ -116,12 +123,17 @@ export async function runTicket({ repo, issueNumber, config, options, log }) {
         const agentRun = (name, fields) => runClaude({ cwd: worktreePath, settingsPath, timeoutMinutes: config.agentTimeoutMinutes, logPath: join(runDir, agentLogName(name)), ...fields })
 
         log(`implementing with ${config.models.implement}…`)
-        const implementation = await agentRun('implement', { prompt: implementPrompt({ issue, base, checks: config.checks }), model: config.models.implement, permissionMode: config.permissionMode })
+        const implementation = await progress.track(
+            'implement',
+            () => agentRun('implement', { prompt: implementPrompt({ issue, base, checks: config.checks }), model: config.models.implement, permissionMode: config.permissionMode }),
+            { log: agentLogName('implement') },
+        )
 
         if (await commitsAhead({ root: repo.root, base, branch }) === 0) {
             log('no commits: handing the ticket to a human')
             await commentOnIssue(issue.number, `Factory run made no commits on \`${branch}\`.\n\n${implementation.result}`, { cwd })
             await swapLabels(issue, { add: [LABELS.human], remove: [LABELS.working] }, { cwd })
+            await finishRun(LABELS.human, 'no commits')
 
             return { outcome: LABELS.human, prUrl: null }
         }
@@ -129,21 +141,31 @@ export async function runTicket({ repo, issueNumber, config, options, log }) {
         let review
         let reworks = 0
         for (let attempt = 1; ; attempt++) {
-            const checkFailures = await failingChecks({ checks: config.checks, cwd: worktreePath, runDir, attempt, log })
+            const checksStep = `checks ${attempt}`
+            const checkFailures = await progress.track(checksStep, () => failingChecks({ checks: config.checks, cwd: worktreePath, runDir, attempt, log, progress, step: checksStep }), {
+                statusOf: (failures) => (failures.length > 0 ? STEP_STATUSES.fail : STEP_STATUSES.pass),
+            })
             if (checkFailures.length > 0) {
                 review = { verdict: REVIEW_VERDICTS.fail, findings: checkFailures, report: '' }
                 log(`checks: ${checkFailures.length} failing, skipping the review`)
             } else {
                 log(`reviewing with /matt-code-review on ${config.models.review} (attempt ${attempt})…`)
                 const logName = `review-${attempt}`
-                const reviewRun = await agentRun(logName, {
-                    prompt: reviewPrompt({ issue, base }),
-                    model: config.models.review,
-                    permissionMode: READ_ONLY_PERMISSION_MODE,
-                    allowedTools: REVIEW_ALLOWED_TOOLS,
-                    jsonSchema: REVIEW_SCHEMA,
-                })
-                review = parseReview(reviewRun.structuredOutput, join(runDir, agentLogName(logName)))
+                review = await progress.track(
+                    `review ${attempt}`,
+                    async () => {
+                        const reviewRun = await agentRun(logName, {
+                            prompt: reviewPrompt({ issue, base }),
+                            model: config.models.review,
+                            permissionMode: READ_ONLY_PERMISSION_MODE,
+                            allowedTools: REVIEW_ALLOWED_TOOLS,
+                            jsonSchema: REVIEW_SCHEMA,
+                        })
+
+                        return parseReview(reviewRun.structuredOutput, join(runDir, agentLogName(logName)))
+                    },
+                    { log: agentLogName(logName), statusOf: (result) => (result.verdict === REVIEW_VERDICTS.pass ? STEP_STATUSES.pass : STEP_STATUSES.fail) },
+                )
                 log(`review: ${review.verdict}${review.findings.length ? ` (${review.findings.length} finding(s))` : ''}`)
             }
             if (review.verdict === REVIEW_VERDICTS.pass || reworks === config.maxReworks) {
@@ -152,36 +174,50 @@ export async function runTicket({ repo, issueNumber, config, options, log }) {
 
             reworks++
             log(`rework ${reworks}/${config.maxReworks} with ${config.models.implement}…`)
-            await agentRun(`rework-${reworks}`, { prompt: reworkPrompt({ issue, findings: review.findings, checks: config.checks }), model: config.models.implement, permissionMode: config.permissionMode })
+            await progress.track(
+                `rework ${reworks}/${config.maxReworks}`,
+                () => agentRun(`rework-${reworks}`, { prompt: reworkPrompt({ issue, findings: review.findings, checks: config.checks }), model: config.models.implement, permissionMode: config.permissionMode }),
+                { log: agentLogName(`rework-${reworks}`) },
+            )
         }
 
         log(`pushing ${branch}`)
-        await pushBranch({ root: repo.root, branch })
+        await progress.track('push', () => pushBranch({ root: repo.root, branch }))
         log(`writing the PR body with /pr on ${config.models.pr}…`)
-        const prBodyRun = await agentRun('pr-body', {
-            prompt: prBodyPrompt({ issue, base, implementationReport: implementation.result, reviewReport: review.report || review.findings.join('\n') }),
-            model: config.models.pr,
-            permissionMode: READ_ONLY_PERMISSION_MODE,
-            allowedTools: PR_BODY_ALLOWED_TOOLS,
-            jsonSchema: PR_BODY_SCHEMA,
-        })
+        const prBodyRun = await progress.track(
+            'PR body',
+            () =>
+                agentRun('pr-body', {
+                    prompt: prBodyPrompt({ issue, base, implementationReport: implementation.result, reviewReport: review.report || review.findings.join('\n') }),
+                    model: config.models.pr,
+                    permissionMode: READ_ONLY_PERMISSION_MODE,
+                    allowedTools: PR_BODY_ALLOWED_TOOLS,
+                    jsonSchema: PR_BODY_SCHEMA,
+                }),
+            { log: agentLogName('pr-body') },
+        )
         const body = prBody({ issue, body: parsePrBody(prBodyRun.structuredOutput, join(runDir, agentLogName('pr-body'))), review, reworks, implementationReport: implementation.result })
-        const existingPr = await findOpenPrForBranch(branch, { cwd })
-        if (existingPr) {
-            await editPrBody(existingPr.number, body, { cwd })
-        }
-        const prUrl = existingPr?.url ?? await createDraftPr({ base, branch, title: issue.title, body }, { cwd })
+        const prUrl = await progress.track('draft PR', async () => {
+            const existingPr = await findOpenPrForBranch(branch, { cwd })
+            if (existingPr) {
+                await editPrBody(existingPr.number, body, { cwd })
+            }
+
+            return existingPr?.url ?? createDraftPr({ base, branch, title: issue.title, body }, { cwd })
+        })
         const report = `**${reviewHeader(review, reworks)}**${review.findings.length ? `\n\n${review.findings.map((finding) => `- ${finding}`).join('\n')}` : ''}`
 
         const passed = review.verdict === REVIEW_VERDICTS.pass
         await commentOnIssue(issue.number, `Factory run finished: ${prUrl}\n\n${report}`, { cwd })
         await swapLabels(issue, { add: [passed ? LABELS.done : LABELS.human], remove: [LABELS.working] }, { cwd })
+        await finishRun(passed ? LABELS.done : LABELS.human, prUrl)
         log(`${passed ? 'done' : 'review still failing, handed to a human'}: ${prUrl}`)
 
         return { outcome: passed ? LABELS.done : LABELS.human, prUrl }
     } catch (error) {
         await commentOnIssue(issue.number, `Factory run stopped: ${error.message}\n\nThe worktree is kept at \`${worktreePath}\`.`, { cwd }).catch(() => {})
         await swapLabels(issue, { add: [LABELS.human], remove: [LABELS.working] }, { cwd }).catch(() => {})
+        await finishRun(STEP_STATUSES.error, error.message).catch(() => {})
         throw error
     }
 }
