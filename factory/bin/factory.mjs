@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { realpathSync } from 'node:fs'
-import { basename, resolve } from 'node:path'
+import { basename, join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { loadConfig } from '../lib/config.mjs'
 import { ERROR_CODES, FACTORY_LABELS, FactoryError, LABELS } from '../lib/constants.mjs'
@@ -9,6 +9,7 @@ import { STEP_STATUSES } from '../lib/progress.mjs'
 import { runTicket } from '../lib/run-ticket.mjs'
 import { resumeSession, watchRun } from '../lib/session.mjs'
 import { factoryStatus } from '../lib/status.mjs'
+import { writeRunMarkdown } from '../lib/transcript.mjs'
 import { hasCommand, succeeds } from '../lib/shell.mjs'
 import { locateRepo } from '../lib/worktree.mjs'
 
@@ -22,13 +23,14 @@ Usage:
   factory next [options]          run the oldest unblocked ${LABELS.ready} ticket
   factory watch <issue>           follow the ticket's latest run: steps and the agent's transcript
   factory resume <issue>          open Claude on the run's last coding session, in the worktree
+  factory log <issue> [--json]    write the latest run as readable Markdown (run.md) and print its path
 
 Options:
   --repo <path>     repository to work on (default: current directory)
   --dry-run         show what would happen; no GitHub writes, no agents
   --no-sandbox      run claude without srt (worktree isolation only)
   --force           take over a ticket already labelled ${LABELS.working}; with resume: resume while the run goes on
-  --step <name>     with resume: the step whose session to open (e.g. "review 1")
+  --step <name>     with resume or log: the step to use (e.g. "review 1")
   --local           with status --json: only the runs in .git/factory, no GitHub calls`
 
 const REQUIRED_TOOLS = ['git', 'gh', 'claude']
@@ -141,6 +143,11 @@ async function main() {
             return watchRun({ repo, issueNumber: issueNumberFrom(issueArgument, command) })
         case 'resume':
             return resumeSession({ repo, issueNumber: issueNumberFrom(issueArgument, command), stepName: values.step, force: values.force })
+        case 'log': {
+            const written = await writeRunMarkdown({ repo, issueNumber: issueNumberFrom(issueArgument, command), stepName: values.step })
+            console.log(values.json ? JSON.stringify(written) : join(repo.root, written.path))
+            return
+        }
         case 'run':
             await runTicket({ repo, issueNumber: issueNumberFrom(issueArgument, command), ...runOptions })
             return
