@@ -25,7 +25,7 @@ Usage:
   factory watch <issue>           follow the ticket's latest run: steps and the agent's transcript
   factory resume <issue>          open Claude on the run's last coding session, in the worktree
   factory log <issue> [--json]    write the latest run as readable Markdown (run.md) and print its path
-  factory clean [--dry-run]       remove the worktrees and branches of tickets whose PR is merged (also runs before run/next)
+  factory clean [--dry-run] [--json] remove the worktrees and branches of tickets whose PR is merged (also runs before run/next)
 
 Options:
   --repo <path>     repository to work on (default: current directory)
@@ -159,7 +159,12 @@ async function main() {
             return
         }
         case 'clean': {
-            const { removed } = await cleanMergedWorktrees({ repo, log, dryRun: values['dry-run'] })
+            const result = await cleanMergedWorktrees({ repo, log: values.json ? () => {} : log, dryRun: values['dry-run'] })
+            if (values.json) {
+                console.log(JSON.stringify(result))
+                return
+            }
+            const { removed } = result
             log(removed.length === 0 ? 'no merged worktree to remove' : `${values['dry-run'] ? 'would remove' : 'removed'} ${removed.map((number) => `#${number}`).join(', ')}`)
             return
         }
