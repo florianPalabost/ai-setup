@@ -17,6 +17,8 @@ const TERMINAL_COMMANDS = Object.freeze({
     resume: (issueNumber) => `resume #${issueNumber}`,
 })
 
+const EXTERNAL_WORKTREES = Object.freeze({ show: 'show', hide: 'hide' })
+
 const CONFIG_FILE = '.factory.json'
 const FACTORY_WORKTREE_PATTERN = /-factory[\\/]issue-\d+$/
 const WSL_UNC_PATTERN = /^\\\\wsl(?:\.localhost|\$)\\([^\\]+)(\\.*)?$/i
@@ -109,6 +111,20 @@ export function createFactorySource(orca) {
         return repos.list
     }
 
+    /**
+     * Orca's sidebar keeps removed worktrees until the repo's external-worktree list reloads, so hide and show them again.
+     * The plugin does it because `orca-ide` is only on PATH in Orca's own terminals, not in the WSL shell `factory clean` runs in.
+     */
+    async function refreshSidebar(repo) {
+        const repoSelector = `name:${posix.basename(repo.root)}`
+        const { repo: orcaRepo } = await orcaCli(['repo', 'show', '--repo', repoSelector])
+        if (orcaRepo.externalWorktreeVisibility !== EXTERNAL_WORKTREES.show) {
+            return
+        }
+        await orcaCli(['repo', 'set', '--repo', repoSelector, '--external-worktree-visibility', EXTERNAL_WORKTREES.hide])
+        await orcaCli(['repo', 'set', '--repo', repoSelector, '--external-worktree-visibility', EXTERNAL_WORKTREES.show])
+    }
+
     /** Removes merged tickets' worktrees in the background, one cleanup per repo at a time; a failure waits for the next refresh. */
     function cleanMergedWorktrees(repo) {
         if (cleaningRoots.has(repo.root)) {
@@ -116,6 +132,7 @@ export function createFactorySource(orca) {
         }
         cleaningRoots.add(repo.root)
         factoryJson(repo, ['clean'])
+            .then(({ removed }) => (removed.length > 0 ? refreshSidebar(repo) : null))
             .catch(() => {})
             .finally(() => cleaningRoots.delete(repo.root))
     }
