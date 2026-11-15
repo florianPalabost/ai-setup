@@ -2,6 +2,7 @@
 import { realpathSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
+import { cleanMergedWorktrees } from '../lib/cleanup.mjs'
 import { loadConfig } from '../lib/config.mjs'
 import { ERROR_CODES, FACTORY_LABELS, FactoryError, LABELS } from '../lib/constants.mjs'
 import { ensureFactoryLabels, listReadyIssues } from '../lib/github.mjs'
@@ -24,6 +25,7 @@ Usage:
   factory watch <issue>           follow the ticket's latest run: steps and the agent's transcript
   factory resume <issue>          open Claude on the run's last coding session, in the worktree
   factory log <issue> [--json]    write the latest run as readable Markdown (run.md) and print its path
+  factory clean [--dry-run]       remove the worktrees and branches of tickets whose PR is merged (also runs before run/next)
 
 Options:
   --repo <path>     repository to work on (default: current directory)
@@ -79,6 +81,14 @@ async function next(repo, runOptions) {
     }
 
     await runTicket({ repo, issueNumber: unblocked[0].number, ...runOptions })
+}
+
+/** Clears merged worktrees before a run; a failure here never blocks the run. */
+async function cleanBeforeRun(repo, { options }) {
+    if (options.dryRun) {
+        return
+    }
+    await cleanMergedWorktrees({ repo, log }).catch((error) => log(`skipped worktree cleanup: ${error.message}`))
 }
 
 function issueNumberFrom(argument, command) {
@@ -148,10 +158,17 @@ async function main() {
             console.log(values.json ? JSON.stringify(written) : join(repo.root, written.path))
             return
         }
+        case 'clean': {
+            const { removed } = await cleanMergedWorktrees({ repo, log, dryRun: values['dry-run'] })
+            log(removed.length === 0 ? 'no merged worktree to remove' : `${values['dry-run'] ? 'would remove' : 'removed'} ${removed.map((number) => `#${number}`).join(', ')}`)
+            return
+        }
         case 'run':
+            await cleanBeforeRun(repo, runOptions)
             await runTicket({ repo, issueNumber: issueNumberFrom(issueArgument, command), ...runOptions })
             return
         case 'next':
+            await cleanBeforeRun(repo, runOptions)
             return next(repo, runOptions)
         default:
             throw new FactoryError(ERROR_CODES.usage, `unknown command "${command}"\n\n${USAGE}`)
