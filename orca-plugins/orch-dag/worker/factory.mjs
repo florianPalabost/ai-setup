@@ -61,11 +61,13 @@ function wsl(distro, args) {
 /**
  * Creates the worker side of the Factory panel: finds repos with a .factory.json among Orca's workspaces,
  * runs `factory status --json` in WSL (GitHub at most once a minute, local runs on every poll),
+ * removes merged tickets' worktrees with `factory clean` on each GitHub refresh,
  * and opens a ticket's worktree or a run log in Orca.
  */
 export function createFactorySource(orca) {
     const nodeByDistro = new Map()
     const githubStateByRoot = new Map()
+    const cleaningRoots = new Set()
     let repos = { at: 0, list: [] }
 
     /** nvm puts node on PATH only in an interactive shell, so ask one once and call node directly after. */
@@ -107,11 +109,23 @@ export function createFactorySource(orca) {
         return repos.list
     }
 
+    /** Removes merged tickets' worktrees in the background, one cleanup per repo at a time; a failure waits for the next refresh. */
+    function cleanMergedWorktrees(repo) {
+        if (cleaningRoots.has(repo.root)) {
+            return
+        }
+        cleaningRoots.add(repo.root)
+        factoryJson(repo, ['clean'])
+            .catch(() => {})
+            .finally(() => cleaningRoots.delete(repo.root))
+    }
+
     async function githubState(repo) {
         const cached = githubStateByRoot.get(repo.root)
         if (cached && Date.now() - cached.at < GITHUB_REFRESH_MS) {
             return cached.state
         }
+        cleanMergedWorktrees(repo)
         const state = await factoryStatus(repo, [])
         githubStateByRoot.set(repo.root, { at: Date.now(), state })
 
