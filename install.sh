@@ -126,6 +126,14 @@ link_global() {
   link "$REPO_DIR/global/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md"
 }
 
+# The factory CLI runs under WSL/Linux node, so Windows gets no link.
+link_factory() {
+  is_windows && return 0
+  log "Factory CLI"
+  link "$REPO_DIR/factory/bin/factory.mjs" "$HOME/.local/bin/factory"
+  [[ ":$PATH:" == *":$HOME/.local/bin:"* ]] || warn "$HOME/.local/bin is not on PATH: add it to run factory"
+}
+
 # settings.json is merged, not symlinked: tools like Orca write their own hooks
 # into it, and those must never end up in the repo.
 merge_settings() {
@@ -735,6 +743,7 @@ main() {
   ((DRY_RUN)) && log "Dry run: nothing will be changed"
   ((UPDATE && !PULLED)) && self_update
   link_global
+  link_factory
   merge_settings
   link_own_plugins
   install_plugins
