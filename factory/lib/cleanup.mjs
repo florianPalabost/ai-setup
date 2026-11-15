@@ -1,9 +1,13 @@
-import { mergedAgentPrs } from './github.mjs'
+import { basename } from 'node:path'
 import { branchForIssue } from './constants.mjs'
-import { run } from './shell.mjs'
+import { mergedAgentPrs } from './github.mjs'
+import { hasCommand, run } from './shell.mjs'
 import { worktreePathFor } from './worktree.mjs'
 
 const git = (args, { cwd }) => run('git', args, { cwd })
+
+const ORCA_CLI = 'orca-ide'
+const ORCA_VISIBILITY = Object.freeze({ show: 'show', hide: 'hide' })
 
 const ISSUE_WORKTREE_PATTERN = /\/issue-(\d+)$/
 
@@ -17,6 +21,30 @@ async function factoryWorktrees(root) {
         .map((line) => line.slice('worktree '.length))
         .map((path) => ({ path, issueNumber: Number(path.match(ISSUE_WORKTREE_PATTERN)?.[1]) }))
         .filter(({ path, issueNumber }) => issueNumber > 0 && path === worktreePathFor(root, issueNumber))
+}
+
+/**
+ * Orca's sidebar keeps showing removed worktrees until the repo's external-worktree list is reloaded,
+ * so hide and show them again. Only when they are shown, and never fatal: Orca is optional.
+ */
+async function refreshOrcaSidebar(root, log) {
+    if (!hasCommand(ORCA_CLI)) {
+        return
+    }
+
+    const repoSelector = `name:${basename(root)}`
+    const setVisibility = (visibility) => run(ORCA_CLI, ['repo', 'set', '--repo', repoSelector, '--external-worktree-visibility', visibility])
+    try {
+        const { result } = JSON.parse(await run(ORCA_CLI, ['repo', 'show', '--repo', repoSelector, '--json']))
+        if (result.repo.externalWorktreeVisibility !== ORCA_VISIBILITY.show) {
+            return
+        }
+        await setVisibility(ORCA_VISIBILITY.hide)
+        await setVisibility(ORCA_VISIBILITY.show)
+        log('refreshed the Orca sidebar')
+    } catch (error) {
+        log(`could not refresh the Orca sidebar: ${error.message}`)
+    }
 }
 
 /**
@@ -56,6 +84,10 @@ export async function cleanMergedWorktrees({ repo, log, dryRun = false }) {
             await git(['branch', '-D', branch], { cwd: repo.root })
         }
         removed.push(issueNumber)
+    }
+
+    if (removed.length > 0 && !dryRun) {
+        await refreshOrcaSidebar(repo.root, log)
     }
 
     return { removed, kept }
