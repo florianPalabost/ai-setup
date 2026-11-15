@@ -112,3 +112,13 @@ export async function factoryState({ cwd }) {
 
     return tickets.sort((left, right) => left.number - right.number)
 }
+
+/**
+ * Merged PRs from agent branches, keyed by branch, with the commit each was merged at.
+ * @returns {Promise<Map<string, { number: number, headRefOid: string }>>}
+ */
+export async function mergedAgentPrs({ cwd }) {
+    const prs = await ghJson(['pr', 'list', '--state', 'merged', '--limit', '200', '--search', 'head:agent/issue-', '--json', 'number,headRefName,headRefOid'], { cwd })
+
+    return new Map(prs.map(({ headRefName, ...pr }) => [headRefName, pr]))
+}
