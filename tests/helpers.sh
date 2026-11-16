@@ -34,7 +34,7 @@ new_sandbox() {
   HERDR="$SANDBOX_HOME/.config/herdr-app"
   mkdir -p "$SANDBOX_HOME" "$SANDBOX/bin"
   cp "$TESTS_DIR/fakes/herdr-app" "$TESTS_DIR/fakes/claude" "$TESTS_DIR/fakes/npx" "$TESTS_DIR/fakes/git" \
-    "$TESTS_DIR/fakes/uname" "$TESTS_DIR/fakes/gh" "$TESTS_DIR/fakes/curl" "$SANDBOX/bin/"
+    "$TESTS_DIR/fakes/uname" "$TESTS_DIR/fakes/gh" "$TESTS_DIR/fakes/curl" "$TESTS_DIR/fakes/rtk" "$SANDBOX/bin/"
 }
 
 # Put fakes from tests/fakes on PATH that most tests must not have, such as the
