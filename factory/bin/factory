@@ -1,0 +1,36 @@
+#!/bin/sh
+# Runs factory.mjs with a node found even outside an interactive shell: herdr
+# and other GUI apps start commands without the PATH that .zshrc gives nvm's node.
+set -eu
+
+script="$(readlink -f "$0")"
+entry="$(dirname "$script")/factory.mjs"
+
+find_node() {
+  if command -v node >/dev/null 2>&1; then
+    command -v node
+    return 0
+  fi
+
+  nvm_versions="${NVM_DIR:-$HOME/.nvm}/versions/node"
+  [ -d "$nvm_versions" ] || return 1
+
+  default_alias="$(cat "${NVM_DIR:-$HOME/.nvm}/alias/default" 2>/dev/null || true)"
+  default_alias="${default_alias#v}"
+  for pattern in "v$default_alias" "v$default_alias.*" "v*"; do
+    newest="$(ls -d "$nvm_versions"/$pattern 2>/dev/null | sort -V | tail -n 1)"
+    if [ -n "$newest" ] && [ -x "$newest/bin/node" ]; then
+      echo "$newest/bin/node"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+if ! node="$(find_node)"; then
+  echo "factory: no node on PATH or under nvm" >&2
+  exit 127
+fi
+
+exec "$node" "$entry" "$@"
