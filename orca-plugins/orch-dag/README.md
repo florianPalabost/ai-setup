@@ -24,7 +24,7 @@ Any Orca workspace with a `.factory.json` counts as a factory repo; with several
 
 **Factory.** The worker (`worker/factory.mjs`) runs this repo's `factory/bin/factory.mjs status --json` where the repo lives: directly on native Linux or macOS, or inside WSL through `wsl.exe` when Orca runs on Windows, which then needs the plugin loaded from its WSL folder. nvm puts node on PATH only in an interactive shell, so the worker asks one for node's path once and calls it directly after. GitHub is read at most once a minute; `status --json --local` reads the runs in `.git/factory` on every 5 s poll.
 
-**Shared with herdr.** `worker/run-graph.mjs` (reading a run) and `worker/demo.mjs` are symlinks into `herdr/mods/orch-graph/`, whose Run graph tab draws the same data: herdr refuses modules from outside a mod's folder, Orca only warns.
+**Shared with herdr.** `worker/run-graph.mjs` (reading a run) and `worker/demo.mjs` are symlinks into `herdr/mods/orch-graph/`, whose Run graph tab draws the same data: herdr refuses modules from outside a mod's folder, Orca only warns. The herdr Factory tab is `herdr/mods/factory-board/`.
 
 ## Develop
 
