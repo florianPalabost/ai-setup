@@ -35,17 +35,18 @@ cd ~/dev/ai-setup
 `install.sh` is idempotent and **never deletes anything**: whatever it would replace is moved to `~/.claude/backups/ai-setup-<timestamp>/`. The only exception is the [skill mirrors](GLOSSARY.md) it generates itself, kept in sync in place. It:
 
 1. Symlinks `global/AGENTS.md`, `global/CLAUDE.md` and `global/RTK.md` into `~/.claude/`
-2. Installs [rtk](https://github.com/rtk-ai/rtk) if it's missing (`brew`, `winget` on Windows, otherwise its install script), which condenses Bash output before Claude reads it. Its `PreToolUse` hook comes from `global/settings.json` and its instructions from `global/RTK.md`, so `rtk init` isn't needed
-3. Merges `global/settings.json` into `~/.claude/settings.json` (merged, not symlinked, so machine-specific hooks never end up in the repo)
-4. Symlinks the skills/commands/agents from `plugins/*/` into `~/.claude/`
-5. Adds the marketplaces and installs the plugins listed in [`manifests/plugins.txt`](manifests/plugins.txt)
-6. Installs the third-party skills listed in [`manifests/skills.txt`](manifests/skills.txt)
-7. Sets up [herdr](https://herdr.dev) with its Git panel (see below)
-8. Lists what an earlier version of this repo installed but the current one dropped (permission rules, plugins, skills, dangling links, herdr mods and clones) and asks before removing it. Removed skills, links and herdr files go to the backup dir, and herdr leaves a layout being removed first; `--dry-run` or a non-interactive run only lists them
+2. Links the [`factory`](factory) CLI into `~/.local/bin` (not on native Windows) and installs what its srt sandbox runs on: `srt` with `npm install -g @anthropic-ai/sandbox-runtime`, then bubblewrap, socat and ripgrep (only ripgrep on macOS) with `brew` or passwordless `apt`. Where `apt` needs a password, the run ends by printing the `sudo apt install …` command to run yourself. It also warns when `gh` is older than 2.48, which `factory status` needs
+3. Installs [rtk](https://github.com/rtk-ai/rtk) if it's missing (`brew`, `winget` on Windows, otherwise its install script), which condenses Bash output before Claude reads it. Its `PreToolUse` hook comes from `global/settings.json` and its instructions from `global/RTK.md`, so `rtk init` isn't needed
+4. Merges `global/settings.json` into `~/.claude/settings.json` (merged, not symlinked, so machine-specific hooks never end up in the repo)
+5. Symlinks the skills/commands/agents from `plugins/*/` into `~/.claude/`
+6. Adds the marketplaces and installs the plugins listed in [`manifests/plugins.txt`](manifests/plugins.txt)
+7. Installs the third-party skills listed in [`manifests/skills.txt`](manifests/skills.txt)
+8. Sets up [herdr](https://herdr.dev) with its Git panel (see below)
+9. Lists what an earlier version of this repo installed but the current one dropped (permission rules, plugins, skills, dangling links, herdr mods and clones) and asks before removing it. Removed skills, links and herdr files go to the backup dir, and herdr leaves a layout being removed first; `--dry-run` or a non-interactive run only lists them
 
 A plain install only adds what's missing; versions already installed are left alone (that's `--update`'s job).
 
-Requirements: `bash` (3.2 is enough), `git`, Python 3 as `python3` or `python`, `claude`, `npx`. The herdr step also needs `patch`, and `curl` if herdr has to be installed. Installing rtk needs `curl` where there's no `brew` (or `winget` on Windows).
+Requirements: `bash` (3.2 is enough), `git`, Python 3 as `python3` or `python`, `claude`, `npx` (whose `npm` also installs `srt`). The herdr step also needs `patch`, and `curl` if herdr has to be installed. Installing rtk needs `curl` where there's no `brew` (or `winget` on Windows).
 
 On native Windows, run `install.ps1` from PowerShell instead. It makes sure Git for Windows and Python exist (with `winget`), then runs the same `install.sh` under Git Bash:
 
@@ -82,7 +83,7 @@ On a machine with no herdr, one run leaves the [Git panel](GLOSSARY.md) active:
 1. Pulls this repo (fast-forward only; skipped with a warning if the tree has local changes or has diverged), then re-runs the freshly pulled `install.sh`
 2. Updates all marketplaces and every **user-scope** plugin, disabled ones included (they stay disabled)
 3. Updates every global `npx skills` skill and pulls every vendored git skill
-4. Upgrades rtk the same way it was installed
+4. Upgrades rtk the same way it was installed, and the factory's `srt` with npm
 
 It updates everything installed, not only what the manifests list. Restart Claude Code afterwards if plugins changed; the script tells you.
 
