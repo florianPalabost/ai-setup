@@ -1,0 +1,5 @@
+#!/bin/sh
+# Stands in for rtk in install tests: already installed, so the install leaves it alone.
+case "$*" in
+  --version) echo "rtk 0.0.0-fake" ;;
+esac
