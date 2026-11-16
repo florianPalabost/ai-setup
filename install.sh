@@ -192,6 +192,83 @@ link_factory() {
   [[ ":$PATH:" == *":$HOME/.local/bin:"* ]] || warn "$HOME/.local/bin is not on PATH: add it to run factory"
 }
 
+SANDBOX_RUNTIME_NPM="@anthropic-ai/sandbox-runtime"
+# `factory status` reads GitHub with `gh api --slurp`, added in gh 2.48.
+FACTORY_GH_MIN_VERSION="2.48.0"
+# What the factory's srt sandbox needs that only a password could install: printed at the end.
+FACTORY_TOOLS_COMMAND=""
+
+# "<command> <apt package>" for the srt sandbox on Linux. macOS sandboxes with
+# its own sandbox-exec and only needs ripgrep.
+factory_system_tools() {
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    echo "rg ripgrep"
+  else
+    printf '%s\n' "bwrap bubblewrap" "socat socat" "rg ripgrep"
+  fi
+}
+
+# Whether version $1 is at least $2 (dotted numbers).
+version_at_least() {
+  [[ "$(printf '%s\n%s\n' "$2" "$1" | sort -t. -k1,1n -k2,2n -k3,3n | head -n1)" == "$2" ]]
+}
+
+# The tools the factory's srt sandbox runs on (see `factory doctor`). What needs
+# no password is installed: srt with npm, the rest with brew or passwordless
+# apt. Otherwise the apt command is printed at the end for the person to run.
+install_factory_tools() {
+  is_windows && return 0
+  log "Factory sandbox tools"
+  if ! command -v srt >/dev/null 2>&1 || ((UPDATE)); then
+    if require npm "srt (the factory's sandbox runtime)"; then
+      run npm install -g "$SANDBOX_RUNTIME_NPM" </dev/null || warn "could not install $SANDBOX_RUNTIME_NPM"
+    fi
+  else
+    info "srt already installed"
+  fi
+
+  local tool package missing=()
+  while read -r tool package; do
+    command -v "$tool" >/dev/null 2>&1 || missing+=("$package")
+  done < <(factory_system_tools)
+  if ((${#missing[@]} == 0)); then
+    info "bubblewrap, socat and ripgrep already installed"
+  elif command -v brew >/dev/null 2>&1; then
+    run brew install "${missing[@]}" </dev/null || warn "could not install ${missing[*]}"
+  elif command -v apt-get >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+    {
+      run sudo -n apt-get update -qq &&
+        run sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y "${missing[@]}"
+    } </dev/null || warn "could not install ${missing[*]}"
+  elif command -v apt-get >/dev/null 2>&1; then
+    FACTORY_TOOLS_COMMAND="sudo apt install ${missing[*]}"
+    info "${missing[*]} need a password to install: the command is printed at the end"
+  else
+    warn "install ${missing[*]} for the factory's sandbox"
+  fi
+
+  local gh_version
+  gh_version="$(gh_version)"
+  if [[ -n "$gh_version" ]] && ! version_at_least "$gh_version" "$FACTORY_GH_MIN_VERSION"; then
+    warn "gh $gh_version is older than $FACTORY_GH_MIN_VERSION, which \`factory status\` needs: upgrade it from https://github.com/cli/cli#installation"
+  fi
+}
+
+# gh's version, or nothing. Any gh call records a device id in its state folder,
+# and a dry run leaves the home alone, so that folder goes somewhere temporary.
+gh_version() {
+  command -v gh >/dev/null 2>&1 || return 0
+  local state
+  state="$(mktemp -d)"
+  XDG_STATE_HOME="$state" gh --version 2>/dev/null | sed -n 's/^gh version \([0-9.]*\).*/\1/p' || true
+  rm -rf "$state"
+}
+
+remind_factory_tools() {
+  [[ -n "$FACTORY_TOOLS_COMMAND" ]] || return 0
+  warn "for the factory's sandbox, run: $FACTORY_TOOLS_COMMAND"
+}
+
 # settings.json is merged, not symlinked: tools like Orca write their own hooks
 # into it, and those must never end up in the repo.
 merge_settings() {
@@ -802,6 +879,7 @@ main() {
   ((UPDATE && !PULLED)) && self_update
   link_global
   link_factory
+  install_factory_tools
   install_rtk
   merge_settings
   link_own_plugins
@@ -819,6 +897,7 @@ main() {
   log "Done"
   ((PLUGINS_CHANGED)) && warn "plugins were updated: restart Claude Code to apply"
   remind_gh_sign_in
+  remind_factory_tools
   return 0
 }
 
