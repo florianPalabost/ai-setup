@@ -4,6 +4,13 @@ import { run } from './shell.mjs'
 const gh = (args, { cwd, input } = {}) => run('gh', args, { cwd, input })
 const ghJson = async (args, options) => JSON.parse(await gh(args, options))
 
+/** Every item of a paginated REST list. `--jq '.[]'` prints one item per line, and works on gh releases older than `--slurp` (2.48). */
+const ghPaginatedItems = async (args, options) =>
+    (await gh(['api', '--paginate', '--jq', '.[]', ...args], options))
+        .split('\n')
+        .filter((line) => line.trim() !== '')
+        .map((line) => JSON.parse(line))
+
 /**
  * @returns {Promise<{ number: number, title: string, body: string, state: string, url: string, labels: string[], comments: { author: string, body: string }[] }>}
  */
@@ -40,10 +47,9 @@ export const commentOnIssue = (issueNumber, body, { cwd }) =>
  * from GitHub's native issue dependencies.
  */
 export async function listReadyIssues({ cwd }) {
-    const issues = await ghJson(['api', '--paginate', '--slurp', '-X', 'GET', 'repos/{owner}/{repo}/issues', '-f', `labels=${LABELS.ready}`, '-f', 'state=open', '-f', 'sort=created', '-f', 'direction=asc'], { cwd })
+    const issues = await ghPaginatedItems(['-X', 'GET', 'repos/{owner}/{repo}/issues', '-f', `labels=${LABELS.ready}`, '-f', 'state=open', '-f', 'sort=created', '-f', 'direction=asc'], { cwd })
 
     return issues
-        .flat()
         .filter((issue) => !issue.pull_request)
         .map((issue) => ({
             number: issue.number,
@@ -88,13 +94,12 @@ async function openBlockers(issueNumber, { cwd }) {
  */
 export async function factoryState({ cwd }) {
     const trackedLabels = Object.values(LABELS)
-    const [issuePages, prs] = await Promise.all([
-        ghJson(['api', '--paginate', '--slurp', '-X', 'GET', 'repos/{owner}/{repo}/issues', '-f', 'state=open', '-f', 'per_page=100'], { cwd }),
+    const [issues, prs] = await Promise.all([
+        ghPaginatedItems(['-X', 'GET', 'repos/{owner}/{repo}/issues', '-f', 'state=open', '-f', 'per_page=100'], { cwd }),
         ghJson(['pr', 'list', '--state', 'open', '--limit', '200', '--json', 'number,url,isDraft,headRefName'], { cwd }),
     ])
     const prsByBranch = new Map(prs.map(({ headRefName, ...pr }) => [headRefName, pr]))
-    const tracked = issuePages
-        .flat()
+    const tracked = issues
         .filter((issue) => !issue.pull_request)
         .map((issue) => ({ ...issue, labels: issue.labels.map((label) => label.name) }))
         .filter((issue) => issue.labels.some((label) => trackedLabels.includes(label)))
