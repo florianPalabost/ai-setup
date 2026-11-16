@@ -4,13 +4,22 @@ import { dirname, join } from 'node:path'
 
 const CLI_TIMEOUT_MS = 20000
 
+/** On Linux and macOS the CLI is `orca-ide`: a bare `orca` there can be GNOME's screen reader. */
 function orcaCliPath() {
-    const candidates = [
-        join(dirname(process.execPath), 'resources', 'bin', 'orca.exe'),
-        process.env.USERPROFILE && join(process.env.USERPROFILE, 'AppData', 'Local', 'Programs', 'orca', 'resources', 'bin', 'orca.exe'),
-    ].filter(Boolean)
+    const candidates = process.platform === 'win32'
+        ? [
+            join(dirname(process.execPath), 'resources', 'bin', 'orca.exe'),
+            process.env.USERPROFILE && join(process.env.USERPROFILE, 'AppData', 'Local', 'Programs', 'orca', 'resources', 'bin', 'orca.exe'),
+        ]
+        : [
+            join(dirname(process.execPath), 'resources', 'bin', 'orca-ide'),
+            join(dirname(process.execPath), '..', 'Resources', 'bin', 'orca-ide'),
+            '/opt/Orca/resources/bin/orca-ide',
+            '/usr/bin/orca-ide',
+        ]
+    const existing = candidates.filter(Boolean)
 
-    return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0]
+    return existing.find((candidate) => existsSync(candidate)) ?? (process.platform === 'win32' ? existing[0] : 'orca-ide')
 }
 
 /** The worker's environment is filtered and drops APPDATA, which the CLI needs to find the runtime. */

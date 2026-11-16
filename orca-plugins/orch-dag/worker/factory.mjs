@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { orcaCli } from './orca-cli.mjs'
 
 export const FACTORY_ERROR_CODES = Object.freeze({
-    notInWsl: 'factory_not_in_wsl',
+    unsupportedLocation: 'factory_unsupported_location',
     cliFailed: 'factory_cli_failed',
     workspaceNotFound: 'factory_workspace_not_found',
     unknownTerminalCommand: 'factory_unknown_terminal_command',
@@ -29,28 +29,39 @@ const REPOS_REFRESH_MS = 5 * 60000
 const factoryError = (code, message) => Object.assign(new Error(message), { code })
 const shellQuote = (value) => `'${String(value).replaceAll("'", "'\\''")}'`
 
-/** `\\wsl.localhost\<distro>\home\…` → `{ distro, path: '/home/…' }`, or null for a Windows path. */
-function wslLocation(uncPath) {
-    const match = WSL_UNC_PATTERN.exec(uncPath)
+const IS_WINDOWS = process.platform === 'win32'
 
-    return match ? { distro: match[1], path: (match[2] ?? '\\').replaceAll('\\', '/') } : null
+/**
+ * Where a path Orca reports lives: `{ distro, path }` for `\\wsl.localhost\<distro>\home\…`,
+ * `{ distro: null, path }` for a native path on Linux or macOS, or null for a Windows path.
+ */
+function hostLocation(orcaPath) {
+    const match = WSL_UNC_PATTERN.exec(orcaPath)
+    if (match) {
+        return { distro: match[1], path: (match[2] ?? '\\').replaceAll('\\', '/') }
+    }
+
+    return IS_WINDOWS ? null : { distro: null, path: orcaPath }
 }
 
 /** The factory CLI ships in the same repo as this plugin: <repo>/factory/bin/factory.mjs. */
 function factoryCli() {
-    const location = wslLocation(fileURLToPath(new URL('..', import.meta.url)).replace(/\\$/, ''))
+    const location = hostLocation(fileURLToPath(new URL('..', import.meta.url)).replace(/[\\/]$/, ''))
     if (!location) {
-        throw factoryError(FACTORY_ERROR_CODES.notInWsl, 'The factory view needs the plugin loaded from a WSL folder')
+        throw factoryError(FACTORY_ERROR_CODES.unsupportedLocation, 'The factory view needs the plugin loaded from a WSL folder on Windows')
     }
 
     return { distro: location.distro, path: posix.join(location.path, '..', '..', 'factory', 'bin', 'factory.mjs') }
 }
 
-function wsl(distro, args) {
-    const wslExe = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'wsl.exe')
+/** Runs `args` in the WSL distro, or directly on this machine when `distro` is null. */
+function runOnHost(distro, args) {
+    const [file, fileArgs] = distro === null
+        ? [args[0], args.slice(1)]
+        : [join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'wsl.exe'), ['-d', distro, '--', ...args]]
 
     return new Promise((resolve, reject) => {
-        execFile(wslExe, ['-d', distro, '--', ...args], { windowsHide: true, timeout: CLI_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
+        execFile(file, fileArgs, { windowsHide: true, timeout: CLI_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
             if (error) {
                 reject(factoryError(FACTORY_ERROR_CODES.cliFailed, stderr.trim() || error.message))
                 return
@@ -62,7 +73,7 @@ function wsl(distro, args) {
 
 /**
  * Creates the worker side of the Factory panel: finds repos with a .factory.json among Orca's workspaces,
- * runs `factory status --json` in WSL (GitHub at most once a minute, local runs on every poll),
+ * runs `factory status --json` in WSL or on this machine (GitHub at most once a minute, local runs on every poll),
  * removes merged tickets' worktrees with `factory clean` on each GitHub refresh,
  * and opens a ticket's worktree or a run log in Orca.
  */
@@ -75,7 +86,7 @@ export function createFactorySource(orca) {
     /** nvm puts node on PATH only in an interactive shell, so ask one once and call node directly after. */
     async function nodePath(distro) {
         if (!nodeByDistro.has(distro)) {
-            const output = await wsl(distro, ['sh', '-c', 'exec "${SHELL:-sh}" -ic "command -v node"'])
+            const output = await runOnHost(distro, ['sh', '-c', 'exec "${SHELL:-sh}" -ic "command -v node"'])
             nodeByDistro.set(distro, output.trim().split('\n').at(-1).trim())
         }
 
@@ -83,7 +94,7 @@ export function createFactorySource(orca) {
     }
 
     async function factoryJson(repo, args) {
-        const output = await wsl(repo.distro, [await nodePath(repo.distro), factoryCli().path, ...args, '--json', '--repo', repo.root])
+        const output = await runOnHost(repo.distro, [await nodePath(repo.distro), factoryCli().path, ...args, '--json', '--repo', repo.root])
 
         return JSON.parse(output)
     }
@@ -100,7 +111,7 @@ export function createFactorySource(orca) {
         }
         const found = new Map()
         for (const workspace of await workspaces()) {
-            const location = wslLocation(workspace.path)
+            const location = hostLocation(workspace.path)
             if (workspace.kind !== 'worktree' || !location || FACTORY_WORKTREE_PATTERN.test(workspace.path) || !existsSync(join(workspace.path, CONFIG_FILE))) {
                 continue
             }
@@ -167,10 +178,10 @@ export function createFactorySource(orca) {
         }
     }
 
-    async function workspaceAt(linuxPath) {
-        const workspace = (await workspaces()).find((candidate) => wslLocation(candidate.path)?.path === linuxPath)
+    async function workspaceAt(hostPath) {
+        const workspace = (await workspaces()).find((candidate) => hostLocation(candidate.path)?.path === hostPath)
         if (!workspace) {
-            throw factoryError(FACTORY_ERROR_CODES.workspaceNotFound, `Orca shows no workspace at ${linuxPath}`)
+            throw factoryError(FACTORY_ERROR_CODES.workspaceNotFound, `Orca shows no workspace at ${hostPath}`)
         }
 
         return workspace
