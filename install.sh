@@ -184,11 +184,12 @@ install_rtk() {
   fi
 }
 
-# The factory CLI runs under WSL/Linux node, so Windows gets no link.
+# The factory CLI runs under WSL/Linux node, so Windows gets no link. The link is
+# the launcher, which finds nvm's node for apps started without the shell's PATH.
 link_factory() {
   is_windows && return 0
   log "Factory CLI"
-  link "$REPO_DIR/factory/bin/factory.mjs" "$HOME/.local/bin/factory"
+  link "$REPO_DIR/factory/bin/factory" "$HOME/.local/bin/factory"
   [[ ":$PATH:" == *":$HOME/.local/bin:"* ]] || warn "$HOME/.local/bin is not on PATH: add it to run factory"
 }
 
