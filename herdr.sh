@@ -14,7 +14,7 @@ export HERDR_APP_HOME="$HERDR_HOME"
 
 HERDR_SRC="$REPO_DIR/herdr"
 # Linked as $HERDR_HOME/mods/<name>.
-HERDR_OWN_MODS=(git git-graph)
+HERDR_OWN_MODS=(git git-graph orch-graph)
 # Icons of linked mods, copied as real files: herdr refuses an svg path that a link
 # leads out of its home. "<folder in herdr/mods/> <folder in the herdr home>"
 HERDR_MOD_ICONS=("git-graph/icons git-graph-icons")
