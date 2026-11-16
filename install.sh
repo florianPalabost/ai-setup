@@ -194,8 +194,6 @@ link_factory() {
 }
 
 SANDBOX_RUNTIME_NPM="@anthropic-ai/sandbox-runtime"
-# `factory status` reads GitHub with `gh api --slurp`, added in gh 2.48.
-FACTORY_GH_MIN_VERSION="2.48.0"
 # What the factory's srt sandbox needs that only a password could install: printed at the end.
 FACTORY_TOOLS_COMMAND=""
 
@@ -207,11 +205,6 @@ factory_system_tools() {
   else
     printf '%s\n' "bwrap bubblewrap" "socat socat" "rg ripgrep"
   fi
-}
-
-# Whether version $1 is at least $2 (dotted numbers).
-version_at_least() {
-  [[ "$(printf '%s\n%s\n' "$2" "$1" | sort -t. -k1,1n -k2,2n -k3,3n | head -n1)" == "$2" ]]
 }
 
 # The tools the factory's srt sandbox runs on (see `factory doctor`). What needs
@@ -247,22 +240,6 @@ install_factory_tools() {
   else
     warn "install ${missing[*]} for the factory's sandbox"
   fi
-
-  local gh_version
-  gh_version="$(gh_version)"
-  if [[ -n "$gh_version" ]] && ! version_at_least "$gh_version" "$FACTORY_GH_MIN_VERSION"; then
-    warn "gh $gh_version is older than $FACTORY_GH_MIN_VERSION, which \`factory status\` needs: upgrade it from https://github.com/cli/cli#installation"
-  fi
-}
-
-# gh's version, or nothing. Any gh call records a device id in its state folder,
-# and a dry run leaves the home alone, so that folder goes somewhere temporary.
-gh_version() {
-  command -v gh >/dev/null 2>&1 || return 0
-  local state
-  state="$(mktemp -d)"
-  XDG_STATE_HOME="$state" gh --version 2>/dev/null | sed -n 's/^gh version \([0-9.]*\).*/\1/p' || true
-  rm -rf "$state"
 }
 
 remind_factory_tools() {
