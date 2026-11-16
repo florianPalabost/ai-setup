@@ -124,6 +124,64 @@ link_global() {
   log "Global instructions"
   link "$REPO_DIR/global/AGENTS.md" "$CLAUDE_DIR/AGENTS.md"
   link "$REPO_DIR/global/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md"
+  link "$REPO_DIR/global/RTK.md" "$CLAUDE_DIR/RTK.md"
+}
+
+RTK_INSTALLER_SH="https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh"
+
+# Run rtk's install script, which also upgrades an install it made.
+run_rtk_installer() {
+  local script status=0
+  require curl "rtk installer" || return 1
+  if ((DRY_RUN)); then
+    run sh "<$RTK_INSTALLER_SH>"
+    return 0
+  fi
+  # Not piped into sh: a download cut short must not run as half a script.
+  script="$(mktemp)"
+  if curl -fsSL -o "$script" "$RTK_INSTALLER_SH"; then
+    sh "$script" </dev/null || status=$?
+  else
+    status=$?
+  fi
+  rm -f "$script"
+  return "$status"
+}
+
+# rtk (https://github.com/rtk-ai/rtk) condenses Bash output before Claude reads
+# it. Its hook comes from global/settings.json and its instructions from
+# global/RTK.md, so `rtk init` isn't run. Installed, or upgraded on --update.
+install_rtk() {
+  log "rtk"
+  PATH="$PATH:$HOME/.local/bin"
+  local installed=0 status=0
+  command -v rtk >/dev/null 2>&1 && installed=1
+  if ((installed && !UPDATE)); then
+    info "$(rtk --version)"
+    return 0
+  fi
+  if command -v brew >/dev/null 2>&1; then
+    if ((installed)); then
+      run brew upgrade rtk </dev/null || status=$?
+    else
+      run brew install rtk </dev/null || status=$?
+    fi
+  elif is_windows; then
+    require winget "rtk" || return 0
+    if ((installed)); then
+      # Exits non-zero when there's nothing to upgrade.
+      run winget upgrade --id rtk-ai.rtk --exact --silent --accept-package-agreements --accept-source-agreements </dev/null || true
+    else
+      run winget install --id rtk-ai.rtk --exact --silent --accept-package-agreements --accept-source-agreements </dev/null || status=$?
+    fi
+  else
+    run_rtk_installer || status=$?
+  fi
+  if ((status != 0)); then
+    warn "could not install or update rtk: Claude Code's Bash hook fails until rtk is on PATH"
+  elif command -v rtk >/dev/null 2>&1; then
+    info "$(rtk --version)"
+  fi
 }
 
 # The factory CLI runs under WSL/Linux node, so Windows gets no link.
@@ -744,6 +802,7 @@ main() {
   ((UPDATE && !PULLED)) && self_update
   link_global
   link_factory
+  install_rtk
   merge_settings
   link_own_plugins
   install_plugins
