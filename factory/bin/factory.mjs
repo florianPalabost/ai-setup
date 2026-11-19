@@ -25,7 +25,7 @@ Usage:
   factory watch <issue>           follow the ticket's latest run: steps and the agent's transcript
   factory resume <issue>          open Claude on the run's last coding session, in the worktree
   factory log <issue> [--json]    write the latest run as readable Markdown (run.md) and print its path
-  factory clean [--dry-run] [--json] remove the worktrees and branches of tickets whose PR is merged (also runs before run/next)
+  factory clean [--dry-run] [--json] [--no-orca-refresh] remove the worktrees and branches of tickets whose PR is merged (also runs before run/next)
 
 Options:
   --repo <path>     repository to work on (default: current directory)
@@ -33,7 +33,8 @@ Options:
   --no-sandbox      run claude without srt (worktree isolation only)
   --force           take over a ticket already labelled ${LABELS.working}; with resume: resume while the run goes on
   --step <name>     with resume or log: the step to use (e.g. "review 1")
-  --local           with status --json: only the runs in .git/factory, no GitHub calls`
+  --local           with status --json: only the runs in .git/factory, no GitHub calls
+  --no-orca-refresh with clean: leave the Orca sidebar alone (the Orca plugin refreshes it itself)`
 
 const REQUIRED_TOOLS = ['git', 'gh', 'claude']
 const SANDBOX_TOOLS = ['srt', 'bwrap', 'socat', 'rg']
@@ -118,6 +119,7 @@ async function main() {
             json: { type: 'boolean', default: false },
             step: { type: 'string' },
             local: { type: 'boolean', default: false },
+            'no-orca-refresh': { type: 'boolean', default: false },
             help: { type: 'boolean', short: 'h', default: false },
         },
     })
@@ -166,7 +168,7 @@ async function main() {
             return
         }
         case 'clean': {
-            const result = await cleanMergedWorktrees({ repo, log: values.json ? () => {} : log, dryRun: values['dry-run'] })
+            const result = await cleanMergedWorktrees({ repo, log: values.json ? () => {} : log, dryRun: values['dry-run'], refreshOrca: !values['no-orca-refresh'] })
             if (values.json) {
                 console.log(JSON.stringify(result))
                 return

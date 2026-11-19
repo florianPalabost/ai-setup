@@ -142,7 +142,7 @@ export function createFactorySource(orca) {
             return
         }
         cleaningRoots.add(repo.root)
-        factoryJson(repo, ['clean'])
+        factoryJson(repo, ['clean', '--no-orca-refresh'])
             .then(({ removed }) => (removed.length > 0 ? refreshSidebar(repo) : null))
             .catch(() => {})
             .finally(() => cleaningRoots.delete(repo.root))
