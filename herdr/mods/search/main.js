@@ -27,7 +27,7 @@ export default class Search extends View {
     this.handle = cx.focus_handle();
     this.input = InputState.new({ placeholder: "Search in files…" });
     this.input.on("change", (_event, cx) => { this.query = this.input.value(); this.schedule(cx); });
-    this.input.on("submit", (event, cx) => this.pick(this.at, event.secondary, cx));
+    this.input.on("submit", (event, cx) => this.pick(this.at, { vscode: event.secondary, newTab: event.shift }, cx));
     this.input.focus();
     if (herdr.checking()) return;
     cx.spawn(async (cx) => {
@@ -107,14 +107,14 @@ export default class Search extends View {
     return row?.kind === ROW_KIND.file ? this.rows[index + 1] : row;
   }
 
-  pick(index, inVsCode, cx) {
+  pick(index, { vscode = false, newTab = false }, cx) {
     const match = this.firstMatchOf(index);
     if (!match || this.leaving) return;
-    if (inVsCode) {
+    if (vscode) {
       openInVsCode(herdr, this.root, `${this.root}/${match.path}`, match.line);
       return this.dismiss();
     }
-    openViewer(herdr, { root: this.root, path: match.path, line: match.line, column: match.column, length: match.length });
+    openViewer(herdr, { root: this.root, path: match.path, line: match.line, column: match.column, length: match.length }, { newTab });
     this.leaving = true;
     cx.timer.after(CLOSE_AFTER_OPEN_MS, () => this.dismiss());
   }
@@ -134,7 +134,7 @@ export default class Search extends View {
     const toggle = toggleFor(event);
     if (event.key === "escape") return this.dismiss();
     if (toggle) this.flip(toggle.option, cx);
-    else if (event.key === "enter" && event.modifiers.control) this.pick(this.at, true, cx);
+    else if (event.key === "enter" && event.modifiers.control) this.pick(this.at, { vscode: true }, cx);
     else if (steps[event.key]) { this.move(steps[event.key]); this.follow(cx); }
     else return;
     cx.stop_propagation();
@@ -174,7 +174,7 @@ export default class Search extends View {
     return v_flex().id("search-list").w_2_5().h_full().flex_none().min_h(0).overflow_hidden()
       .on_size_change((size, cx) => { this.visible = Math.max(1, Math.floor(size.height / herdr.settings().zoom / ROW_HEIGHT)); cx.notify(); })
       .on_scroll_wheel((event, cx) => this.onWheel(event, cx))
-      .child(resultList({ rows: this.rows, at: this.at, top: this.top, visible: this.visible, t, onPick: (index, _event, cx) => { this.at = index; this.pick(index, false, cx); } }));
+      .child(resultList({ rows: this.rows, at: this.at, top: this.top, visible: this.visible, t, onPick: (index, event, cx) => { this.at = index; this.pick(index, { vscode: event.modifiers.control, newTab: event.modifiers.shift }, cx); } }));
   }
 
   render(cx) {
@@ -187,6 +187,6 @@ export default class Search extends View {
       .child(h_flex().h(BODY_HEIGHT).flex_none().gap(12).child(this.listPane(t)).child(this.previewPane(t)))
       .child(h_flex().flex_none().gap(16).text_size(11).text_color(t.dim)
         .child(div().flex_1().min_w(0).truncate().child(this.status()))
-        .child(div().child("Enter: Viewer · Ctrl+Enter: VS Code · Alt+R: regex · Alt+W: whole word · Esc: close")));
+        .child(div().child("Enter: Viewer · Shift+Enter: new tab · Ctrl+Enter: VS Code · Alt+R: regex · Alt+W: whole word · Esc: close")));
   }
 }

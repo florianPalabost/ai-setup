@@ -1,6 +1,6 @@
 // What the Viewer shows in each space, kept in shared state, and how a pick
-// gets there. herdr loads no module from outside a mod's folder, so quick-open
-// and search keep a copy of this file. Takes the herdr module as `herdr`.
+// gets there. herdr loads no module from outside a mod's folder, so quick-open,
+// search and find keep a copy of this file. Takes the herdr module as `herdr`.
 export const VIEWER = Object.freeze({ mod: "viewer", name: "Viewer" });
 export const TARGETS_KEY = "viewer.targets";
 // A popup that closes right after openViewer takes the Viewer's first load down
@@ -12,17 +12,26 @@ export function targetFor(herdr, space) {
   return herdr.shared(TARGETS_KEY)?.[space] ?? null;
 }
 
+// Picks go to the tab named VIEWER.name; a tab of its own is named after its
+// file. A mod pane's props are not in panes(), so the name tells them apart.
 function openTab(herdr, space) {
-  const tabs = new Set(space.tabs.map((tab) => tab.id));
+  const tabs = new Set(space.tabs.filter((tab) => tab.name === VIEWER.name).map((tab) => tab.id));
   const pane = herdr.panes().find((candidate) => candidate.mod === VIEWER.mod && tabs.has(candidate.tab));
   if (pane) herdr.run("tab.select", { id: pane.tab });
   else herdr.run("tab.new", { name: VIEWER.name, space: space.id, mod: VIEWER.mod, props: { space: space.id } });
 }
 
-export function openViewer(herdr, target) {
+// A Viewer tab of its own keeps showing `target`: it does not follow picks.
+function openPinned(herdr, space, target) {
+  const props = { space: space.id, target: { ...target, seq: 1 } };
+  herdr.run("tab.new", { name: target.path.split("/").pop(), space: space.id, mod: VIEWER.mod, props });
+}
+
+export function openViewer(herdr, target, { newTab = false } = {}) {
   const spaces = herdr.spaces();
   const space = spaces.find((candidate) => candidate.active);
   if (!space) return;
+  if (newTab) return openPinned(herdr, space, target);
   const live = new Set(spaces.map((candidate) => candidate.id));
   const targets = Object.fromEntries(Object.entries(herdr.shared(TARGETS_KEY) ?? {}).filter(([id]) => live.has(id)));
   const seq = (targets[space.id]?.seq ?? 0) + 1;

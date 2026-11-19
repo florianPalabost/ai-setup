@@ -1,6 +1,7 @@
-// The Viewer: a tab showing one file at the line quick open or search picked,
-// editable, saved with ctrl-s. Each pick replaces the file, unless it has
-// unsaved edits; edits on disk reload it, unless it has unsaved edits.
+// The Viewer: a tab showing one file at the line quick open, search or find
+// picked, editable, saved with ctrl-s. Each pick replaces the file, unless it has
+// unsaved edits; edits on disk reload it, unless it has unsaved edits. A tab
+// opened with a target in its props keeps that file and ignores picks.
 import { View, div } from "gpui-kit";
 import { v_flex, Editor } from "gpui-base";
 import * as herdr from "herdr";
@@ -59,7 +60,7 @@ export default class Viewer extends View {
 
   // Loads the space's newest target; an older load still running drops its result.
   follow(cx) {
-    const target = targetFor(herdr, this.space());
+    const target = herdr.props()?.target ?? targetFor(herdr, this.space());
     if (!target || target.seq === this.seq) return;
     this.seq = target.seq;
     if (this.dirty && fileOf(target) !== this.file) { this.pending = target; return; }
