@@ -213,7 +213,7 @@ factory_system_tools() {
 install_factory_tools() {
   is_windows && return 0
   log "Factory sandbox tools"
-  if ! command -v srt >/dev/null 2>&1 || ((UPDATE)); then
+  if [[ -z "$(linux_command srt)" ]] || ((UPDATE)); then
     if require npm "srt (the factory's sandbox runtime)"; then
       run npm install -g "$SANDBOX_RUNTIME_NPM" </dev/null || warn "could not install $SANDBOX_RUNTIME_NPM"
     fi
@@ -584,12 +584,15 @@ install_skills() {
 #   skill                  skill from manifests/skills.txt
 #   link                   symlink into this repo or the vendor dir whose target is gone
 stale_entries() {
-  py3 - "$REPO_DIR" "$CLAUDE_DIR" "$VENDOR_DIR" "$BASH" <<'PY'
+  py3 - "$REPO_DIR" "$CLAUDE_DIR" "$VENDOR_DIR" "$BASH" "$(linux_command claude)" <<'PY'
 import json, os, re, shutil, subprocess, sys
 from pathlib import Path
 
 # bash by path: on Windows the bare name finds WSL's launcher in System32 first.
 repo, claude_dir, vendor_dir, bash = sys.argv[1], Path(sys.argv[2]), sys.argv[3], sys.argv[4]
+# By full path. On Windows, which() finds an npm install's claude.cmd, which the
+# bare name doesn't; elsewhere linux_command's, which leaves out Windows' under WSL.
+claude = shutil.which("claude") if os.name == "nt" else sys.argv[5]
 
 def git(*args):
     return subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True).stdout
@@ -631,8 +634,6 @@ for kind, rules in stale.items():
 
 # Plugins
 installed = set()
-# By full path: on Windows the bare name doesn't find an npm install's claude.cmd.
-claude = shutil.which("claude")
 if claude:
     out = subprocess.run([claude, "plugin", "list", "--json"], capture_output=True, text=True).stdout
     installed = {p["id"] for p in json.loads(out or "[]") if p["scope"] == "user"}

@@ -10,8 +10,13 @@ info() { printf '    %s\n' "$*"; }
 warn() { printf '\033[1;33m!!\033[0m  %s\n' "$*" >&2; }
 
 require() {
-  if ! command -v "$1" >/dev/null 2>&1; then
+  local path
+  if ! path="$(command -v "$1" 2>/dev/null)"; then
     warn "'$1' not found, skipping: $2"
+    return 1
+  fi
+  if is_windows_binary "$path"; then
+    warn "'$1' is Windows' ($path), not WSL's: install it inside WSL. Skipping: $2"
     return 1
   fi
 }
@@ -21,6 +26,25 @@ is_windows() {
     MINGW* | MSYS* | CYGWIN*) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+# Linux under WSL: Linux paths, with Windows' PATH appended by interop.
+is_wsl() {
+  [[ -n "${WSL_DISTRO_NAME:-}" ]] || grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null
+}
+
+# Whether $1, a resolved command path, is a Windows program WSL found on the
+# Windows drives. npm's npm, npx and claude are extensionless shell scripts, so
+# they'd run Windows' node and install into the Windows profile.
+is_windows_binary() {
+  is_wsl && [[ "$1" == /mnt/[a-z]/* ]]
+}
+
+# The path of command $1, empty if missing or, under WSL, Windows'.
+linux_command() {
+  local path
+  path="$(command -v "$1" 2>/dev/null)" || return 0
+  is_windows_binary "$path" || printf '%s\n' "$path"
 }
 
 # The command that runs Python 3, empty if none does. It has to be run to tell:
