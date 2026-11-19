@@ -63,11 +63,11 @@ export default class Output extends View {
   // Looks for the active space's sources and keeps following the one it had, else the space's pick.
   findSources(cx) {
     const space = activeSpace();
-    const run = ++this.finding;
+    const generation = ++this.finding;
     if (!space) { this.sources = []; this.open(null, cx); return; }
     cx.spawn(async (cx) => {
       const found = await this.finder.find(space).catch(() => ({ on: null, sources: [] }));
-      if (run !== this.finding) return;
+      if (generation !== this.finding) return;
       this.on = found.on;
       this.sources = found.sources;
       const issue = this.wantedIssue;
@@ -149,12 +149,11 @@ export default class Output extends View {
   // The drawn rows, worked out again only when the lines, the filter or the width change.
   rows() {
     const filter = this.filter.value();
-    const columns = Math.floor((this.width - 2 * ROWS_PADDING - SCROLLBAR_WIDTH) / (FONT_SIZE * CHAR_WIDTH));
+    const columns = this.width > 0 ? Math.floor((this.width - 2 * ROWS_PADDING - SCROLLBAR_WIDTH) / (FONT_SIZE * CHAR_WIDTH)) : Infinity;
     const key = [this.lines, filter, columns];
     if (key.some((part, index) => part !== this.view.key?.[index])) {
-      const count = this.view.rows.length;
       this.view = { key, rows: wrapRows(matching(this.lines ?? [], filter), columns) };
-      if (this.follow && this.view.rows.length !== count) this.scroll.scroll_to_bottom();
+      if (this.follow) this.scroll.scroll_to_bottom();
     }
     return this.view.rows;
   }
