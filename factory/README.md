@@ -50,4 +50,4 @@ Optional, at the repo root. Every key falls back to the default shown.
 
 ## Where to see it
 
-The Factory tab in herdr (`herdr/mods/factory-board`) and the Factory panel of the [Orca plugin](../orca-plugins/orch-dag) show these tickets as a kanban, with Watch, Resume and Log buttons.
+The Factory tab in herdr (`herdr/mods/factory-board`) shows these tickets as a kanban, with Watch, Resume and Log buttons. The Run graph tab (`herdr/mods/orch-graph`) draws a ticket's latest run as a graph of its steps.

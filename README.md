@@ -64,7 +64,7 @@ On a machine with no herdr, one run leaves the [Git panel](GLOSSARY.md) active:
 1. On Linux or WSL with neither `DISPLAY` nor `WAYLAND_DISPLAY` set, skips the whole step with one line. The rest of the setup still installs
 2. Installs herdr with [its official installer](https://herdr.dev) if `herdr-app` is missing. If that fails, it warns and carries on without the panel
 3. Installs `gh` where that needs no prompt: `brew`, `winget`, or `apt` with passwordless sudo. Otherwise the panel's PR sections say what to do
-4. Links the mods from `herdr/mods/` into `~/.config/herdr-app/mods/`: the Git panel, its Graph tab, and the Run graph and Factory tabs (`orch-graph`, `factory-board`), which the panel's header opens. Those two show what the [Orca plugin](orca-plugins/orch-dag) shows: an Orca orchestration run as a graph, and the [`factory`](factory) tickets as a kanban
+4. Links the mods from `herdr/mods/` into `~/.config/herdr-app/mods/`: the Git panel, its Graph tab, and the Run graph and Factory tabs (`orch-graph`, `factory-board`), which the panel's header opens. Those two show a [`factory`](factory) run as a graph of its steps, and the factory's tickets as a kanban
 5. If the Git panel's layout isn't showing or herdr's shipped files are missing, starts the herdr window if it isn't running and waits for `herdr-app status` to answer, for up to 60 seconds. Once the layout is active, re-runs don't open a window
 6. Builds any missing [clones](docs/adr/0002-herdr-clones-are-patches-on-shipped-files.md), then switches to the layout. If a patch no longer applies, it warns and stays on the current layout
 7. Ends with "run `gh auth login`" if `gh` isn't signed in

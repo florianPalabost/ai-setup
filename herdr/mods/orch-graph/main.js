@@ -1,29 +1,45 @@
-// The run graph: an Orca orchestration run drawn as cards, as the Orca plugin's
-// "Run graph" panel does (orca-plugins/orch-dag). The data comes from the same
-// run-graph.mjs, through the Orca CLI; layout.js places the cards.
+// The run graph: a factory run drawn as cards, one per step. The data comes from
+// `factory status --json --local` in the active space's repo, shaped by
+// run-graph.mjs; layout.js places the cards.
 import { View, div, PathBuilder } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { exec, theme, props, checking } from "herdr";
+import { exec, spaces, theme, props, checking } from "herdr";
 import { DEMO_RUN_ID } from "./demo.mjs";
-import { loadGraph } from "./run-graph.mjs";
-import { createOrcaCli } from "./orca.js";
+import { runGraph } from "./run-graph.mjs";
 import { buildGraph, layoutGraph, CARD_HEIGHT, EDGE_KINDS, NODE_KINDS } from "./layout.js";
 
+export const RUN_GRAPH_ERROR_CODES = Object.freeze({
+  noSpace: "run_graph_no_space",
+  cliMissing: "factory_cli_missing",
+  cliFailed: "factory_cli_failed",
+});
+
+const FACTORY_CLI = "factory";
+const CLI_TIMEOUT_MS = 30000;
 const POLL_INTERVAL_MS = 5000;
-const RUN_KEY = "orch-graph.run";
 const MARGIN = 16;
 const ARROW = 8;
 const EDGE_WIDTH = 2;
-const TERMINAL_STATUSES = new Set(["completed", "failed"]);
+const RUNNING = "running";
 
 const statusColors = (t) => ({
-  pending: t.dim, ready: t.ansi4, dispatched: t.ansi3, completed: t.ansi2,
-  failed: t.ansi1, blocked: t.ansi5, run: t.ansi6, gate: t.ansi11 ?? t.ansi3,
+  running: t.ansi3, done: t.ansi2, pass: t.ansi2, fail: t.ansi1, error: t.ansi1, run: t.ansi6,
 });
 
-function parseTimestamp(value) {
-  if (!value) return null;
-  return new Date(value.includes("T") ? value : `${value.replace(" ", "T")}Z`).getTime();
+const runGraphError = (code, message) => Object.assign(new Error(message), { code });
+
+// The runs of the repo the active space works in: its main repo, also from inside a ticket's worktree.
+async function loadStatus() {
+  const space = spaces().find((candidate) => candidate.active);
+  if (!space?.folder) throw runGraphError(RUN_GRAPH_ERROR_CODES.noSpace, "No active space");
+  let result;
+  try {
+    result = await exec(FACTORY_CLI, ["status", "--json", "--local", "--repo", space.folder], { on: space.machine ?? null, timeout: CLI_TIMEOUT_MS });
+  } catch (error) {
+    throw runGraphError(RUN_GRAPH_ERROR_CODES.cliMissing, `No factory CLI on PATH (run install.sh): ${error?.message ?? error}`);
+  }
+  if (result.code !== 0) throw runGraphError(RUN_GRAPH_ERROR_CODES.cliFailed, result.stderr.trim() || `factory status exited ${result.code}`);
+  return { folder: space.folder, status: JSON.parse(result.stdout) };
 }
 
 function shortDuration(milliseconds) {
@@ -33,18 +49,16 @@ function shortDuration(milliseconds) {
   return hours < 48 ? `${hours}h ${minutes % 60}m` : `${Math.floor(hours / 24)}d`;
 }
 
-function ageLabel(task) {
-  const createdAt = parseTimestamp(task.createdAt);
-  if (!createdAt) return "";
-  const completedAt = parseTimestamp(task.completedAt);
-  return completedAt ? `took ${shortDuration(completedAt - createdAt)}` : `${shortDuration(Date.now() - createdAt)} old`;
+function ageLabel(step) {
+  if (!step.startedAt) return "";
+  const startedAt = new Date(step.startedAt).getTime();
+  return step.endedAt ? `took ${shortDuration(new Date(step.endedAt).getTime() - startedAt)}` : `${shortDuration(Date.now() - startedAt)} so far`;
 }
 
 export default class OrchGraph extends View {
   init(_props, cx) {
-    this.orca = createOrcaCli(exec);
     this.data = null; this.layout = null; this.signature = ""; this.error = null; this.loading = false;
-    this.runId = props()?.runId ?? localStorage.getItem(RUN_KEY) ?? null;
+    this.runId = props()?.runId ?? null;
     if (checking()) return;
     this.refresh(cx);
     cx.timer.every(POLL_INTERVAL_MS, (cx) => this.refresh(cx));
@@ -55,7 +69,8 @@ export default class OrchGraph extends View {
     this.loading = true;
     cx.spawn(async (cx) => {
       try {
-        const data = await loadGraph(this.orca.orchestration, { runId: this.runId });
+        const { folder, status } = await loadStatus();
+        const data = runGraph(status, { runId: this.runId, folder });
         this.error = null;
         const graph = data.run ? buildGraph(data) : null;
         const signature = JSON.stringify(graph && [graph.nodes.map(({ id, kind }) => [id, kind]), graph.edges]);
@@ -66,7 +81,7 @@ export default class OrchGraph extends View {
         }
         this.data = data;
       } catch (e) {
-        this.error = e?.message ?? String(e);
+        this.error = `${e?.code ?? "error"}: ${e?.message ?? e}`;
       } finally {
         this.loading = false;
         cx.notify();
@@ -76,7 +91,6 @@ export default class OrchGraph extends View {
 
   show(runId, cx) {
     this.runId = runId;
-    localStorage.setItem(RUN_KEY, runId);
     this.signature = "";
     this.refresh(cx);
   }
@@ -90,9 +104,9 @@ export default class OrchGraph extends View {
 
   header(t) {
     const run = this.data?.run;
-    const tasks = this.data?.tasks ?? [];
-    const done = tasks.filter((task) => TERMINAL_STATUSES.has(task.status)).length;
-    const status = this.error ? this.error : !this.data ? "Loading…" : !run ? "No orchestration run yet" : `${done}/${tasks.length} tasks ended`;
+    const steps = this.data?.steps ?? [];
+    const done = steps.filter((step) => step.status !== RUNNING).length;
+    const status = this.error ? this.error : !this.data ? "Loading…" : !run ? `No factory run in ${this.data.repo ?? "this repo"} yet` : `${done}/${steps.length} steps ended`;
     const button = (id, label, onClick) => div().id(id).flex_none().px(6).py(2).rounded(5).text_color(t.muted).cursor_pointer()
       .hover((s) => s.bg(t.hover).text_color(t.foreground)).on_click((_e, cx) => onClick(cx)).child(label);
     const header = h_flex().id("orch-graph-header").h(36).flex_none().px(10).gap(6).items_center().border_b(1).border_color(t.border)
@@ -109,8 +123,6 @@ export default class OrchGraph extends View {
     const style = {
       [EDGE_KINDS.root]: { color: t.dim, dashed: false },
       [EDGE_KINDS.dep]: { color: t.muted, dashed: false },
-      [EDGE_KINDS.child]: { color: t.dim, dashed: true },
-      [EDGE_KINDS.gate]: { color: colors.gate, dashed: true },
     };
     // Coordinates as percentages of the drawing: paint_path's pixels follow neither the zoom nor the display's scale.
     const { width, height } = this.layout;
@@ -134,31 +146,25 @@ export default class OrchGraph extends View {
       .px(10).py(6).gap(4).rounded(8).bg(t.surface).border(1).overflow_hidden();
     const line = (text, color) => div().truncate().text_size(11).text_color(color).child(text);
     if (node.kind === NODE_KINDS.run) {
-      const done = node.taskCount > 0 && node.doneCount === node.taskCount;
-      return box.border_color(done ? colors.completed : colors.run).border_l(4)
+      const ended = Boolean(node.run.finishedAt);
+      return box.border_color(ended ? colors.done : colors.run).border_l(4)
         .child(div().truncate().font_semibold().child(node.run.objective || node.run.id))
-        .child(line(`${node.doneCount}/${node.taskCount} completed`, t.dim));
+        .child(line(`${node.doneCount}/${node.stepCount} steps ended`, t.dim));
     }
-    if (node.kind === NODE_KINDS.gate) {
-      const open = node.gate.status === "pending";
-      return box.border_color(open ? colors.gate : t.border).border_l(4)
-        .child(line(open ? "⚠ Gate · waiting for you" : `✓ Gate · ${node.gate.resolution ? `→ ${node.gate.resolution}` : "resolved"}`, open ? colors.gate : t.dim))
-        .child(div().truncate().child(node.gate.question));
-    }
-    const { task } = node, color = colors[task.status] ?? t.dim;
-    const meta = [task.status, task.outcome && task.outcome !== "succeeded" ? task.outcome : null, task.agent, ageLabel(task)].filter(Boolean);
+    const { step } = node, color = colors[step.status] ?? t.dim;
+    const meta = [step.agent, ageLabel(step), step.detail].filter(Boolean);
     return box.border_color(color).border_l(4)
-      .child(div().truncate().child(task.name))
+      .child(div().truncate().child(step.name))
       .child(h_flex().gap(8).text_size(11)
-        .child(div().flex_none().text_color(color).child(meta[0]))
-        .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(meta.slice(1).join(" · "))));
+        .child(div().flex_none().text_color(color).child(step.status))
+        .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(meta.join(" · "))));
   }
 
   render(_cx) {
     const t = theme(), colors = statusColors(t);
     const root = v_flex().id("orch-graph").size_full().min_h(0).bg(t.background).text_color(t.foreground).text_size(13).child(this.header(t));
     if (!this.layout) {
-      return root.child(div().p(16).text_color(t.dim).child(this.error ? "Can't read Orca's orchestration runs." : this.data ? "No orchestration run yet. Try the demo." : "Loading…"));
+      return root.child(div().p(16).text_color(t.dim).child(this.error ? "Can't read the factory's runs." : this.data ? "No factory run yet. Try the demo." : "Loading…"));
     }
     const { width, height, nodes } = this.layout;
     return root.child(div().id("orch-graph-scroll").flex_1().min_h(0).overflow_scroll()
