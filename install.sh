@@ -790,6 +790,9 @@ prune_stale() {
   local rules
   rules="$(grep '^rule:' <<<"$entries" || true)"
   [[ -n "$rules" ]] && remove_rules "$rules" && info "removed rules from $CLAUDE_DIR/settings.json"
+  local herdr_keys
+  herdr_keys="$(grep '^herdr-key' <<<"$entries" || true)"
+  [[ -n "$herdr_keys" ]] && remove_herdr_keys "$herdr_keys" && info "removed bindings from $HERDR_HOME/keys.json"
   while IFS=$'\t' read -r kind entry; do
     case "$kind" in
       plugin)
