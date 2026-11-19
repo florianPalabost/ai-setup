@@ -29,3 +29,6 @@ debug/
 .DS_Store
 .idea/
 .vscode/
+
+# Local agent scratch: review reports and other throwaway output
+.scratch/
