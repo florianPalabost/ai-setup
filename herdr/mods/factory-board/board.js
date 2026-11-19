@@ -20,9 +20,11 @@ export function sinceLabel(isoTime, now = Date.now()) {
   return minutes < 48 * 60 ? `${Math.floor(minutes / 60)}h ago` : `${Math.floor(minutes / 1440)}d ago`;
 }
 
+const isUnblockedReady = (ticket) => ticket.state === "ready-for-agent" && ticket.blockedBy.length === 0;
+
 // The oldest unblocked ready ticket: the one `factory next` picks.
 export function nextUp(tickets) {
-  return tickets.filter((ticket) => ticket.state === "ready-for-agent" && ticket.blockedBy.length === 0)
+  return tickets.filter(isUnblockedReady)
     .sort((left, right) => left.number - right.number)[0] ?? null;
 }
 
@@ -54,10 +56,14 @@ export function boardLanes(tickets) {
 export const withLocalRuns = (tickets, runs) => tickets.map((ticket) => ({ ...ticket, run: runs[ticket.number] ?? ticket.run }));
 
 // The buttons a card gets, in order: { label, action } with action one of ACTIONS.
-export const ACTIONS = Object.freeze({ worktree: "worktree", watch: "watch", resume: "resume", issue: "issue", pr: "pr", log: "log" });
+export const ACTIONS = Object.freeze({ start: "start", worktree: "worktree", watch: "watch", resume: "resume", issue: "issue", pr: "pr", log: "log" });
 
-export function cardActions(ticket) {
+// `starting`: Start was just clicked and no poll has shown the run yet.
+export function cardActions(ticket, { starting = false } = {}) {
   const actions = [];
+  const running = ticket.run && !ticket.run.finishedAt;
+  const startable = isUnblockedReady(ticket) || ticket.state === "ready-for-human";
+  if (startable && !starting && !running) actions.push({ label: "Start", action: ACTIONS.start });
   if (ticket.worktree) {
     actions.push({ label: "Worktree", action: ACTIONS.worktree });
     if (ticket.run && !ticket.run.finishedAt) actions.push({ label: "Watch", action: ACTIONS.watch });
@@ -67,6 +73,17 @@ export function cardActions(ticket) {
   if (ticket.pr) actions.push({ label: `PR #${ticket.pr.number}${ticket.pr.isDraft ? " draft" : ""}`, action: ACTIONS.pr });
   if (ticket.run) actions.push({ label: "Log", action: ACTIONS.log });
   return actions;
+}
+
+// How long a clicked Start stays hidden when no poll shows the run.
+export const START_MARK_MS = 2 * 60000;
+
+// Whether a "just started" mark { at, state } is done with: the ticket left the state it was
+// clicked in, has a run started after the click, or the mark expired. `ticket` is undefined when no poll shows it.
+export function startSettled(mark, ticket, now = Date.now()) {
+  if (now - mark.at >= START_MARK_MS) return true;
+  if (!ticket) return false;
+  return ticket.state !== mark.state || Date.parse(ticket.run?.startedAt) >= mark.at;
 }
 
 // The small tags under a card's title.

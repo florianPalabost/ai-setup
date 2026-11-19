@@ -5,7 +5,7 @@
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { exec, readTextFile, spaces, panes, theme, run, notify, window, checking, props, layout, setShared } from "herdr";
-import { ACTIONS, STEP_MARKS, boardLanes, cardActions, cardTags, nextUp, sinceLabel } from "./board.js";
+import { ACTIONS, STEP_MARKS, boardLanes, cardActions, cardTags, nextUp, sinceLabel, startSettled } from "./board.js";
 import { createOpener } from "./opener.js";
 import { createFactorySource } from "./source.js";
 import { factoryPanel } from "./panel.js";
@@ -20,6 +20,8 @@ const PAGER_SCRIPT = 'exec "${PAGER:-less}" "$1"';
 const OUTPUT_FOLLOW_KEY = "bottom-output.follow";
 const BOTTOM_PANEL = "bottom";
 
+const startKey = (root, number) => `${root}\0${number}`;
+
 const hasNode = (node, id) => node?.id === id || (node?.children ?? []).some((child) => hasNode(child, id));
 
 const laneColor = (t, key) => ({ human: t.ansi1, working: t.ansi3, done: t.ansi2, ready: t.ansi4 })[key] ?? t.dim;
@@ -30,6 +32,8 @@ export default class FactoryBoard extends View {
     this.source = createFactorySource({ exec, readTextFile, spaces, panes });
     this.openUrl = createOpener({ platform: () => window().platform, readTextFile, exec, warn: (body) => this.warn("Link not opened", body) });
     this.data = null; this.error = null; this.loading = false; this.panel = Boolean(props()?.panel);
+    // Tickets whose Start was just clicked, by startKey: { root, number, state, at }.
+    this.starting = new Map();
     this.root = localStorage.getItem(REPO_KEY);
     if (checking()) return;
     this.refresh(cx);
@@ -45,6 +49,7 @@ export default class FactoryBoard extends View {
       try {
         this.data = await this.source.getFactory(this.root);
         this.error = null;
+        this.settleStarts();
       } catch (e) {
         this.error = `${e?.code ?? "error"}: ${e?.message ?? e}`;
       } finally {
@@ -52,6 +57,23 @@ export default class FactoryBoard extends View {
         cx.notify();
       }
     });
+  }
+
+  settleStarts() {
+    const now = Date.now();
+    const tickets = new Map((this.data?.tickets ?? []).map((ticket) => [ticket.number, ticket]));
+    for (const [key, mark] of this.starting) {
+      const ticket = mark.root === this.data?.repo?.root ? tickets.get(mark.number) : undefined;
+      if (startSettled(mark, ticket, now)) this.starting.delete(key);
+    }
+  }
+
+  start(ticket, cx) {
+    const { root } = this.data.repo;
+    this.openTerminal(ticket, "run", root);
+    this.starting.set(startKey(root, ticket.number), { root, number: ticket.number, state: ticket.state, at: Date.now() });
+    this.source.forgetGithub(root);
+    cx.notify();
   }
 
   pickRepo(by, cx) {
@@ -73,8 +95,8 @@ export default class FactoryBoard extends View {
     else run("space.new", { folder: ticket.worktree, machine: on ?? undefined });
   }
 
-  openTerminal(ticket, command) {
-    run("terminal.open", { argv: ["factory", command, String(ticket.number), "--repo", this.data.repo.root], folder: ticket.worktree, place: "tab" });
+  openTerminal(ticket, command, folder = ticket.worktree) {
+    run("terminal.open", { argv: ["factory", command, String(ticket.number), "--repo", this.data.repo.root], folder, place: "tab" });
   }
 
   // In the Bottom panel's Output tab when the layout has it, else in a terminal tab.
@@ -87,6 +109,7 @@ export default class FactoryBoard extends View {
   act(ticket, action, cx) {
     const repo = this.data?.repo;
     if (!repo) return;
+    if (action === ACTIONS.start) return this.start(ticket, cx);
     if (action === ACTIONS.worktree) return this.openWorktree(ticket);
     if (action === ACTIONS.watch) return this.watch(ticket);
     if (action === ACTIONS.resume) return this.openTerminal(ticket, action);
@@ -132,7 +155,7 @@ export default class FactoryBoard extends View {
 
   card(ticket, depth, isNext, t, color) {
     const tags = cardTags(ticket, { isNext });
-    const actions = cardActions(ticket);
+    const actions = cardActions(ticket, { starting: this.starting.has(startKey(this.data.repo.root, ticket.number)) });
     const tag = ({ text, next }) => div().flex_none().px(5).rounded(4).text_size(10).border(1)
       .border_color(next ? color : t.border).text_color(next ? color : t.muted).child(text);
     let box = v_flex().id(`ticket-${ticket.number}`).ml(depth * CHILD_INDENT).p(8).gap(6).rounded(8).bg(t.surface)

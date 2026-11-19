@@ -82,5 +82,11 @@ export function createFactorySource({ exec, readTextFile, spaces, panes, now = (
   // Writes the ticket's latest run as Markdown with `factory log` and resolves with its path.
   const logPath = async (repo, issueNumber) => (await factoryJson(repo, ["log", String(issueNumber)])).path;
 
-  return { getFactory, logPath, forgetRepos: () => { repos = { at: 0, list: [] }; } };
+  return {
+    getFactory,
+    logPath,
+    forgetRepos: () => { repos = { at: 0, list: [] }; },
+    // Makes the next getFactory read GitHub again for that repo.
+    forgetGithub: (root) => { githubByRoot.delete(root); },
+  };
 }
