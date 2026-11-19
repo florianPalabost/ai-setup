@@ -17,7 +17,7 @@ HERDR_SRC="$REPO_DIR/herdr"
 # leads out of its home. "<folder in herdr/mods/> <folder in the herdr home>"
 HERDR_MOD_ICONS=("git-graph/icons git-graph-icons")
 # "<shipped mod> <clone> <patch in herdr/patches/>"
-HERDR_MOD_CLONES=("tabs tabs-git tabs.patch" "menu menu-git menu.patch")
+HERDR_MOD_CLONES=("tabs tabs-git tabs.patch" "menu menu-git menu.patch" "files files-git files.patch")
 HERDR_LAYOUT_SHIPPED=main
 HERDR_LAYOUT=main-git
 HERDR_LAYOUT_EDIT="$HERDR_SRC/patches/main-layout.json"

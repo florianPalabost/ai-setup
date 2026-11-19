@@ -1,6 +1,7 @@
 {
   "blocks": {
     "tabs": { "from": "tabs", "to": "tabs-git" },
+    "files": { "from": "files", "to": "files-git" },
     "changes": { "from": "changes", "to": "git", "feature": "git" }
   },
   "add": {
