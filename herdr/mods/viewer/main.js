@@ -5,7 +5,7 @@
 import { View, div } from "gpui-kit";
 import { v_flex, Editor } from "gpui-base";
 import * as herdr from "herdr";
-import { targetFor, CLOSE_AFTER_OPEN_MS } from "./target.js";
+import { targetFor, fileName, CLOSE_AFTER_OPEN_MS, TABS_KEY, VIEWER_MOD } from "./target.js";
 import { isBinary, lineAt, rangeFor, shown, MAX_CHARS } from "./text.js";
 import { createCode } from "./code.js";
 import { watchFile } from "./file-watch.js";
@@ -58,9 +58,33 @@ export default class Viewer extends View {
     return herdr.props()?.space ?? herdr.spaces().find((space) => space.active)?.id;
   }
 
+  claimed() {
+    const claim = herdr.props()?.claim;
+    const entry = herdr.shared(TABS_KEY)?.[this.space()];
+    return claim && entry?.claim === claim ? entry : null;
+  }
+
+  recordTab() {
+    const entry = this.claimed();
+    if (!entry || entry.tab) return;
+    const before = new Set(entry.before);
+    const tabs = herdr.spaces().find((space) => space.id === this.space())?.tabs ?? [];
+    const viewers = new Set(herdr.panes().filter((pane) => pane.mod === VIEWER_MOD).map((pane) => pane.tab));
+    const added = tabs.filter((tab) => !before.has(tab.id) && viewers.has(tab.id));
+    if (added.length === 1) herdr.setShared(TABS_KEY, { ...herdr.shared(TABS_KEY), [this.space()]: { ...entry, tab: added[0].id } });
+  }
+
+  // A Pinned Viewer keeps its target; otherwise only the space's Viewer tab follows picks.
+  targetNow() {
+    const pinned = herdr.props()?.target;
+    if (pinned) return pinned;
+    return this.claimed() ? targetFor(herdr, this.space()) : null;
+  }
+
   // Loads the space's newest target; an older load still running drops its result.
   follow(cx) {
-    const target = herdr.props()?.target ?? targetFor(herdr, this.space());
+    if (!herdr.checking()) this.recordTab();
+    const target = this.targetNow();
     if (!target || target.seq === this.seq) return;
     this.seq = target.seq;
     if (this.dirty && fileOf(target) !== this.file) { this.pending = target; return; }
@@ -84,6 +108,8 @@ export default class Viewer extends View {
     if (this.seq !== target.seq) return;
     if (error) return this.fail(error, target, cx);
     this.target = target; this.error = null;
+    const tab = this.claimed()?.tab;
+    if (tab) herdr.run("tab.rename", { id: tab, name: fileName(target.path) });
     this.show(file, disk, target, cx);
     cx.notify();
   }
