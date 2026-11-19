@@ -5,6 +5,7 @@ import { ERROR_CODES, FactoryError, LABELS, REVIEW_VERDICTS, branchForIssue } fr
 import { RUN_STEP, STEP_NAMES, STEP_STATUSES, progressRecorder } from './progress.mjs'
 import { commentOnIssue, createDraftPr, editPrBody, findOpenPrForBranch, swapLabels, viewIssue } from './github.mjs'
 import { PR_BODY_ALLOWED_TOOLS, PR_BODY_SCHEMA, REVIEW_ALLOWED_TOOLS, REVIEW_SCHEMA, implementPrompt, prBodyPrompt, reviewPrompt, reworkPrompt } from './prompts.mjs'
+import { writeWatchLog } from './session.mjs'
 import { runCheckCommand, runShellCommand } from './shell.mjs'
 import { commitsAhead, prepareWorktree, pushBranch, worktreePathFor } from './worktree.mjs'
 
@@ -101,6 +102,7 @@ export async function runTicket({ repo, issueNumber, config, options, log }) {
     await progress.record({ step: RUN_STEP, status: STEP_STATUSES.running, pid: process.pid })
     await swapLabels(issue, { add: [LABELS.working], remove: [LABELS.ready, LABELS.done, LABELS.human] }, { cwd })
 
+    const watchLog = writeWatchLog({ repo, issueNumber: issue.number, runDir })
     try {
         const { created } = await prepareWorktree({ root: repo.root, path: worktreePath, branch, base })
         if (created) {
@@ -220,5 +222,8 @@ export async function runTicket({ repo, issueNumber, config, options, log }) {
         await swapLabels(issue, { add: [LABELS.human], remove: [LABELS.working] }, { cwd }).catch(() => {})
         await finishRun(STEP_STATUSES.error, error.message).catch(() => {})
         throw error
+    } finally {
+        watchLog.stop()
+        await watchLog.done
     }
 }
