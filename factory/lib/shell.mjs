@@ -65,22 +65,53 @@ export function runShellCommand(commandLine, { cwd }) {
     })
 }
 
+/** How long a timed-out check gets to stop after SIGTERM before SIGKILL. */
+const CHECK_KILL_GRACE_MS = 5000
+
+/** Signals the check's whole process group; the group may already be gone. */
+function signalGroup(child, signal) {
+    try {
+        process.kill(-child.pid, signal)
+    } catch {}
+}
+
 /**
- * Runs a repo-configured check command through sh and never rejects on a non-zero exit.
+ * Runs a repo-configured check command through sh, in its own process group, and never rejects on a
+ * non-zero exit. Past `timeoutMs` the group is killed and the check fails. Processes the check leaves
+ * behind are killed when sh exits, since one holding the output pipe would keep it from ever closing.
  * @returns {Promise<{ passed: boolean, output: string }>}
  */
-export function runCheckCommand(commandLine, { cwd }) {
+export function runCheckCommand(commandLine, { cwd, timeoutMs }) {
     return new Promise((resolve, reject) => {
-        const child = spawn('sh', ['-c', commandLine], { cwd, stdio: ['ignore', 'pipe', 'pipe'] })
+        const child = spawn('sh', ['-c', commandLine], { cwd, stdio: ['ignore', 'pipe', 'pipe'], detached: true })
         let output = ''
+        let timedOut = false
+        let killTimer = null
+        const timer = setTimeout(() => {
+            timedOut = true
+            signalGroup(child, 'SIGTERM')
+            killTimer = setTimeout(() => signalGroup(child, 'SIGKILL'), CHECK_KILL_GRACE_MS)
+        }, timeoutMs)
         child.stdout.on('data', (chunk) => {
             output += chunk
         })
         child.stderr.on('data', (chunk) => {
             output += chunk
         })
-        child.on('error', (error) => reject(new FactoryError(ERROR_CODES.commandFailed, `${commandLine}: ${error.message}`)))
-        child.on('close', (exitCode) => resolve({ passed: exitCode === 0, output }))
+        child.on('error', (error) => {
+            clearTimeout(timer)
+            reject(new FactoryError(ERROR_CODES.commandFailed, `${commandLine}: ${error.message}`))
+        })
+        child.on('exit', () => signalGroup(child, 'SIGKILL'))
+        child.on('close', (exitCode) => {
+            clearTimeout(timer)
+            clearTimeout(killTimer)
+            if (timedOut) {
+                resolve({ passed: false, output: `${output}\n[factory] timed out after ${Math.round(timeoutMs / 60000)} min` })
+                return
+            }
+            resolve({ passed: exitCode === 0, output })
+        })
     })
 }
 

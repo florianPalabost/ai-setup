@@ -35,12 +35,12 @@ const tail = (text, lines) => text.trimEnd().split('\n').slice(-lines).join('\n'
  * Runs the repo's checks on the host, so the factory never takes an agent's word that they pass.
  * @returns {Promise<string[]>} one finding per failing check
  */
-async function failingChecks({ checks, cwd, runDir, attempt, log, progress, step }) {
+async function failingChecks({ checks, cwd, timeoutMs, runDir, attempt, log, progress, step }) {
     const failures = []
     for (const [index, command] of checks.entries()) {
         log(`check: ${command}`)
         await progress.record({ step, status: STEP_STATUSES.running, detail: command })
-        const { passed, output } = await runCheckCommand(command, { cwd })
+        const { passed, output } = await runCheckCommand(command, { cwd, timeoutMs })
         await writeFile(join(runDir, `checks-${attempt}-${index + 1}.log`), `$ ${command}\n\n${output}`)
         if (!passed) {
             failures.push(`Automated check \`${command}\` fails. Last lines of its output:\n\`\`\`\n${tail(output, CHECK_OUTPUT_TAIL_LINES)}\n\`\`\``)
@@ -145,7 +145,7 @@ export async function runTicket({ repo, issueNumber, config, options, log }) {
         let reworks = 0
         for (let attempt = 1; ; attempt++) {
             const checksStep = STEP_NAMES.checks(attempt)
-            const checkFailures = await progress.track(checksStep, () => failingChecks({ checks: config.checks, cwd: worktreePath, runDir, attempt, log, progress, step: checksStep }), {
+            const checkFailures = await progress.track(checksStep, () => failingChecks({ checks: config.checks, cwd: worktreePath, timeoutMs: config.checkTimeoutMinutes * 60_000, runDir, attempt, log, progress, step: checksStep }), {
                 statusOf: (failures) => (failures.length > 0 ? STEP_STATUSES.fail : STEP_STATUSES.pass),
             })
             if (checkFailures.length > 0) {

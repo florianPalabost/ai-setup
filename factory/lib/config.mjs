@@ -13,6 +13,7 @@ const DEFAULTS = Object.freeze({
     permissionMode: 'auto',
     maxReworks: 2,
     agentTimeoutMinutes: 60,
+    checkTimeoutMinutes: 20,
     sandbox: { allowWrite: [], denyRead: [] },
 })
 
