@@ -310,18 +310,25 @@ install_plugins() {
   require_python "plugins" || return 0
 
   local marketplaces installed
-  marketplaces="$(claude plugin marketplace list --json | py3 -c 'import json,sys; print("\n".join(m["name"] for m in json.load(sys.stdin)))')"
-  installed="$(claude plugin list --json | py3 -c 'import json,sys; print("\n".join(p["id"] for p in json.load(sys.stdin) if p["scope"] == "user"))')"
+  if ! marketplaces="$(claude plugin marketplace list --json | py3 -c 'import json,sys; print("\n".join(m["name"] for m in json.load(sys.stdin)))')" ||
+    ! installed="$(claude plugin list --json | py3 -c 'import json,sys; print("\n".join(p["id"] for p in json.load(sys.stdin) if p["scope"] == "user"))')"; then
+    warn "could not list Claude Code's plugins, skipping plugins"
+    return 0
+  fi
 
   local plugin repo state marketplace
   while read -r plugin repo state; do
     marketplace="${plugin#*@}"
     if ! grep -qxF "$marketplace" <<<"$marketplaces"; then
-      run claude plugin marketplace add "$repo"
+      if ! run claude plugin marketplace add "$repo"; then
+        warn "could not add marketplace $repo, skipping $plugin"
+        continue
+      fi
       marketplaces+=$'\n'"$marketplace"
     fi
-    if ! grep -qxF "$plugin" <<<"$installed"; then
-      run claude plugin install --scope user "$plugin"
+    if ! grep -qxF "$plugin" <<<"$installed" && ! run claude plugin install --scope user "$plugin"; then
+      warn "could not install $plugin"
+      continue
     fi
     if [[ "$state" == "disabled" ]]; then
       run claude plugin disable --scope user "$plugin" >/dev/null 2>&1 || true
@@ -487,7 +494,7 @@ vendor_checkout() {
   if [[ ! -d "$dest/.git" ]]; then
     {
       run mkdir -p "$VENDOR_DIR"
-      run git clone --depth 1 --quiet "$1" "$dest"
+      run git clone --depth 1 --quiet "$1" "$dest" || warn "could not clone $1"
     } >&2
   fi
   printf '%s\n' "$dest"
@@ -502,9 +509,8 @@ install_git_skill() {
     return 0
   fi
   dest="$(vendor_checkout "$url")"
-  # Only on a dry run, which clones nothing
   if [[ ! -d "$dest" ]]; then
-    info "$name: not cloned yet, so its links can't be previewed"
+    ((DRY_RUN)) && info "$name: not cloned yet, so its links can't be previewed"
     return 0
   fi
 
@@ -528,9 +534,8 @@ install_git_skill() {
 install_plugin_skills() {
   local url="$1" dest path
   dest="$(vendor_checkout "$url")"
-  # Only on a dry run, which clones nothing
   if [[ ! -d "$dest" ]]; then
-    info "$url: not cloned yet, so its skills can't be previewed"
+    ((DRY_RUN)) && info "$url: not cloned yet, so its skills can't be previewed"
     return 0
   fi
   while read -r path; do
@@ -551,7 +556,8 @@ install_skills() {
         if [[ -e "$CLAUDE_DIR/skills/$target" ]]; then
           info "$target already installed"
         elif require npx "skill $target"; then
-          run npx -y skills add "$source" --global --yes --agent claude-code --skill "$target"
+          run npx -y skills add "$source" --global --yes --agent claude-code --skill "$target" </dev/null ||
+            warn "could not install skill $target from $source"
         fi
         ;;
       git)
@@ -814,7 +820,7 @@ update_plugins() {
   require claude "plugin update" || return 0
   require_python "plugin update" || return 0
 
-  run claude plugin marketplace update
+  run claude plugin marketplace update || warn "could not update the plugin marketplaces"
 
   local before after plugin _version
   before="$(user_plugin_versions)"
