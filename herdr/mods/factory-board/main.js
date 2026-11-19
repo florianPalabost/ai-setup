@@ -1,12 +1,14 @@
 // The Factory board: the factory's tickets as a kanban. Lanes: Needs you, Working,
 // Done · draft PR, Ready. A blocked ticket sits under the one blocking it, and
-// the ticket `factory next` would pick is marked "next up".
+// the ticket `factory next` would pick is marked "next up". With `panel` in its
+// props it is the Factory panel instead (panel.js).
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { exec, readTextFile, spaces, panes, theme, run, notify, window, checking } from "herdr";
+import { exec, readTextFile, spaces, panes, theme, run, notify, window, checking, props } from "herdr";
 import { ACTIONS, STEP_MARKS, boardLanes, cardActions, cardTags, nextUp, sinceLabel } from "./board.js";
 import { createOpener } from "./opener.js";
 import { createFactorySource } from "./source.js";
+import { factoryPanel } from "./panel.js";
 
 const POLL_INTERVAL_MS = 5000;
 const REPO_KEY = "factory-board.repo";
@@ -22,7 +24,7 @@ export default class FactoryBoard extends View {
   init(_props, cx) {
     this.source = createFactorySource({ exec, readTextFile, spaces, panes });
     this.openUrl = createOpener({ platform: () => window().platform, readTextFile, exec, warn: (body) => this.warn("Link not opened", body) });
-    this.data = null; this.error = null; this.loading = false;
+    this.data = null; this.error = null; this.loading = false; this.panel = Boolean(props()?.panel);
     this.root = localStorage.getItem(REPO_KEY);
     if (checking()) return;
     this.refresh(cx);
@@ -148,6 +150,7 @@ export default class FactoryBoard extends View {
 
   render(_cx) {
     const t = theme();
+    if (this.panel) return factoryPanel(this, laneColor, t);
     const root = v_flex().id("factory-board").size_full().min_h(0).bg(t.background).text_color(t.foreground).text_size(13).child(this.header(t));
     if (!this.data?.repo) {
       const message = this.error ? "Can't read the factory." : this.data ? "No repo open in herdr has a .factory.json." : "Loading…";
