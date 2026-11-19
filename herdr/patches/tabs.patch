@@ -9,6 +9,9 @@
 +  { id: "changes", label: "Git", icon: "mods/workspace-chrome/git-branch.svg" },
 +];
 +
+@@ -119 +127 @@
+-        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openOverlay({ mod: "menu", kind: "popup", width: 200, props: { tab: "tab", target: { id: c.id, space: space.id } } }); })
++        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openOverlay({ mod: "menu-git", kind: "popup", width: 200, props: { tab: "tab", target: { id: c.id, space: space.id } } }); })
 @@ -132 +140,3 @@
 -    const enabled = shared("workspace.panels") ?? ["files", "changes"];
 +    // The welcome's list decides Files only: it can leave out the panels above.
