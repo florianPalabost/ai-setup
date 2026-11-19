@@ -117,7 +117,7 @@ export default class Viewer extends View {
       .when(Boolean(target) && !this.error, (el) => el.child(
         div().id("viewer-vscode").flex_none().px(8).py(3).rounded(6).text_size(12).cursor_pointer()
           .bg(t.raised).hover((s) => s.bg(t.hover))
-          .on_click(() => { openInVsCode(herdr, fileOf(target), this.currentLine()); })
+          .on_click(() => { openInVsCode(herdr, target.root, fileOf(target), this.currentLine()); })
           .child("Open in VS Code")));
   }
 
