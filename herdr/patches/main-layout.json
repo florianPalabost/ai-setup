@@ -2,5 +2,8 @@
   "blocks": {
     "tabs": { "from": "tabs", "to": "tabs-git" },
     "changes": { "from": "changes", "to": "git" }
+  },
+  "add": {
+    "panel-body": [{ "id": "find", "type": "block", "content": { "mod": "find" } }]
   }
 }

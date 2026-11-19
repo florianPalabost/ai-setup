@@ -124,9 +124,7 @@ patch_applies() {
   return "$status"
 }
 
-# Write to $3 the layout $1 with the edit $2 applied: for each block id, the mod
-# it holds. If the edit doesn't apply, return 1 and leave $3 alone. The layout is
-# edited as JSON because herdr may reorder its keys, which a text patch can't follow.
+# The layout is edited as JSON because herdr may reorder its keys, which a text patch can't follow.
 edited_layout() {
   py3 - "$@" <<'PY'
 import json, sys
@@ -136,9 +134,13 @@ EXIT_EDIT_DOES_NOT_APPLY = 1
 
 src, edit, dst = map(Path, sys.argv[1:4])
 layout = json.loads(src.read_text())
-blocks = json.loads(edit.read_text())["blocks"]
+spec = json.loads(edit.read_text())
+blocks = spec["blocks"]
+added = spec.get("add", {})
+ids = set()
 
 def visit(node):
+    ids.add(node.get("id"))
     change = blocks.get(node.get("id"))
     if change:
         content = node.get("content", {})
@@ -148,10 +150,14 @@ def visit(node):
         seen.add(node["id"])
     for child in node.get("children", []):
         visit(child)
+    if node.get("id") in added:
+        node["children"] = node.get("children", []) + added[node["id"]]
+        seen.add(node["id"])
 
 seen = set()
 visit(layout)
-if seen != set(blocks):
+new_ids = {block["id"] for blocks_added in added.values() for block in blocks_added}
+if seen != set(blocks) | set(added) or ids & new_ids:
     sys.exit(EXIT_EDIT_DOES_NOT_APPLY)
 dst.write_text(json.dumps(layout, indent=2) + "\n")
 PY
