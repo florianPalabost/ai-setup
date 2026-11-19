@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { realpathSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { cleanMergedWorktrees } from '../lib/cleanup.mjs'
@@ -39,13 +39,41 @@ const REQUIRED_TOOLS = ['git', 'gh', 'claude']
 const SANDBOX_TOOLS = ['srt', 'bwrap', 'socat', 'rg']
 /** The apt package of each sandbox tool apt installs; srt comes from npm. */
 const SANDBOX_APT_PACKAGES = Object.freeze({ bwrap: 'bubblewrap', socat: 'socat', rg: 'ripgrep' })
+/** A sandbox shaped like srt's: an installed bwrap can still be refused user or network namespaces. */
+const BWRAP_PROBE_ARGS = ['--ro-bind', '/', '/', '--dev', '/dev', '--unshare-net', 'true']
+/** Ubuntu 23.10+ sets this to 1, which blocks bwrap's namespaces unless an AppArmor profile allows them. */
+const APPARMOR_USERNS_SYSCTL = '/proc/sys/kernel/apparmor_restrict_unprivileged_userns'
+const BWRAP_APPARMOR_PROFILE = '/etc/apparmor.d/bwrap'
+const BWRAP_APPARMOR_FIX = `sudo tee ${BWRAP_APPARMOR_PROFILE} >/dev/null <<'EOF'
+abi <abi/4.0>,
+include <tunables/global>
+
+profile bwrap /usr/bin/bwrap flags=(unconfined) {
+  userns,
+  include if exists <local/bwrap>
+}
+EOF
+sudo apparmor_parser -r ${BWRAP_APPARMOR_PROFILE}`
 
 const log = (message) => console.log(`▸ ${message}`)
 
+const readSysctl = (path) => {
+    try {
+        return readFileSync(path, 'utf8').trim()
+    } catch {
+        return null
+    }
+}
+
+/** null when there's nothing to probe: not Linux, or no bwrap. */
+const bwrapSandboxWorks = () => (process.platform === 'linux' && hasCommand('bwrap') ? succeeds('bwrap', BWRAP_PROBE_ARGS) : null)
+
 async function doctor(repo) {
     const config = await loadConfig(repo.root)
+    const bwrapWorks = bwrapSandboxWorks()
     const rows = [
         ...[...REQUIRED_TOOLS, ...SANDBOX_TOOLS].map((tool) => [tool, hasCommand(tool), SANDBOX_TOOLS.includes(tool) ? 'needed for the srt sandbox' : 'required']),
+        ...(bwrapWorks === null ? [] : [['bwrap sandbox', bwrapWorks, 'bwrap is installed but cannot create a sandbox (see below)']]),
         ['gh auth', succeeds('gh', ['auth', 'status']), 'run: gh auth login'],
         ['.factory.json', Boolean(config.path), 'optional: setup and check commands for this repo'],
     ]
@@ -58,6 +86,11 @@ async function doctor(repo) {
     }
     if (missingAptPackages.length) {
         console.log(`\nsandbox tools: sudo apt install ${missingAptPackages.join(' ')}`)
+    }
+    if (bwrapWorks === false) {
+        console.log(readSysctl(APPARMOR_USERNS_SYSCTL) === '1' && !existsSync(BWRAP_APPARMOR_PROFILE)
+            ? `\nbwrap sandbox: AppArmor blocks bwrap's user namespaces. Allow them for bwrap only:\n${BWRAP_APPARMOR_FIX}`
+            : `\nbwrap sandbox: run \`bwrap ${BWRAP_PROBE_ARGS.join(' ')}\` to see why it fails, or pass --no-sandbox`)
     }
 }
 
