@@ -154,7 +154,7 @@ GLOSSARY.md, docs/adr/            vocabulary and design decisions
 
 | Skill | Source |
 | --- | --- |
-| `orca-cli`, `orchestration`, `computer-use` | [stablyai/orca](https://github.com/stablyai/orca) |
+| `orca-cli`, `orchestration`, `orca-computer-use` | [stablyai/orca](https://github.com/stablyai/orca) |
 | `find-skills` | [vercel-labs/skills](https://github.com/vercel-labs/skills) |
 | `show-me` | [humanlayer/skills](https://github.com/humanlayer/skills) |
 | `unslop` | [cursor/plugins](https://github.com/cursor/plugins) |
