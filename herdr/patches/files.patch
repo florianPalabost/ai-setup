@@ -1,0 +1,56 @@
+--- a/main.js
++++ b/main.js
+@@ -4 +4 @@
+-import { spaces, panes, focused, exec, readTextFile, watchFolder, theme, settings, window } from "herdr";
++import { spaces, panes, focused, exec, readTextFile, watchFolder, theme, settings, window, shared, setShared, run, notify, appHome } from "herdr";
+@@ -15,0 +16,35 @@
++// A copy of the Viewer's target.js and vscode.js: herdr loads no module from
++// outside a mod's folder. Keep the keys in step with herdr/mods/viewer/target.js.
++const VIEWER_MOD = "viewer", TARGETS_KEY = "viewer.targets", TABS_KEY = "viewer.tabs";
++const VSCODE_ERROR_CODES = Object.freeze({ missing: "vscode_missing", failed: "vscode_failed" });
++const fileName = (path) => path.split("/").pop();
++
++function viewerTab(space) {
++  const id = shared(TABS_KEY)?.[space.id]?.tab;
++  return space.tabs.some(tab => tab.id === id) && panes().some(pane => pane.mod === VIEWER_MOD && pane.tab === id) ? id : null;
++}
++
++function openViewer(target, { newTab = false } = {}) {
++  const all = spaces(), space = all.find(s => s.active);
++  if (!space) return;
++  if (newTab) return run("tab.new", { name: fileName(target.path), space: space.id, mod: VIEWER_MOD, props: { space: space.id, target: { ...target, seq: 1 } } });
++  const live = new Set(all.map(s => s.id));
++  const targets = Object.fromEntries(Object.entries(shared(TARGETS_KEY) ?? {}).filter(([id]) => live.has(id)));
++  setShared(TARGETS_KEY, { ...targets, [space.id]: { ...target, seq: (targets[space.id]?.seq ?? 0) + 1 } });
++  const id = viewerTab(space);
++  if (id) return run("tab.select", { id });
++  const claim = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
++  setShared(TABS_KEY, { ...(shared(TABS_KEY) ?? {}), [space.id]: { claim, before: space.tabs.map(tab => tab.id), tab: null } });
++  run("tab.new", { name: fileName(target.path), space: space.id, mod: VIEWER_MOD, props: { space: space.id, claim } });
++}
++
++async function openInVsCode(folder, file) {
++  const fail = (code, body) => notify({ title: "Not opened in VS Code", body: `${body} (${code})`, level: "warning" });
++  try {
++    const result = await exec("code", [folder, "-g", `${file}:1`]);
++    if (result.code !== 0) fail(VSCODE_ERROR_CODES.failed, result.stderr.trim() || `code exited ${result.code}`);
++  } catch (error) {
++    fail(VSCODE_ERROR_CODES.missing, `No \`code\` on PATH: ${error?.message ?? error}`);
++  }
++}
++
+@@ -46,0 +82,11 @@
++    this.viewer = false;
++    cx.spawn(async () => { this.viewer = Boolean(await readTextFile(`${appHome()}/mods/${VIEWER_MOD}/mod.json`).catch(() => null)); });
++  }
++
++  // Like find: a click opens the Viewer tab, ctrl VS Code, shift a Pinned Viewer.
++  // The Viewer and VS Code read this machine's files: a remote folder, or no
++  // Viewer installed, keeps the preview here.
++  open(path, e, cx) {
++    if (!this.on && e?.modifiers?.control) return openInVsCode(this.root, `${this.root}/${path}`);
++    if (this.on || !this.viewer) return this.show(path, cx);
++    openViewer({ root: this.root, path, line: 1 }, { newTab: Boolean(e?.modifiers?.shift) });
+@@ -156 +202 @@
+-        .on_click((_e, cx) => entry.dir ? this.toggle(path, cx) : this.show(path, cx))
++        .on_click((e, cx) => entry.dir ? this.toggle(path, cx) : this.open(path, e, cx))
