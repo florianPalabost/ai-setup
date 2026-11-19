@@ -667,9 +667,13 @@ def skill_names(fields):
 
 old, now = versions("manifests/skills.txt")
 gone = set().union(*(manifest_keys(t, skill_names) for t in old)) - manifest_keys(now, skill_names)
+def own_plugin_link(path):
+    """A skill the manifest dropped may now ship from plugins/ (link_own_plugins)."""
+    return path.is_symlink() and path.exists() and os.readlink(path).startswith(repo + "/plugins/")
+
 for skill in sorted(gone):
     path = claude_dir / "skills" / skill
-    if path.exists() or path.is_symlink():
+    if (path.exists() or path.is_symlink()) and not own_plugin_link(path):
         print(f"skill\t{path}")
 
 # Dangling links left by renamed or removed repo/vendor items
