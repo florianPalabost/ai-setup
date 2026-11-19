@@ -1,5 +1,6 @@
 // Quick open: a popup that finds a file in the root by fuzzy name, with a
-// preview. Enter shows it in the Viewer, ctrl-Enter opens it in VS Code.
+// preview. Enter shows it in the Viewer, shift-Enter in a Viewer tab of its own,
+// ctrl-Enter opens it in VS Code.
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, Editor } from "gpui-base";
 import * as herdr from "herdr";
@@ -27,7 +28,7 @@ export default class QuickOpen extends View {
     this.handle = cx.focus_handle();
     this.input = InputState.new({ placeholder: "Go to file…" });
     this.input.on("change", (_event, cx) => { this.query = this.input.value(); this.refilter(); cx.notify(); });
-    this.input.on("submit", (event, cx) => this.pick(this.at, event.secondary, cx));
+    this.input.on("submit", (event, cx) => this.pick(this.at, { vscode: event.secondary, newTab: event.shift }, cx));
     this.input.focus();
     if (herdr.checking()) return;
     cx.spawn(async (cx) => {
@@ -60,16 +61,16 @@ export default class QuickOpen extends View {
     this.at = Math.max(0, Math.min(this.hits.length - 1, this.at + by));
   }
 
-  pick(index, inVsCode, cx) {
+  pick(index, { vscode = false, newTab = false }, cx) {
     const hit = this.hits[index];
     if (!hit || this.leaving) return;
     const file = `${this.root}/${hit.path}`;
     if (this.space) rememberFile(herdr, this.space, file);
-    if (inVsCode) {
+    if (vscode) {
       openInVsCode(herdr, this.root, file, FIRST_LINE);
       return this.dismiss();
     }
-    openViewer(herdr, { root: this.root, path: hit.path, line: FIRST_LINE });
+    openViewer(herdr, { root: this.root, path: hit.path, line: FIRST_LINE }, { newTab });
     this.leaving = true;
     cx.timer.after(CLOSE_AFTER_OPEN_MS, () => this.dismiss());
   }
@@ -82,7 +83,7 @@ export default class QuickOpen extends View {
     const page = Math.max(1, this.visible - 1);
     const steps = { down: 1, up: -1, pagedown: page, pageup: -page };
     if (event.key === "escape") return this.dismiss();
-    if (event.key === "enter" && event.modifiers.control) this.pick(this.at, true, cx);
+    if (event.key === "enter" && event.modifiers.control) this.pick(this.at, { vscode: true }, cx);
     else if (steps[event.key]) this.move(steps[event.key]);
     else return;
     cx.stop_propagation();
@@ -117,7 +118,7 @@ export default class QuickOpen extends View {
     return v_flex().id("qo-list").w_2_5().h_full().flex_none().min_h(0).overflow_hidden()
       .on_size_change((size, cx) => { this.visible = Math.max(1, Math.floor(size.height / herdr.settings().zoom / ROW_HEIGHT)); cx.notify(); })
       .on_scroll_wheel((event, cx) => this.onWheel(event, cx))
-      .child(resultList({ hits: this.hits, at: this.at, top: this.top, visible: this.visible, t, onPick: (index, _event, cx) => { this.at = index; this.pick(index, false, cx); } }));
+      .child(resultList({ hits: this.hits, at: this.at, top: this.top, visible: this.visible, t, onPick: (index, event, cx) => { this.at = index; this.pick(index, { vscode: event.modifiers.control, newTab: event.modifiers.shift }, cx); } }));
   }
 
   render(cx) {
@@ -131,6 +132,6 @@ export default class QuickOpen extends View {
       .child(h_flex().h(BODY_HEIGHT).flex_none().gap(12).child(this.listPane(t)).child(this.previewPane(t)))
       .child(h_flex().flex_none().gap(16).text_size(11).text_color(t.dim)
         .child(div().flex_1().min_w(0).truncate().child(this.status()))
-        .child(div().child("Enter: Viewer · Ctrl+Enter: VS Code · Esc: close")));
+        .child(div().child("Enter: Viewer · Shift+Enter: new tab · Ctrl+Enter: VS Code · Esc: close")));
   }
 }

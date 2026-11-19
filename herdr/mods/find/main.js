@@ -32,7 +32,7 @@ export default class Find extends View {
     this.handle = cx.focus_handle();
     this.input = InputState.new({ placeholder: "Find files and text…" });
     this.input.on("change", (_event, cx) => { this.query = this.input.value(); this.schedule(cx); });
-    this.input.on("submit", (event, cx) => this.pick(this.at, event.secondary));
+    this.input.on("submit", (event) => this.pick(this.at, { vscode: event.secondary, newTab: event.shift }));
   }
 
   async close() {
@@ -104,11 +104,11 @@ export default class Find extends View {
     return row?.kind === ROW_KIND.file ? this.rows[index + 1] : row;
   }
 
-  pick(index, inVsCode) {
+  pick(index, { vscode = false, newTab = false }) {
     const target = this.firstMatchOf(index);
     if (!target || !PICKABLE.has(target.kind) || !this.root) return;
-    if (inVsCode) return openInVsCode(herdr, this.root, `${this.root}/${target.path}`, target.line);
-    openViewer(herdr, { root: this.root, path: target.path, line: target.line, column: target.column, length: target.length });
+    if (vscode) return openInVsCode(herdr, this.root, `${this.root}/${target.path}`, target.line);
+    openViewer(herdr, { root: this.root, path: target.path, line: target.line, column: target.column, length: target.length }, { newTab });
   }
 
   flip(option, cx) {
@@ -121,7 +121,7 @@ export default class Find extends View {
     const toggle = toggleFor(event);
     if (toggle) this.flip(toggle.option, cx);
     else if (event.key === "escape" && this.query) { this.input.set_value(""); this.query = ""; this.schedule(cx); }
-    else if (event.key === "enter" && event.modifiers.control) this.pick(this.at, true);
+    else if (event.key === "enter" && event.modifiers.control) this.pick(this.at, { vscode: true });
     else if (steps[event.key]) this.move(steps[event.key]);
     else return;
     cx.stop_propagation();
@@ -137,7 +137,7 @@ export default class Find extends View {
   }
 
   results(t) {
-    const onPick = (index, event, cx) => { this.at = index; this.pick(index, event.modifiers.control); cx.notify(); };
+    const onPick = (index, event, cx) => { this.at = index; this.pick(index, { vscode: event.modifiers.control, newTab: event.modifiers.shift }); cx.notify(); };
     const status = this.status();
     return v_flex().id("find-results").flex_1().min_h(0).overflow_y_scrollbar().track_scroll(this.scroll).p(6)
       .children(this.rows.map((row, index) => rowView(row, index, index === this.at, t, onPick)))
