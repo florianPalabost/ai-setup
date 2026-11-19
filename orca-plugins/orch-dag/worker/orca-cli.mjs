@@ -2,6 +2,10 @@ import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
+export const ORCA_CLI_ERROR_CODES = Object.freeze({
+    failed: 'cli_failed',
+})
+
 const CLI_TIMEOUT_MS = 20000
 
 /** On Linux and macOS the CLI is `orca-ide`: a bare `orca` there can be GNOME's screen reader. */
@@ -40,11 +44,11 @@ export function orcaCli(args) {
             try {
                 response = JSON.parse(stdout)
             } catch {
-                reject(Object.assign(new Error(stderr || error?.message || 'orca CLI returned no JSON'), { code: 'cli_failed' }))
+                reject(Object.assign(new Error(stderr || error?.message || 'orca CLI returned no JSON'), { code: ORCA_CLI_ERROR_CODES.failed }))
                 return
             }
             if (!response.ok) {
-                reject(Object.assign(new Error(response.error?.message ?? 'orca CLI failed'), { code: response.error?.code ?? 'cli_failed' }))
+                reject(Object.assign(new Error(response.error?.message ?? 'orca CLI failed'), { code: response.error?.code ?? ORCA_CLI_ERROR_CODES.failed }))
                 return
             }
             resolve(response.result)
