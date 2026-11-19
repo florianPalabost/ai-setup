@@ -10,7 +10,8 @@
 # --update also pulls this repo, then moves every user-scope plugin,
 # marketplace and third-party skill to its latest upstream version.
 #
-# Where there's a display, it also installs herdr and sets up its Git panel (see herdr.sh).
+# Where there's a display, it also installs herdr and the herdr features you pick
+# (see herdr-features.sh and herdr.sh).
 #
 # Usage: ./install.sh [--update] [--dry-run]
 
@@ -20,6 +21,8 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 # shellcheck source=herdr.sh
 source "$(dirname "${BASH_SOURCE[0]}")/herdr.sh"
+# shellcheck source=herdr-features.sh
+source "$(dirname "${BASH_SOURCE[0]}")/herdr-features.sh"
 
 BACKUP_DIR="$CLAUDE_DIR/backups/ai-setup-$(date +%Y%m%d-%H%M%S)"
 DRY_RUN=0
@@ -30,7 +33,7 @@ PLUGINS_CHANGED=0
 ARGS=("$@")
 
 usage() {
-  sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 for arg in "$@"; do
