@@ -42,11 +42,12 @@ Optional, at the repo root. Every key falls back to the default shown.
   "permissionMode": "auto",
   "maxReworks": 2,
   "agentTimeoutMinutes": 60,
+  "checkTimeoutMinutes": 20,
   "sandbox": { "allowWrite": [], "denyRead": [] }
 }
 ```
 
-`setup` and `checks` are shell commands run in the worktree. `permissionMode: "bypassPermissions"` is refused with `--no-sandbox`. `sandbox` adds paths to what `srt` lets the agents write and keeps them from reading.
+`setup` and `checks` are shell commands run in the worktree. A check still running after `checkTimeoutMinutes` is killed, with everything it started, and counts as failing. `permissionMode: "bypassPermissions"` is refused with `--no-sandbox`. `sandbox` adds paths to what `srt` lets the agents write and keeps them from reading.
 
 ## Where to see it
 
