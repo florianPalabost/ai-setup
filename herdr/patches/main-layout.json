@@ -4,6 +4,9 @@
     "changes": { "from": "changes", "to": "git" }
   },
   "add": {
-    "panel-body": [{ "id": "find", "type": "block", "content": { "mod": "find" } }]
+    "panel-body": [
+      { "id": "find", "type": "block", "content": { "mod": "find" } },
+      { "id": "factory", "type": "block", "content": { "mod": "factory-board", "props": { "panel": true } } }
+    ]
   }
 }
