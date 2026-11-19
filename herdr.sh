@@ -14,10 +14,13 @@ export HERDR_APP_HOME="$HERDR_HOME"
 
 HERDR_SRC="$REPO_DIR/herdr"
 # Linked as $HERDR_HOME/mods/<name>.
-HERDR_OWN_MODS=(git git-graph orch-graph factory-board)
+HERDR_OWN_MODS=(git git-graph orch-graph factory-board viewer quick-open search find)
 # Icons of linked mods, copied as real files: herdr refuses an svg path that a link
 # leads out of its home. "<folder in herdr/mods/> <folder in the herdr home>"
 HERDR_MOD_ICONS=("git-graph/icons git-graph-icons")
+# Bound in keys.json's global section: "<key> <command>". A key already bound to
+# something else keeps its binding.
+HERDR_KEYS=("ctrl-p mod.open:quick-open" "ctrl-alt-f mod.open:search")
 # "<shipped mod> <clone> <patch in herdr/patches/>"
 HERDR_MOD_CLONES=("tabs tabs-git tabs.patch")
 HERDR_LAYOUT_SHIPPED=main
@@ -41,6 +44,8 @@ HERDR_PANEL_WANTED=0
 # clone leaves the lists above, add it here.
 HERDR_DROPPED_MODS=(proto-git proto-graph-community proto-pr-pane proto-prs-panel tabs-proto)
 HERDR_DROPPED_LAYOUTS=(main-proto)
+# When a binding leaves HERDR_KEYS, add it here: "<key> <command>".
+HERDR_DROPPED_KEYS=()
 
 # The version of the binary on disk, which an update can replace under an open window.
 herdr_version() {
@@ -188,6 +193,68 @@ link_herdr_mods() {
   for name in "${HERDR_OWN_MODS[@]}"; do
     link "$HERDR_SRC/mods/$name" "$HERDR_HOME/mods/$name"
   done
+}
+
+# Bind HERDR_KEYS in keys.json, leaving a key bound to something else alone. herdr
+# writes keys.json on first start, so before that there is nothing to edit.
+install_herdr_keys() {
+  local keys="$HERDR_HOME/keys.json" line
+  if [[ ! -f "$keys" ]]; then
+    info "$keys not found: start herdr once, then re-run install to bind its keys"
+    return 0
+  fi
+  while IFS= read -r line; do
+    case "$line" in
+      bind$'\t'*) info "${line#bind$'\t'}" ;;
+      taken$'\t'*) warn "${line#taken$'\t'}" ;;
+    esac
+  done < <(py3 - "$keys" "$BACKUP_DIR" "$DRY_RUN" "${HERDR_KEYS[@]}" <<'PY'
+import json, shutil, sys
+from pathlib import Path
+
+keys, backup_dir, dry_run, wanted = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3] == "1", sys.argv[4:]
+bindings = json.loads(keys.read_text())
+section = bindings.setdefault("global", {})
+added = []
+for spec in wanted:
+    key, command = spec.split(" ", 1)
+    bound = section.get(key)
+    if bound == command:
+        continue
+    if bound is not None:
+        print(f"taken\t{key} is bound to {bound}, not {command}: left as it is")
+        continue
+    section[key] = command
+    added.append(f"{key} -> {command}")
+for binding in added:
+    print(f"bind\t{'[dry-run] would bind' if dry_run else 'bound'} {binding} in {keys}")
+if added and not dry_run:
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    if not (backup_dir / "keys.json").exists():
+        shutil.copy2(keys, backup_dir / "keys.json")
+    keys.write_text(json.dumps(bindings, indent=2) + "\n")
+PY
+  )
+}
+
+# $1: "herdr-key\t<key> <command>" lines from herdr_stale_entries.
+remove_herdr_keys() {
+  py3 - "$HERDR_HOME/keys.json" "$BACKUP_DIR" "$1" <<'PY'
+import json, shutil, sys
+from pathlib import Path
+
+keys, backup_dir, entries = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
+bindings = json.loads(keys.read_text())
+section = bindings.get("global", {})
+for line in entries.splitlines():
+    key, command = line.split("\t", 1)[1].split(" ", 1)
+    if section.get(key) == command:
+        del section[key]
+backup_dir.mkdir(parents=True, exist_ok=True)
+if not (backup_dir / "keys.json").exists():
+    shutil.copy2(keys, backup_dir / "keys.json")
+keys.write_text(json.dumps(bindings, indent=2) + "\n")
+PY
 }
 
 copy_herdr_mod_icons() {
@@ -376,14 +443,17 @@ layout_outdated() {
 # still on this machine:
 #   herdr-mod     dropped mod or clone, or a link into this repo whose target is gone
 #   herdr-layout  dropped layout clone
+#   herdr-key     dropped binding still in keys.json, as "<key> <command>"
 # Only those named above qualify, so mods and layouts of the user's own never do,
-# and neither does anything installed.json records as shipped.
+# and neither does anything installed.json records as shipped, nor a key the
+# user bound to another command.
 herdr_stale_entries() {
-  py3 - "$HERDR_HOME" "$REPO_DIR" "${HERDR_DROPPED_MODS[*]}" "${HERDR_DROPPED_LAYOUTS[*]}" <<'PY'
+  py3 - "$HERDR_HOME" "$REPO_DIR" "${HERDR_DROPPED_MODS[*]}" "${HERDR_DROPPED_LAYOUTS[*]}" "${HERDR_DROPPED_KEYS[@]}" <<'PY'
 import json, os, sys
 from pathlib import Path
 
 home, repo, mods, layouts = Path(sys.argv[1]), sys.argv[2], sys.argv[3].split(), sys.argv[4].split()
+dropped_keys = sys.argv[5:]
 
 try:
     shipped = set(json.loads((home / "installed.json").read_text()))
@@ -404,6 +474,15 @@ for name in layouts:
     path = home / "layouts" / f"{name}.json"
     if f"layout:{name}" not in shipped and path.exists():
         print(f"herdr-layout\t{path}")
+
+try:
+    bound = json.loads((home / "keys.json").read_text()).get("global", {})
+except (OSError, ValueError):
+    bound = {}
+for spec in dropped_keys:
+    key, command = spec.split(" ", 1)
+    if bound.get(key) == command:
+        print(f"herdr-key\t{spec}")
 PY
 }
 
@@ -647,6 +726,7 @@ install_herdr() {
 
   link_herdr_mods
   copy_herdr_mod_icons
+  install_herdr_keys
 
   local ready=1 spec shipped clone patch
   # Generating the Changes code needs herdr's files but no window.
