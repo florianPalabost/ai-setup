@@ -14,6 +14,9 @@ export const STEP_STATUSES = Object.freeze({
 
 export const RUN_STEP = 'run'
 
+/** The outcome given to a run whose process died before it recorded one. */
+export const RUN_ABANDONED = 'abandoned'
+
 /** The names a run gives its steps, in the order it runs them. */
 export const STEP_NAMES = Object.freeze({
     setup: 'setup',
@@ -114,6 +117,32 @@ async function latestActivity(transcriptPath) {
     return null
 }
 
+/** Whether the process that started a run is still alive: EPERM means it exists but belongs to someone else. */
+function isAlive(pid) {
+    try {
+        process.kill(pid, 0)
+
+        return true
+    } catch (error) {
+        return error.code === 'EPERM'
+    }
+}
+
+/** How a run ended: its recorded outcome, or abandoned when the process that started it is gone without recording one. */
+function runEnd(entries) {
+    const runEntries = entries.filter((entry) => entry.step === RUN_STEP)
+    const finish = runEntries.findLast((entry) => entry.status !== STEP_STATUSES.running)
+    if (finish) {
+        return { finishedAt: finish.at, outcome: finish.status }
+    }
+    const pid = runEntries.find((entry) => entry.status === STEP_STATUSES.running)?.pid
+    if (pid && !isAlive(pid)) {
+        return { finishedAt: entries.at(-1).at, outcome: RUN_ABANDONED }
+    }
+
+    return { finishedAt: null, outcome: null }
+}
+
 /** Replays progress.jsonl into one entry per step, in the order the steps started. */
 function foldSteps(entries) {
     const steps = new Map()
@@ -145,7 +174,7 @@ export async function latestRun({ root, gitDir, issueNumber }) {
     const runDir = join(runsDir, runNames.at(-1))
     const entries = (await readFile(join(runDir, PROGRESS_FILE), 'utf8')).split('\n').map(parseJsonLine).filter(Boolean)
     const steps = foldSteps(entries)
-    const finish = entries.findLast((entry) => entry.step === RUN_STEP)
+    const { finishedAt, outcome } = runEnd(entries)
     const relativeToRoot = (name) => relative(root, join(runDir, name))
     const running = steps.findLast((step) => step.status === STEP_STATUSES.running)
     const runningTranscript = running?.log ? join(runDir, running.log) : null
@@ -154,8 +183,8 @@ export async function latestRun({ root, gitDir, issueNumber }) {
     return {
         dir: relative(root, runDir),
         startedAt: entries[0]?.at ?? null,
-        finishedAt: finish?.at ?? null,
-        outcome: finish?.status ?? null,
+        finishedAt,
+        outcome,
         steps: await Promise.all(
             steps.map(async (step) => ({ ...step, log: step.log ? relativeToRoot(step.log) : null, sessionId: step.log ? await sessionIdOf(join(runDir, step.log)) : null })),
         ),

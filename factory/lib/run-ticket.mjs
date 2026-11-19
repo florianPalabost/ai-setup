@@ -98,6 +98,7 @@ export async function runTicket({ repo, issueNumber, config, options, log }) {
     await mkdir(runDir, { recursive: true })
     const progress = progressRecorder(runDir)
     const finishRun = (status, detail) => progress.record({ step: RUN_STEP, status, detail })
+    await progress.record({ step: RUN_STEP, status: STEP_STATUSES.running, pid: process.pid })
     await swapLabels(issue, { add: [LABELS.working], remove: [LABELS.ready, LABELS.done, LABELS.human] }, { cwd })
 
     try {

@@ -5,7 +5,7 @@ const LANES = [
     { state: 'agent-done', key: 'done', title: 'Done · draft PR' },
     { state: 'ready-for-agent', key: 'ready', title: 'Ready' },
 ]
-const RUN_OUTCOMES = { 'agent-done': 'done', 'ready-for-human': 'handed to you', error: 'stopped on an error' }
+const RUN_OUTCOMES = { 'agent-done': 'done', 'ready-for-human': 'handed to you', error: 'stopped on an error', abandoned: 'stopped without finishing' }
 const STEP_MARKS = { done: '✓', pass: '✓', fail: '✗', error: '✗', running: '▸' }
 
 const lanesElement = document.getElementById('lanes')
