@@ -1,16 +1,16 @@
 // A copy of viewer/code.js: herdr loads no module from outside a mod's folder.
-// The read-only code view's state, colored from the theme.
+// A code view's state, colored from the theme: read-only unless asked.
 import { EditorState } from "gpui-base";
 import { theme, settings } from "herdr";
 import { languageFor } from "./text.js";
 
 const FONT_SIZE = 13;
 
-export function createCode(path, text) {
+export function createCode(path, text, { readonly = true } = {}) {
   const t = theme();
   return EditorState.new({
     language: languageFor(path),
-    readonly: true,
+    readonly,
     value: text,
     font_family: settings().font_family,
     font_size: FONT_SIZE,
