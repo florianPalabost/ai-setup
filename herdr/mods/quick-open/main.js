@@ -66,7 +66,7 @@ export default class QuickOpen extends View {
     const file = `${this.root}/${hit.path}`;
     if (this.space) rememberFile(herdr, this.space, file);
     if (inVsCode) {
-      openInVsCode(herdr, file, FIRST_LINE);
+      openInVsCode(herdr, this.root, file, FIRST_LINE);
       return this.dismiss();
     }
     openViewer(herdr, { root: this.root, path: hit.path, line: FIRST_LINE });
