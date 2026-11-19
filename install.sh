@@ -244,7 +244,7 @@ install_factory_tools() {
 
   local tool package missing=()
   while read -r tool package; do
-    command -v "$tool" >/dev/null 2>&1 || missing+=("$package")
+    [[ -n "$(linux_command "$tool")" ]] || missing+=("$package")
   done < <(factory_system_tools)
   if ((${#missing[@]} == 0)); then
     info "bubblewrap, socat and ripgrep already installed"
