@@ -148,6 +148,25 @@ run_rtk_installer() {
   return "$status"
 }
 
+RTK_SOURCES_BREW="brew"
+RTK_SOURCES_WINGET="winget"
+RTK_SOURCES_SCRIPT="script"
+
+# Where rtk comes from: for an installed rtk, what installed it (brew only when
+# rtk sits under brew's prefix); otherwise brew if there is one, winget on Windows,
+# else rtk's install script.
+rtk_source() {
+  local path
+  path="$(command -v rtk 2>/dev/null)"
+  if is_windows; then
+    echo "$RTK_SOURCES_WINGET"
+  elif command -v brew >/dev/null 2>&1 && { [[ -z "$path" ]] || [[ "$path" == "$(brew --prefix)"/* ]]; }; then
+    echo "$RTK_SOURCES_BREW"
+  else
+    echo "$RTK_SOURCES_SCRIPT"
+  fi
+}
+
 # rtk (https://github.com/rtk-ai/rtk) condenses Bash output before Claude reads
 # it. Its hook comes from global/settings.json and its instructions from
 # global/RTK.md, so `rtk init` isn't run. Installed, or upgraded on --update.
@@ -160,23 +179,25 @@ install_rtk() {
     info "$(rtk --version)"
     return 0
   fi
-  if command -v brew >/dev/null 2>&1; then
-    if ((installed)); then
-      run brew upgrade rtk </dev/null || status=$?
-    else
-      run brew install rtk </dev/null || status=$?
-    fi
-  elif is_windows; then
-    require winget "rtk" || return 0
-    if ((installed)); then
-      # Exits non-zero when there's nothing to upgrade.
-      run winget upgrade --id rtk-ai.rtk --exact --silent --accept-package-agreements --accept-source-agreements </dev/null || true
-    else
-      run winget install --id rtk-ai.rtk --exact --silent --accept-package-agreements --accept-source-agreements </dev/null || status=$?
-    fi
-  else
-    run_rtk_installer || status=$?
-  fi
+  case "$(rtk_source)" in
+    "$RTK_SOURCES_BREW")
+      if ((installed)); then
+        run brew upgrade rtk </dev/null || status=$?
+      else
+        run brew install rtk </dev/null || status=$?
+      fi
+      ;;
+    "$RTK_SOURCES_WINGET")
+      require winget "rtk" || return 0
+      if ((installed)); then
+        # Exits non-zero when there's nothing to upgrade.
+        run winget upgrade --id rtk-ai.rtk --exact --silent --accept-package-agreements --accept-source-agreements </dev/null || true
+      else
+        run winget install --id rtk-ai.rtk --exact --silent --accept-package-agreements --accept-source-agreements </dev/null || status=$?
+      fi
+      ;;
+    *) run_rtk_installer || status=$? ;;
+  esac
   if ((status != 0)); then
     warn "could not install or update rtk: Claude Code's Bash hook fails until rtk is on PATH"
   elif command -v rtk >/dev/null 2>&1; then
