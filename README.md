@@ -19,7 +19,6 @@ It works two ways:
 | Plugin | Contents |
 | --- | --- |
 | [`laravel`](plugins/laravel) | `debug-laravel`: root-cause-first debugging workflow built on the [Laravel Boost](https://github.com/laravel/boost) MCP tools |
-| [`orca`](plugins/orca) | `coordinate-ticket`: shapes a ticket as an Orca orchestration graph, with every step a task and every open design question a gate |
 | [`review`](plugins/review) | `no-comments` + `comment-sicko` agent: deletes narration comments and flags the code they excuse, adapted from [pstack](https://github.com/cursor/plugins/tree/main/pstack) |
 | [`writing`](plugins/writing) | `unslop`: removes AI tells from prose, callable from `/pr` and other workflows, adapted from [pstack](https://github.com/cursor/plugins/tree/main/pstack) |
 
@@ -154,7 +153,6 @@ GLOSSARY.md, docs/adr/            vocabulary and design decisions
 
 | Skill | Source |
 | --- | --- |
-| `orca-cli`, `orchestration`, `orca-computer-use` | [stablyai/orca](https://github.com/stablyai/orca) |
 | `find-skills` | [vercel-labs/skills](https://github.com/vercel-labs/skills) |
 | `show-me` | [humanlayer/skills](https://github.com/humanlayer/skills) |
 | `unslop` | [cursor/plugins](https://github.com/cursor/plugins) |

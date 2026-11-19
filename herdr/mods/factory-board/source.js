@@ -1,7 +1,6 @@
 // Where the Factory board's data comes from: the factory CLI (`factory`, linked
 // into ~/.local/bin by install.sh), run in each repo with a .factory.json among
-// herdr's spaces. Takes herdr's functions, so node can test it. The Orca
-// plugin's worker (orca-plugins/orch-dag/worker/factory.mjs) does the same through Orca.
+// herdr's spaces. Takes herdr's functions, so node can test it.
 import { FACTORY_WORKTREE_PATTERN, withLocalRuns } from "./board.js";
 
 export const FACTORY_ERROR_CODES = Object.freeze({
