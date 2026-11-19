@@ -50,4 +50,4 @@ Optional, at the repo root. Every key falls back to the default shown.
 
 ## Where to see it
 
-The Factory tab in herdr (`herdr/mods/factory-board`) shows these tickets as a kanban, with Watch, Resume and Log buttons. With the Bottom panel installed, Watch follows the run's `watch.log` in its Output tab instead of a terminal. The Run graph tab (`herdr/mods/orch-graph`) draws a ticket's latest run as a graph of its steps.
+The Factory tab in herdr (`herdr/mods/factory-board`) shows these tickets as a kanban, with Watch, Resume and Log buttons. With the Bottom panel installed, Watch follows the run's `watch.log` in its Output tab instead of a terminal. A Start button on a ready, unblocked ticket or one that needs you runs `factory run` for it in a new terminal tab. The Run graph tab (`herdr/mods/orch-graph`) draws a ticket's latest run as a graph of its steps.
