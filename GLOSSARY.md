@@ -51,11 +51,11 @@ A file or match chosen in Quick open, Search or Find, shown in the Viewer unless
 _Avoid_: selection, result
 
 **Viewer**:
-The herdr tab that shows and edits one file at a time. Each space has one, and each Pick replaces its file unless it has unsaved edits.
+The herdr tab that shows and edits one file at a time, named after that file. Each space has one, and each Pick replaces its file unless it has unsaved edits.
 _Avoid_: editor, preview
 
 **Pinned Viewer**:
-A Viewer tab named after its file that keeps that file and ignores Picks.
+A Viewer tab that keeps its file and ignores Picks.
 _Avoid_: Viewer tab of its own, extra Viewer
 
 **Clone**:
