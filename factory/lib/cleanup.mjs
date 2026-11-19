@@ -1,13 +1,9 @@
-import { basename } from 'node:path'
 import { branchForIssue } from './constants.mjs'
 import { mergedAgentPrs } from './github.mjs'
-import { hasCommand, run } from './shell.mjs'
+import { run } from './shell.mjs'
 import { worktreePathFor } from './worktree.mjs'
 
 const git = (args, { cwd }) => run('git', args, { cwd })
-
-const ORCA_CLI = 'orca-ide'
-const ORCA_VISIBILITY = Object.freeze({ show: 'show', hide: 'hide' })
 
 const ISSUE_WORKTREE_PATTERN = /\/issue-(\d+)$/
 
@@ -24,36 +20,11 @@ async function factoryWorktrees(root) {
 }
 
 /**
- * Orca's sidebar keeps showing removed worktrees until the repo's external-worktree list is reloaded,
- * so hide and show them again. Only when they are shown, and never fatal: Orca is optional.
- */
-async function refreshOrcaSidebar(root, log) {
-    if (!hasCommand(ORCA_CLI)) {
-        return
-    }
-
-    const repoSelector = `name:${basename(root)}`
-    const setVisibility = (visibility) => run(ORCA_CLI, ['repo', 'set', '--repo', repoSelector, '--external-worktree-visibility', visibility])
-    try {
-        const { result } = JSON.parse(await run(ORCA_CLI, ['repo', 'show', '--repo', repoSelector, '--json']))
-        if (result.repo.externalWorktreeVisibility !== ORCA_VISIBILITY.show) {
-            return
-        }
-        await setVisibility(ORCA_VISIBILITY.hide)
-        await setVisibility(ORCA_VISIBILITY.show)
-        log('refreshed the Orca sidebar')
-    } catch (error) {
-        log(`could not refresh the Orca sidebar: ${error.message}`)
-    }
-}
-
-/**
  * Removes the worktree and local branch of every ticket whose PR is merged.
  * Keeps a worktree with uncommitted changes, or whose branch moved past the merged commit.
- * Then refreshes Orca's sidebar, unless `refreshOrca` is false because the caller (the Orca plugin) does it.
  * @returns {Promise<{ removed: number[], kept: { issueNumber: number, reason: string }[] }>}
  */
-export async function cleanMergedWorktrees({ repo, log, dryRun = false, refreshOrca = true }) {
+export async function cleanMergedWorktrees({ repo, log, dryRun = false }) {
     const worktrees = await factoryWorktrees(repo.root)
     if (worktrees.length === 0) {
         return { removed: [], kept: [] }
@@ -85,10 +56,6 @@ export async function cleanMergedWorktrees({ repo, log, dryRun = false, refreshO
             await git(['branch', '-D', branch], { cwd: repo.root })
         }
         removed.push(issueNumber)
-    }
-
-    if (removed.length > 0 && !dryRun && refreshOrca) {
-        await refreshOrcaSidebar(repo.root, log)
     }
 
     return { removed, kept }
