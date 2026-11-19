@@ -30,6 +30,34 @@ One collapsible part of the Git panel.
 **Graph tab**:
 The herdr tab that shows the full commit graph: one per space, reused if it's already open.
 
+**Root**:
+The folder Quick open, Search and Find look in. It is the git root of the focused pane's folder, or that folder itself outside a repository.
+_Avoid_: project, workspace
+
+**Quick open**:
+The herdr popup that finds a file in the Root by fuzzy name.
+_Avoid_: file picker, go to file
+
+**Search**:
+The herdr popup that finds text inside the Root's files, with the matches grouped by file.
+_Avoid_: grep, find in files
+
+**Find**:
+The herdr side panel that does Quick open and Search at once. It lists the files whose name matches, then the matches inside files.
+_Avoid_: search panel, explorer
+
+**Pick**:
+A file or match chosen in Quick open, Search or Find, shown in the Viewer unless sent to VS Code or a Pinned Viewer.
+_Avoid_: selection, result
+
+**Viewer**:
+The herdr tab that shows and edits one file at a time. Each space has one, and each Pick replaces its file unless it has unsaved edits.
+_Avoid_: editor, preview
+
+**Pinned Viewer**:
+A Viewer tab named after its file that keeps that file and ignores Picks.
+_Avoid_: Viewer tab of its own, extra Viewer
+
 **Clone**:
 A copy of something herdr ships, adjusted by this setup, which herdr never updates by itself.
 _Avoid_: fork
