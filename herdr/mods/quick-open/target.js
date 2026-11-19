@@ -12,7 +12,7 @@ export function targetFor(herdr, space) {
   return herdr.shared(TARGETS_KEY)?.[space] ?? null;
 }
 
-// Picks go to the tab named VIEWER.name; a tab of its own is named after its
+// Picks go to the tab named VIEWER.name; a Pinned Viewer is named after its
 // file. A mod pane's props are not in panes(), so the name tells them apart.
 function openTab(herdr, space) {
   const tabs = new Set(space.tabs.filter((tab) => tab.name === VIEWER.name).map((tab) => tab.id));
@@ -21,7 +21,7 @@ function openTab(herdr, space) {
   else herdr.run("tab.new", { name: VIEWER.name, space: space.id, mod: VIEWER.mod, props: { space: space.id } });
 }
 
-// A Viewer tab of its own keeps showing `target`: it does not follow picks.
+// A Pinned Viewer keeps showing `target`: it does not follow picks.
 function openPinned(herdr, space, target) {
   const props = { space: space.id, target: { ...target, seq: 1 } };
   herdr.run("tab.new", { name: target.path.split("/").pop(), space: space.id, mod: VIEWER.mod, props });
