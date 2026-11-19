@@ -1,6 +1,6 @@
 # Orchestration Graph
 
-A read-only Orca plugin with two views: the orchestration run graph and the factory board.
+An Orca plugin with two views: the orchestration run graph and the factory board. The run graph only reads. The factory board also changes things: each GitHub refresh runs `factory clean`, which removes the worktree and branch of every ticket whose PR is merged, and its Watch and Resume buttons open terminals that run the factory CLI.
 
 ## Run graph
 
