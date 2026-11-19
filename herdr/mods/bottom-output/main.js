@@ -44,7 +44,7 @@ export default class Output extends View {
     this.finder = createSourceFinder({ exec: herdr.exec, readTextFile: herdr.readTextFile });
     this.spaceId = null; this.on = null; this.sources = null; this.source = null;
     this.lines = null; this.message = null; this.follow = true; this.width = 0;
-    this.loading = false; this.reloadAgain = false; this.finding = 0; this.wantedIssue = null; this.stopWatch = null;
+    this.loading = false; this.reloadAgain = false; this.finding = 0; this.wantedIssue = null; this.unfound = null; this.stopWatch = null;
     this.picks = readJson(PICKS_KEY, {});
     this.handledAt = Number(localStorage.getItem(HANDLED_KEY) ?? 0);
     this.view = { key: null, rows: [] };
@@ -70,11 +70,13 @@ export default class Output extends View {
       if (run !== this.finding) return;
       this.on = found.on;
       this.sources = found.sources;
-      const wanted = this.wantedIssue === null ? null : factorySourceId(this.wantedIssue);
+      const issue = this.wantedIssue;
+      const wanted = issue === null ? null : factorySourceId(issue);
       this.wantedIssue = null;
       const pick = [wanted, this.source?.id, this.picks[space.id]].find((id) => id && found.sources.some((source) => source.id === id));
       const source = found.sources.find((candidate) => candidate.id === pick) ?? found.sources[0] ?? null;
       if (wanted && pick === wanted) this.remember(source);
+      if (wanted) this.unfound = pick === wanted ? null : `#${issue} has no run in this space's repo`;
       if (source?.id !== this.source?.id || source?.path !== this.source?.path) this.open(source, cx);
       cx.notify();
     });
@@ -87,7 +89,7 @@ export default class Output extends View {
   }
 
   pick(source, cx) {
-    this.menuOpen = false;
+    this.menuOpen = false; this.unfound = null;
     this.remember(source);
     if (source.id !== this.source?.id) this.open(source, cx);
     cx.notify();
@@ -192,7 +194,7 @@ export default class Output extends View {
       .child(div().w(220).h(26).px(8).flex().items_center().rounded(6).border_1().border_color(t.border)
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
         .child(Input.new(this.filter).h_full().text_size(12).text_color(t.foreground)))
-      .child(div().flex_1())
+      .child(div().flex_1().min_w(0).truncate().text_size(12).text_color(t.dim).child(this.unfound ?? ""))
       .when(!this.follow, (el) => el.child(div().id("output-end").flex_none().px(8).py(3).rounded(6).text_size(12).bg(t.raised)
         .cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => this.jumpToEnd(cx)).child("↓ Jump to end")));
   }
