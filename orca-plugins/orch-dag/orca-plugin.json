@@ -3,7 +3,7 @@
   "id": "orch-dag",
   "name": "Orchestration Graph",
   "version": "0.1.0",
-  "description": "Read-only graphs of an orchestration run's tasks and of the factory's tickets.",
+  "description": "Graphs of an orchestration run's tasks and of the factory's tickets, cleaning merged ticket worktrees.",
   "engines": {
     "orca": ">=1.4.248"
   },
