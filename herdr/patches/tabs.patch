@@ -17,6 +17,15 @@
 +    // The welcome's list decides Files only: it can leave out the panels above.
 +    const added = PANELS.filter(p => body?.children?.some(child => child.id === p.id));
 +    const enabled = [...(shared("workspace.panels") ?? ["files"]).filter(id => id === "files"), ...added.map(p => p.id)];
-@@ -152 +162 @@
+@@ -133,0 +144,7 @@
++    // The Bottom panel sits under the active tab, not in the side panel.
++    const bottom = find(root, "bottom");
++    const bottomButton = () => h_flex().id("panel-bottom").h(26).px(8).gap(5).flex_none().items_center().rounded(6)
++      .text_size(12).bg(bottom.hidden ? t.chrome : t.selected).text_color(bottom.hidden ? t.muted : t.foreground)
++      .hover(s => s.bg(t.hover)).on_mouse_down("left", stop)
++      .on_click(() => run("layout.toggle", { id: "bottom" }))
++      .child(svg("mods/workspace-chrome/terminal.svg").size(14)).child("Output");
+@@ -152 +169,2 @@
 -      .when(enabled.includes("changes"), el => el.child(panelButton("changes", "Changes", "mods/changes/changes.svg")))
 +      .children(added.map(p => panelButton(p.id, p.label, p.icon)))
++      .when(Boolean(bottom), el => el.child(bottomButton()))
