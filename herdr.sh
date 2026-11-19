@@ -1,6 +1,6 @@
 # shellcheck shell=bash disable=SC1010  # `herdr-app do` is its subcommand, not the keyword
-# The herdr step of install.sh: the Git panel. Sourced by install.sh, whose run,
-# link and backup it uses.
+# The herdr step of install.sh: the features herdr-features.sh lists. Sourced by
+# install.sh, whose run, link and backup it uses.
 #
 # Own mods are linked from herdr/mods/. What differs from herdr's shipped files
 # is kept as patches in herdr/patches/ and built into real files here, from
@@ -13,14 +13,9 @@ HERDR_HOME="${HERDR_APP_HOME:-$HOME/.config/herdr-app}"
 export HERDR_APP_HOME="$HERDR_HOME"
 
 HERDR_SRC="$REPO_DIR/herdr"
-# Linked as $HERDR_HOME/mods/<name>.
-HERDR_OWN_MODS=(git git-graph orch-graph factory-board viewer quick-open search find)
 # Icons of linked mods, copied as real files: herdr refuses an svg path that a link
 # leads out of its home. "<folder in herdr/mods/> <folder in the herdr home>"
 HERDR_MOD_ICONS=("git-graph/icons git-graph-icons")
-# Bound in keys.json's global section: "<key> <command>". A key already bound to
-# something else keeps its binding.
-HERDR_KEYS=("ctrl-p mod.open:quick-open" "ctrl-alt-f mod.open:search")
 # "<shipped mod> <clone> <patch in herdr/patches/>"
 HERDR_MOD_CLONES=("tabs tabs-git tabs.patch")
 HERDR_LAYOUT_SHIPPED=main
@@ -40,14 +35,14 @@ HERDR_WINDOW_WAIT_SECS="${HERDR_WINDOW_WAIT_SECS:-60}"
 HERDR_STATUS_CALL_SECS="${HERDR_STATUS_CALL_SECS:-10}"
 # Same code as timeout(1).
 HERDR_STATUS_STUCK=124
-# Set once the herdr step goes ahead on this machine.
+# Set when this machine gets the Git panel, the only part that needs gh.
 HERDR_PANEL_WANTED=0
 # What the leftover check offers to remove. These can't be read from the repo's
 # history: the prototypes were only ever on prototype/* branches. When a mod or
 # clone leaves the lists above, add it here.
 HERDR_DROPPED_MODS=(proto-git proto-graph-community proto-pr-pane proto-prs-panel tabs-proto)
 HERDR_DROPPED_LAYOUTS=(main-proto)
-# When a binding leaves HERDR_KEYS, add it here: "<key> <command>".
+# When a binding leaves HERDR_FEATURES, add it here: "<key> <command>".
 HERDR_DROPPED_KEYS=()
 
 # The version of the binary on disk, which an update can replace under an open window.
@@ -133,6 +128,8 @@ patch_applies() {
 }
 
 # The layout is edited as JSON because herdr may reorder its keys, which a text patch can't follow.
+# An entry of the edit with a "feature" applies only when $4, the chosen panel
+# features separated by spaces, has it.
 edited_layout() {
   py3 - "$@" <<'PY'
 import json, sys
@@ -141,10 +138,22 @@ from pathlib import Path
 EXIT_EDIT_DOES_NOT_APPLY = 1
 
 src, edit, dst = map(Path, sys.argv[1:4])
+chosen = set(sys.argv[4].split()) if len(sys.argv) > 4 else set()
 layout = json.loads(src.read_text())
 spec = json.loads(edit.read_text())
-blocks = spec["blocks"]
-added = spec.get("add", {})
+
+def wanted(entry):
+    return entry.get("feature") in (None, *chosen)
+
+def without_feature(entry):
+    return {key: value for key, value in entry.items() if key != "feature"}
+
+blocks = {id: change for id, change in spec["blocks"].items() if wanted(change)}
+added = {}
+for container, entries in spec.get("add", {}).items():
+    kept = [without_feature(entry) for entry in entries if wanted(entry)]
+    if kept:
+        added[container] = kept
 ids = set()
 
 def visit(node):
@@ -171,11 +180,11 @@ dst.write_text(json.dumps(layout, indent=2) + "\n")
 PY
 }
 
-# Whether the edit $2 applies to the layout $1. Writes nothing.
+# Whether the edit $2, for the chosen panel features $3, applies to the layout $1. Writes nothing.
 layout_edit_applies() {
   local out status=0
   out="$(mktemp)"
-  edited_layout "$1" "$2" "$out" 2>/dev/null || status=1
+  edited_layout "$1" "$2" "$out" "${3:-}" 2>/dev/null || status=1
   rm -f "$out"
   return "$status"
 }
@@ -191,17 +200,23 @@ warn_build_failed() {
   fi
 }
 
+# Linked as $HERDR_HOME/mods/<name>.
 link_herdr_mods() {
   local name
-  for name in "${HERDR_OWN_MODS[@]}"; do
+  while IFS= read -r name; do
     link "$HERDR_SRC/mods/$name" "$HERDR_HOME/mods/$name"
-  done
+  done < <(herdr_mods wanted)
 }
 
-# Bind HERDR_KEYS in keys.json, leaving a key bound to something else alone. herdr
+# Bind the chosen features' keys in keys.json's global section, leaving a key
+# bound to something else alone. herdr
 # writes keys.json on first start, so before that there is nothing to edit.
 install_herdr_keys() {
-  local keys="$HERDR_HOME/keys.json" line
+  local keys="$HERDR_HOME/keys.json" line wanted=()
+  while IFS= read -r line; do
+    wanted+=("$line")
+  done < <(herdr_keys wanted)
+  ((${#wanted[@]})) || return 0
   if [[ ! -f "$keys" ]]; then
     info "$keys not found: start herdr once, then re-run install to bind its keys"
     return 0
@@ -211,7 +226,7 @@ install_herdr_keys() {
       bind$'\t'*) info "${line#bind$'\t'}" ;;
       taken$'\t'*) warn "${line#taken$'\t'}" ;;
     esac
-  done < <(py3 - "$keys" "$BACKUP_DIR" "$DRY_RUN" "${HERDR_KEYS[@]}" <<'PY'
+  done < <(py3 - "$keys" "$BACKUP_DIR" "$DRY_RUN" "${wanted[@]}" <<'PY'
 import json, shutil, sys
 from pathlib import Path
 
@@ -261,9 +276,11 @@ PY
 }
 
 copy_herdr_mod_icons() {
-  local spec src dst
+  local spec src dst wanted
+  wanted="$(herdr_mods wanted)"
   for spec in "${HERDR_MOD_ICONS[@]}"; do
     read -r src dst <<<"$spec"
+    grep -qxF "${src%%/*}" <<<"$wanted" || continue
     if diff -r "$HERDR_SRC/mods/$src" "$HERDR_HOME/$dst" >/dev/null 2>&1; then
       continue
     fi
@@ -370,7 +387,7 @@ build_layout() {
     warn "$shipped not found: start herdr once, then re-run install"
     return 1
   fi
-  if ! layout_edit_applies "$shipped" "$HERDR_LAYOUT_EDIT"; then
+  if ! layout_edit_applies "$shipped" "$HERDR_LAYOUT_EDIT" "$(herdr_chosen_panels)"; then
     warn_build_failed "$HERDR_LAYOUT_EDIT" "$HERDR_LAYOUT" "$file"
     return 1
   fi
@@ -395,7 +412,7 @@ build_layout() {
     cp -p "$saved_clicks" "$clicks"
     rm -f "$saved_clicks"
   fi
-  if ! edited_layout "$file" "$HERDR_LAYOUT_EDIT" "$file" 2>/dev/null; then
+  if ! edited_layout "$file" "$HERDR_LAYOUT_EDIT" "$file" "$(herdr_chosen_panels)" 2>/dev/null; then
     restore_backup "$file"
     show_layout_afresh "$before"
     warn_build_failed "$HERDR_LAYOUT_EDIT" "$HERDR_LAYOUT" "$file"
@@ -404,7 +421,7 @@ build_layout() {
   if [[ -n "$saved_clicks" ]]; then
     show_layout_afresh "$HERDR_LAYOUT"
   fi
-  patch_hash "$HERDR_LAYOUT_EDIT" >"$(layout_built_from)"
+  patch_hash "$HERDR_LAYOUT_EDIT" "$(herdr_chosen_panels)" >"$(layout_built_from)"
   info "built $HERDR_LAYOUT from $HERDR_LAYOUT_SHIPPED"
 }
 
@@ -430,12 +447,12 @@ outdated() {
   info "$what came from herdr ${recorded:-of unknown version}, running $running"
 }
 
-# The hash of the patch or edit $1, which a build records.
+# The hash of the patch or edit $1, plus the text $2 if given, which a build records.
 patch_hash() {
-  py3 - "$1" <<'PY'
+  py3 - "$1" "${2:-}" <<'PY'
 import hashlib, sys
 
-print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())
+print(hashlib.sha256(open(sys.argv[1], "rb").read() + sys.argv[2].encode()).hexdigest())
 PY
 }
 
@@ -444,12 +461,12 @@ layout_built_from() {
 }
 
 # Whether $2, the hash the build $1 recorded, isn't that of the patch or edit $3
-# now. Says so, which is what a dry run reports. A build from before hashes were
-# recorded counts as changed, so it is rebuilt once.
+# (plus the text $4) now. Says so, which is what a dry run reports. A build from
+# before hashes were recorded counts as changed, so it is rebuilt once.
 patch_changed() {
-  local what="$1" recorded="$2" patch="$3"
-  [[ "$recorded" != "$(patch_hash "$patch")" ]] || return 1
-  info "$what was built from another ${patch#"$REPO_DIR"/}"
+  local what="$1" recorded="$2" patch="$3" extra="${4:-}"
+  [[ "$recorded" != "$(patch_hash "$patch" "$extra")" ]] || return 1
+  info "$what was built from another ${patch#"$REPO_DIR"/}${extra:+ or other features}"
 }
 
 changes_outdated() {
@@ -469,7 +486,7 @@ mod_clone_outdated() {
 layout_outdated() {
   [[ -f "$HERDR_HOME/layouts/$HERDR_LAYOUT.json" ]] || return 1
   outdated "$HERDR_LAYOUT" "$(cloned_from_version "$HERDR_HOME/layouts/$HERDR_LAYOUT.json")" ||
-    patch_changed "$HERDR_LAYOUT" "$(cat "$(layout_built_from)" 2>/dev/null)" "$HERDR_LAYOUT_EDIT"
+    patch_changed "$HERDR_LAYOUT" "$(cat "$(layout_built_from)" 2>/dev/null)" "$HERDR_LAYOUT_EDIT" "$(herdr_chosen_panels)"
 }
 
 # Print, in the format of stale_entries, what the repo no longer lists and is
@@ -477,16 +494,27 @@ layout_outdated() {
 #   herdr-mod     dropped mod or clone, or a link into this repo whose target is gone
 #   herdr-layout  dropped layout clone
 #   herdr-key     dropped binding still in keys.json, as "<key> <command>"
+# Mods and keys of features not chosen count as dropped, mods only while linked
+# into this repo.
 # Only those named above qualify, so mods and layouts of the user's own never do,
 # and neither does anything installed.json records as shipped, nor a key the
 # user bound to another command.
 herdr_stale_entries() {
-  py3 - "$HERDR_HOME" "$REPO_DIR" "${HERDR_DROPPED_MODS[*]}" "${HERDR_DROPPED_LAYOUTS[*]}" "${HERDR_DROPPED_KEYS[@]}" <<'PY'
+  local unchosen_mods unchosen_keys=() line wanted_keys
+  load_herdr_choice
+  unchosen_mods="$(comm -23 <(herdr_mods all | sort) <(herdr_mods wanted | sort) | tr '\n' ' ')"
+  wanted_keys="$(herdr_keys wanted)"
+  while IFS= read -r line; do
+    grep -qxF "$line" <<<"$wanted_keys" || unchosen_keys+=("$line")
+  done < <(herdr_keys all)
+  py3 - "$HERDR_HOME" "$REPO_DIR" "${HERDR_DROPPED_MODS[*]}" "${HERDR_DROPPED_LAYOUTS[*]}" "$unchosen_mods" \
+    ${HERDR_DROPPED_KEYS[@]+"${HERDR_DROPPED_KEYS[@]}"} ${unchosen_keys[@]+"${unchosen_keys[@]}"} <<'PY'
 import json, os, sys
 from pathlib import Path
 
 home, repo, mods, layouts = Path(sys.argv[1]), sys.argv[2], sys.argv[3].split(), sys.argv[4].split()
-dropped_keys = sys.argv[5:]
+unchosen_mods = sys.argv[5].split()
+dropped_keys = sys.argv[6:]
 
 try:
     shipped = set(json.loads((home / "installed.json").read_text()))
@@ -496,6 +524,11 @@ except (OSError, ValueError):
 for name in mods:
     path = home / "mods" / name
     if name not in shipped and (path.exists() or path.is_symlink()):
+        print(f"herdr-mod\t{path}")
+
+for name in unchosen_mods:
+    path = home / "mods" / name
+    if path.is_symlink() and os.readlink(path).startswith(repo + "/"):
         print(f"herdr-mod\t{path}")
 
 for path in sorted((home / "mods").glob("*")):
@@ -561,8 +594,11 @@ herdr_leave_dropped_layout() {
 # Whether everything the layout depends on is there, built from the right herdr.
 herdr_all_built() {
   local spec _shipped clone patch
-  [[ -f "$HERDR_CHANGES_JS" && -f "$HERDR_HOME/layouts/$HERDR_LAYOUT.json" ]] || return 1
-  changes_outdated >/dev/null && return 1
+  [[ -f "$HERDR_HOME/layouts/$HERDR_LAYOUT.json" ]] || return 1
+  if herdr_chosen git; then
+    [[ -f "$HERDR_CHANGES_JS" ]] || return 1
+    changes_outdated >/dev/null && return 1
+  fi
   layout_outdated >/dev/null && return 1
   for spec in "${HERDR_MOD_CLONES[@]}"; do
     read -r _shipped clone patch <<<"$spec"
@@ -611,7 +647,7 @@ install_herdr_app() {
     info "installed herdr $(herdr_version)"
     return 0
   fi
-  warn "could not install herdr: skipping the Git panel"
+  warn "could not install herdr: skipping the herdr step"
   return 1
 }
 
@@ -687,7 +723,7 @@ herdr_window_ready() {
   deadline=$((SECONDS + HERDR_WINDOW_WAIT_SECS))
   until herdr_status; do
     if ((SECONDS >= deadline)); then
-      warn "herdr didn't answer within ${HERDR_WINDOW_WAIT_SECS}s: open it and re-run install to finish the Git panel"
+      warn "herdr didn't answer within ${HERDR_WINDOW_WAIT_SECS}s: open it and re-run install to finish the herdr panels"
       if [[ -n "$window_log" ]]; then
         warn "its output is in $window_log"
       fi
@@ -704,7 +740,9 @@ herdr_window_ready() {
 preview_first_build() {
   local spec shipped clone patch
   info "[dry-run] herdr's shipped files aren't there yet, so the patches can't be checked"
-  info "[dry-run] would generate $HERDR_CHANGES_JS"
+  if herdr_chosen git; then
+    info "[dry-run] would generate $HERDR_CHANGES_JS"
+  fi
   for spec in "${HERDR_MOD_CLONES[@]}"; do
     read -r shipped clone patch <<<"$spec"
     run herdr-app do mod.clone "{\"name\":\"$shipped\",\"as\":\"$clone\"}"
@@ -747,23 +785,30 @@ gh_signed_in() {
 # built and has no earlier build; a piece with an earlier build keeps it.
 install_herdr() {
   if herdr_has_no_display; then
-    log "Herdr Git panel: skipped, no DISPLAY or WAYLAND_DISPLAY"
+    log "Herdr: skipped, no DISPLAY or WAYLAND_DISPLAY"
     return 0
   fi
-  log "Herdr Git panel ($HERDR_HOME)"
+  log "Herdr ($HERDR_HOME)"
   install_herdr_app || return 0
-  HERDR_PANEL_WANTED=1
-  install_gh
-  require_python "Git panel" || return 0
-  require patch "Git panel" || return 0
+  require_python "herdr step" || return 0
+  choose_herdr_features
+  if herdr_chosen git; then
+    HERDR_PANEL_WANTED=1
+    install_gh
+  fi
 
   link_herdr_mods
   copy_herdr_mod_icons
   install_herdr_keys
+  if ! herdr_wants_panel; then
+    info "no panel chosen: the layout stays as it is"
+    return 0
+  fi
+  require patch "herdr panels" || return 0
 
   local ready=1 spec shipped clone patch
   # Generating the Changes code needs herdr's files but no window.
-  if [[ ! -f "$HERDR_CHANGES_JS" && -f "$HERDR_HOME/mods/changes/main.js" ]] && command -v herdr-app >/dev/null 2>&1; then
+  if herdr_chosen git && [[ ! -f "$HERDR_CHANGES_JS" && -f "$HERDR_HOME/mods/changes/main.js" ]] && command -v herdr-app >/dev/null 2>&1; then
     build_changes || ready=0
   fi
   if herdr_all_built && herdr_shipped_present && [[ "$(herdr_shown_layout)" == "$HERDR_LAYOUT" ]]; then
@@ -778,13 +823,13 @@ install_herdr() {
     preview_first_build
     return 0
   fi
-  if ((ready && !DRY_RUN)) && [[ ! -f "$HERDR_CHANGES_JS" ]]; then
+  if herdr_chosen git && ((ready && !DRY_RUN)) && [[ ! -f "$HERDR_CHANGES_JS" ]]; then
     build_changes || ready=0
   fi
 
   # Shipped files are only this version's once its window has started, so this
   # waits for the window even though it doesn't go through it.
-  if changes_outdated; then
+  if herdr_chosen git && changes_outdated; then
     build_changes || true
   fi
   for spec in "${HERDR_MOD_CLONES[@]}"; do

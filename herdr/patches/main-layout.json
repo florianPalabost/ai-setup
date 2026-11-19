@@ -1,12 +1,12 @@
 {
   "blocks": {
     "tabs": { "from": "tabs", "to": "tabs-git" },
-    "changes": { "from": "changes", "to": "git" }
+    "changes": { "from": "changes", "to": "git", "feature": "git" }
   },
   "add": {
     "panel-body": [
-      { "id": "find", "type": "block", "content": { "mod": "find" } },
-      { "id": "factory", "type": "block", "content": { "mod": "factory-board", "props": { "panel": true } } }
+      { "feature": "find", "id": "find", "type": "block", "content": { "mod": "find" } },
+      { "feature": "factory", "id": "factory", "type": "block", "content": { "mod": "factory-board", "props": { "panel": true } } }
     ]
   }
 }
