@@ -27,7 +27,7 @@ Runs GitHub tickets through Claude, one at a time: implement, check, review, rew
 5. Pushes the branch, writes the PR body with `/pr` and opens a draft PR, or updates the one already open.
 6. Comments on the ticket and labels it `agent-done` when the review passed, otherwise `ready-for-human`. A run that stops on an error also goes to `ready-for-human`, and its worktree is kept.
 
-Each run writes to `.git/factory/issue-<n>/<timestamp>/`: `progress.jsonl` (step changes, read by `status`, `watch` and the boards) and one stream-json transcript per agent step. A run whose process died before it finished reads as `abandoned`.
+Each run writes to `.git/factory/issue-<n>/<timestamp>/`: `progress.jsonl` (step changes, read by `status`, `watch` and the boards), one stream-json transcript per agent step, and `watch.log` (what `watch` prints, as plain text, written while the run goes). A run whose process died before it finished reads as `abandoned`.
 
 ## `.factory.json`
 

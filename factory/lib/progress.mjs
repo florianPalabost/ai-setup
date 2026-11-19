@@ -4,6 +4,9 @@ import { join, relative } from 'node:path'
 
 export const PROGRESS_FILE = 'progress.jsonl'
 
+/** The run's transcript as `factory watch` prints it, written beside progress.jsonl while the run goes. */
+export const WATCH_LOG_FILE = 'watch.log'
+
 export const STEP_STATUSES = Object.freeze({
     running: 'running',
     done: 'done',

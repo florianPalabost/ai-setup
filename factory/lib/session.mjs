@@ -1,9 +1,9 @@
 import { spawnSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { appendFileSync, existsSync } from 'node:fs'
 import { open, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { ERROR_CODES, FactoryError } from './constants.mjs'
-import { STEP_STATUSES, describeToolUse, isCodingStep, latestRun, parseJsonLine } from './progress.mjs'
+import { STEP_STATUSES, WATCH_LOG_FILE, describeToolUse, isCodingStep, latestRun, parseJsonLine } from './progress.mjs'
 import { worktreePathFor } from './worktree.mjs'
 
 const WATCH_POLL_MS = 1000
@@ -66,9 +66,9 @@ async function readNewLines(path, cursor) {
 
 /**
  * Follows a ticket's latest run in the terminal: each step as it starts and ends, and the running agent's
- * transcript as readable lines. Returns once the run records its outcome.
+ * transcript as readable lines. Returns once the run records its outcome, or after one last read once `stopped` says so.
  */
-export async function watchRun({ repo, issueNumber, write = (text) => process.stdout.write(`${text}\n`) }) {
+export async function watchRun({ repo, issueNumber, write = (text) => process.stdout.write(`${text}\n`), stopped = () => false }) {
     const cursors = new Map()
     const announced = new Map()
     let shownDetail = null
@@ -97,8 +97,24 @@ export async function watchRun({ repo, issueNumber, write = (text) => process.st
             write(`\n■ run finished: ${run.outcome}`)
             return
         }
+        if (stopped()) {
+            return
+        }
         await sleep(WATCH_POLL_MS)
     }
+}
+
+/**
+ * Writes what `factory watch` prints to watch.log in the run folder while the run goes, so a reader can follow it
+ * as plain text. `stop` ends it after one last read; `done` settles once it has.
+ * @returns {{ stop: () => void, done: Promise<void> }}
+ */
+export function writeWatchLog({ repo, issueNumber, runDir }) {
+    let stopping = false
+    const path = join(runDir, WATCH_LOG_FILE)
+    const done = watchRun({ repo, issueNumber, write: (text) => appendFileSync(path, `${text}\n`), stopped: () => stopping }).catch(() => {})
+
+    return { stop: () => (stopping = true), done }
 }
 
 /**
