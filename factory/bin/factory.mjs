@@ -37,6 +37,8 @@ Options:
 
 const REQUIRED_TOOLS = ['git', 'gh', 'claude']
 const SANDBOX_TOOLS = ['srt', 'bwrap', 'socat', 'rg']
+/** The apt package of each sandbox tool apt installs; srt comes from npm. */
+const SANDBOX_APT_PACKAGES = Object.freeze({ bwrap: 'bubblewrap', socat: 'socat', rg: 'ripgrep' })
 
 const log = (message) => console.log(`▸ ${message}`)
 
@@ -49,8 +51,13 @@ async function doctor(repo) {
     ]
     rows.forEach(([name, ok, hint]) => console.log(`${ok ? '✓' : '✗'} ${name.padEnd(14)} ${ok ? '' : hint}`))
     console.log(`\nrepo ${repo.root} · base ${config.baseBranch} · ${config.setup.length} setup / ${config.checks.length} check command(s)`)
-    if (!SANDBOX_TOOLS.every(hasCommand)) {
-        console.log('\nsrt: npm install -g @anthropic-ai/sandbox-runtime · socat/rg: sudo apt install socat ripgrep')
+    const missingSandboxTools = SANDBOX_TOOLS.filter((tool) => !hasCommand(tool))
+    const missingAptPackages = missingSandboxTools.map((tool) => SANDBOX_APT_PACKAGES[tool]).filter(Boolean)
+    if (missingSandboxTools.includes('srt')) {
+        console.log('\nsrt: npm install -g @anthropic-ai/sandbox-runtime')
+    }
+    if (missingAptPackages.length) {
+        console.log(`\nsandbox tools: sudo apt install ${missingAptPackages.join(' ')}`)
     }
 }
 
