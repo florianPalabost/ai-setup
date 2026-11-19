@@ -6,7 +6,7 @@ Runs GitHub tickets through Claude, one at a time: implement, check, review, rew
 
 | Command | What it does |
 | --- | --- |
-| `factory doctor` | Checks `git`, `gh`, `claude`, the sandbox tools, `gh auth` and the repo's `.factory.json`, and prints the install command for what's missing |
+| `factory doctor` | Checks `git`, `gh`, `claude`, the sandbox tools, that `bwrap` can create a sandbox on Linux, `gh auth` and the repo's `.factory.json`, and prints the install command for what's missing, or the AppArmor fix when Ubuntu blocks `bwrap` |
 | `factory init` | Creates the `agent-working` and `agent-done` labels in the repo |
 | `factory status [--json] [--local]` | Lists the tickets the factory tracks, with their PR, blockers, worktree and latest run. `--local` reads only the runs under `.git/factory` and makes no GitHub calls |
 | `factory run <issue>` | Runs one ticket |
