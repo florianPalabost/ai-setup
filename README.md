@@ -35,7 +35,7 @@ cd ~/dev/ai-setup
 `install.sh` is idempotent and **never deletes anything**: whatever it would replace is moved to `~/.claude/backups/ai-setup-<timestamp>/`. The only exception is the [skill mirrors](GLOSSARY.md) it generates itself, kept in sync in place. It:
 
 1. Symlinks `global/AGENTS.md`, `global/CLAUDE.md` and `global/RTK.md` into `~/.claude/`
-2. Links the [`factory`](factory) CLI into `~/.local/bin` (not on native Windows) and installs what its srt sandbox runs on: `srt` with `npm install -g @anthropic-ai/sandbox-runtime`, then bubblewrap, socat and ripgrep (only ripgrep on macOS) with `brew` or passwordless `apt`. Where `apt` needs a password, the run ends by printing the `sudo apt install …` command to run yourself. It also warns when `gh` is older than 2.48, which `factory status` needs
+2. Links the [`factory`](factory) CLI into `~/.local/bin` (not on native Windows) and installs what its srt sandbox runs on: `srt` with `npm install -g @anthropic-ai/sandbox-runtime`, then bubblewrap, socat and ripgrep (only ripgrep on macOS) with `brew` or passwordless `apt`. Where `apt` needs a password, the run ends by printing the `sudo apt install …` command to run yourself.
 3. Installs [rtk](https://github.com/rtk-ai/rtk) if it's missing (`brew`, `winget` on Windows, otherwise its install script), which condenses Bash output before Claude reads it. Its `PreToolUse` hook comes from `global/settings.json` and its instructions from `global/RTK.md`, so `rtk init` isn't needed
 4. Merges `global/settings.json` into `~/.claude/settings.json` (merged, not symlinked, so machine-specific hooks never end up in the repo)
 5. Symlinks the skills/commands/agents from `plugins/*/` into `~/.claude/`
