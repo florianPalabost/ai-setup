@@ -1,72 +1,56 @@
-import { DEMO_RUN, DEMO_RUN_ID, demoGraph } from './demo.mjs'
+import { DEMO_RUN, DEMO_RUN_ID, demoRun } from './demo.mjs'
 
-const LEGACY_RUN_ID = 'run_legacy_local'
+const RUN_OUTCOMES = Object.freeze({
+    'agent-done': 'draft PR open',
+    'ready-for-human': 'handed to you',
+    error: 'stopped on an error',
+    abandoned: 'stopped without finishing',
+})
 
-function parseJson(value, fallback) {
-    if (typeof value !== 'string') {
-        return value ?? fallback
-    }
-    try {
-        return JSON.parse(value) ?? fallback
-    } catch {
-        return fallback
-    }
+// A ticket's worktree, e.g. ~/dev/lara-vision-factory/issue-42, or a folder inside it.
+const ISSUE_WORKTREE_PATTERN = /-factory[\\/]issue-(\d+)(?:[\\/]|$)/
+
+export const issueOfFolder = (folder) => ISSUE_WORKTREE_PATTERN.exec(folder ?? '')?.[1] ?? null
+
+function objectiveOf(issueNumber, run) {
+    const state = run.outcome ? RUN_OUTCOMES[run.outcome] ?? run.outcome : run.finishedAt ? 'ended' : 'running'
+
+    return `#${issueNumber} · ${state}`
 }
 
 /**
- * Reads one orchestration run (the newest when `runId` names none) with its tasks, gates and workers,
- * shaped for drawing. `orchestration(args)` runs `orca orchestration <args> --full --json` and resolves
- * with its result. Shared by the Orca plugin's worker and the herdr mod, so it imports nothing host-specific.
+ * One factory run shaped for drawing, from `factory status --json --local`: each step a card after the one before it.
+ * Picks `runId` (an issue number, or the demo), else the ticket whose worktree `folder` is in, else the newest run.
+ * Imports nothing from herdr, so node can test it.
  */
-export async function loadGraph(orchestration, { runId } = {}) {
-    const runs = (await orchestration(['run-list'])).runs.filter((run) => run.id !== LEGACY_RUN_ID && !run.legacy)
+export function runGraph(status, { runId = null, folder = null, now = Date.now() } = {}) {
+    const runs = Object.entries(status?.runs ?? {})
+        .map(([issueNumber, run]) => ({ id: issueNumber, objective: objectiveOf(issueNumber, run), run }))
+        .sort((left, right) => (right.run.startedAt ?? '').localeCompare(left.run.startedAt ?? ''))
     const summary = [...runs.map(({ id, objective }) => ({ id, objective })), DEMO_RUN]
-    if (runId === DEMO_RUN_ID) {
-        return { runs: summary, ...demoGraph(Date.now()) }
-    }
-    const run = runs.find((candidate) => candidate.id === runId) ?? runs[0]
-    if (!run) {
-        return { runs: summary, run: null, tasks: [], gates: [] }
-    }
-
-    const [taskResult, gateResult, workerResult] = await Promise.all([
-        orchestration(['task-list', '--run', run.id]),
-        orchestration(['gate-list', '--run', run.id]),
-        orchestration(['worker-list', '--run', run.id]),
-    ])
-
-    const workerByTaskId = new Map()
-    for (const worker of workerResult.workers) {
-        if (!workerByTaskId.has(worker.taskId)) {
-            workerByTaskId.set(worker.taskId, worker)
-        }
+    const picked = runId === DEMO_RUN_ID
+        ? { ...DEMO_RUN, run: demoRun(now) }
+        : runs.find((run) => run.id === runId) ?? runs.find((run) => run.id === issueOfFolder(folder)) ?? runs[0]
+    if (!picked) {
+        return { repo: status?.repo ?? null, runs: summary, run: null, steps: [] }
     }
 
-    const tasks = taskResult.tasks.map((task) => {
-        const worker = workerByTaskId.get(task.id)
-
-        return {
-            id: task.id,
-            name: task.display_name || task.task_title || task.id,
-            spec: task.spec ?? '',
-            status: task.status,
-            deps: parseJson(task.deps, []),
-            parentId: parseJson(task.parent_id, null),
-            outcome: parseJson(task.result, {})?.outcome ?? null,
-            createdAt: task.created_at,
-            completedAt: task.completed_at,
-            agent: worker?.projection?.provider?.id ?? null,
-            terminal: worker?.agentTerminalHandle ?? null,
-            worktreeId: worker?.resource?.worktreeId ?? worker?.projection?.workspace?.id ?? null,
-        }
-    })
-    const gates = gateResult.gates.map((gate) => ({
-        id: gate.id,
-        taskId: gate.task_id,
-        question: gate.question,
-        status: gate.status ?? 'pending',
-        resolution: gate.resolution ?? null,
+    const { run } = picked
+    const steps = run.steps.map((step, index) => ({
+        id: `step:${step.name}`,
+        name: step.name,
+        status: step.status,
+        deps: index === 0 ? [] : [`step:${run.steps[index - 1].name}`],
+        detail: step.detail ?? null,
+        agent: step.sessionId ? 'claude' : null,
+        startedAt: step.startedAt,
+        endedAt: step.status === 'running' ? null : step.updatedAt,
     }))
 
-    return { runs: summary, run: { id: run.id, objective: run.objective, createdAt: run.created_at }, tasks, gates }
+    return {
+        repo: status?.repo ?? null,
+        runs: summary,
+        run: { id: picked.id, objective: picked.objective, outcome: run.outcome, startedAt: run.startedAt, finishedAt: run.finishedAt },
+        steps,
+    }
 }

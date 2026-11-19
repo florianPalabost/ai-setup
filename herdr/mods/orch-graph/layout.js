@@ -1,46 +1,35 @@
 // Turns a run into positioned cards and edges, free of the herdr runtime so it
-// can run under `node --test`. The Orca panel lays the same graph out with dagre;
-// herdr can't load it, so this is a small layered layout of its own: ranks by
-// longest path, top to bottom, ordered by the mean position of each card's parents.
+// can run under `node --test`. herdr can't load dagre, so this is a small layered
+// layout of its own: ranks by longest path, top to bottom, ordered by the mean
+// position of each card's parents.
 
 export const CARD_WIDTH = 240;
-export const GATE_WIDTH = 200;
 export const CARD_HEIGHT = 64;
 export const NODE_GAP = 28;
 export const RANK_GAP = 56;
 
-export const EDGE_KINDS = Object.freeze({ root: "root", dep: "dep", child: "child", gate: "gate" });
-export const NODE_KINDS = Object.freeze({ run: "run", task: "task", gate: "gate" });
+export const EDGE_KINDS = Object.freeze({ root: "root", dep: "dep" });
+export const NODE_KINDS = Object.freeze({ run: "run", step: "step" });
 
-// The run is the root, every gate points at the task it blocks, and a task's
-// parent points at it with a "child" edge. Same graph as the Orca panel's buildGraph.
-export function buildGraph({ run, tasks, gates }) {
+// The run is the root; a step with no dependency hangs from it, every other step from the steps it follows.
+export function buildGraph({ run, steps }) {
   const runNodeId = `run:${run.id}`;
-  const taskIds = new Set(tasks.map((task) => task.id));
-  const doneCount = tasks.filter((task) => task.status === "completed").length;
-  const nodes = [{ id: runNodeId, kind: NODE_KINDS.run, width: CARD_WIDTH, run, doneCount, taskCount: tasks.length }];
+  const stepIds = new Set(steps.map((step) => step.id));
+  const doneCount = steps.filter((step) => step.status !== "running").length;
+  const nodes = [{ id: runNodeId, kind: NODE_KINDS.run, width: CARD_WIDTH, run, doneCount, stepCount: steps.length }];
   const edges = [];
 
-  for (const task of tasks) {
-    nodes.push({ id: task.id, kind: NODE_KINDS.task, width: CARD_WIDTH, task });
-    const deps = task.deps.filter((depId) => taskIds.has(depId));
-    const hasParent = task.parentId && taskIds.has(task.parentId);
-    for (const depId of deps) edges.push({ from: depId, to: task.id, kind: EDGE_KINDS.dep });
-    if (hasParent) edges.push({ from: task.parentId, to: task.id, kind: EDGE_KINDS.child });
-    if (deps.length === 0 && !hasParent) edges.push({ from: runNodeId, to: task.id, kind: EDGE_KINDS.root });
-  }
-  for (const gate of gates) {
-    if (!taskIds.has(gate.taskId)) continue;
-    const gateNodeId = `gate:${gate.id}`;
-    nodes.push({ id: gateNodeId, kind: NODE_KINDS.gate, width: GATE_WIDTH, gate });
-    edges.push({ from: gateNodeId, to: gate.taskId, kind: EDGE_KINDS.gate });
+  for (const step of steps) {
+    nodes.push({ id: step.id, kind: NODE_KINDS.step, width: CARD_WIDTH, step });
+    const deps = step.deps.filter((depId) => stepIds.has(depId));
+    for (const depId of deps) edges.push({ from: depId, to: step.id, kind: EDGE_KINDS.dep });
+    if (deps.length === 0) edges.push({ from: runNodeId, to: step.id, kind: EDGE_KINDS.root });
   }
 
   return { nodes, edges };
 }
 
-// Longest path from the sources, with a gate pulled down to sit just above the task it blocks.
-// An edge that would close a cycle is ignored, so bad data still draws.
+// Longest path from the sources. An edge that would close a cycle is ignored, so bad data still draws.
 function ranks(nodes, edges) {
   const incoming = new Map(nodes.map((node) => [node.id, []]));
   for (const edge of edges) incoming.get(edge.to)?.push(edge.from);
@@ -56,9 +45,6 @@ function ranks(nodes, edges) {
     return value;
   };
   for (const node of nodes) rankOf(node.id);
-  for (const edge of edges) {
-    if (edge.kind === EDGE_KINDS.gate) rank.set(edge.from, Math.max(0, rank.get(edge.to) - 1));
-  }
   return rank;
 }
 
