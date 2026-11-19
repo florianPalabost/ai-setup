@@ -4,7 +4,7 @@
 // props it is the Factory panel instead (panel.js).
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { exec, readTextFile, spaces, panes, theme, run, notify, window, checking, props } from "herdr";
+import { exec, readTextFile, spaces, panes, theme, run, notify, window, checking, props, layout, setShared } from "herdr";
 import { ACTIONS, STEP_MARKS, boardLanes, cardActions, cardTags, nextUp, sinceLabel } from "./board.js";
 import { createOpener } from "./opener.js";
 import { createFactorySource } from "./source.js";
@@ -16,6 +16,11 @@ const LANE_MIN_WIDTH = 180;
 const CHILD_INDENT = 14;
 // Opens a run's Markdown log in the person's pager, the path kept out of the script.
 const PAGER_SCRIPT = 'exec "${PAGER:-less}" "$1"';
+// The Bottom panel's Output tab follows the ticket this shared value names (bottom-output/main.js).
+const OUTPUT_FOLLOW_KEY = "bottom-output.follow";
+const BOTTOM_PANEL = "bottom";
+
+const hasNode = (node, id) => node?.id === id || (node?.children ?? []).some((child) => hasNode(child, id));
 
 const laneColor = (t, key) => ({ human: t.ansi1, working: t.ansi3, done: t.ansi2, ready: t.ansi4 })[key] ?? t.dim;
 const stepColor = (t, status) => ({ done: t.ansi2, pass: t.ansi2, fail: t.ansi1, error: t.ansi1, running: t.ansi3 })[status] ?? t.dim;
@@ -72,11 +77,19 @@ export default class FactoryBoard extends View {
     run("terminal.open", { argv: ["factory", command, String(ticket.number), "--repo", this.data.repo.root], folder: ticket.worktree, place: "tab" });
   }
 
+  // In the Bottom panel's Output tab when the layout has it, else in a terminal tab.
+  watch(ticket) {
+    if (!hasNode(layout(), BOTTOM_PANEL)) return this.openTerminal(ticket, ACTIONS.watch);
+    setShared(OUTPUT_FOLLOW_KEY, { issue: ticket.number, at: Date.now() });
+    run("layout.show", { id: BOTTOM_PANEL });
+  }
+
   act(ticket, action, cx) {
     const repo = this.data?.repo;
     if (!repo) return;
     if (action === ACTIONS.worktree) return this.openWorktree(ticket);
-    if (action === ACTIONS.watch || action === ACTIONS.resume) return this.openTerminal(ticket, action);
+    if (action === ACTIONS.watch) return this.watch(ticket);
+    if (action === ACTIONS.resume) return this.openTerminal(ticket, action);
     if (action === ACTIONS.issue) return void this.openUrl(ticket.url);
     if (action === ACTIONS.pr) return void this.openUrl(ticket.pr?.url);
     if (action === ACTIONS.log) {
