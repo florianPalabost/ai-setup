@@ -1,13 +1,14 @@
 // The Output tab of the Bottom panel: follows one Output source of the active
 // space (a factory run's watch.log, the Laravel log), remembering the pick per
-// space. It stays at the end of the file until scrolled up, and stays silent on
-// new lines. Another mod asks it to follow a factory ticket by setting the shared
-// FOLLOW_KEY to { issue, at }.
+// space. The log is selectable text. It stays at the end of the file until
+// scrolled up or clicked, stays silent on new lines, and holds still while text
+// is selected. Another mod asks it to follow a factory ticket by setting the
+// shared FOLLOW_KEY to { issue, at }.
 import { View, div, svg } from "gpui-kit";
-import { v_flex, h_flex, InputState, Input, Scrollbar, Select, Popup, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
+import { v_flex, h_flex, InputState, Input, Select, Popup, EditorState, Editor } from "gpui-base";
 import * as herdr from "herdr";
 import { SOURCE_KINDS, createSourceFinder, factorySourceId } from "./sources.js";
-import { matching, wrapRows } from "./text.js";
+import { matching } from "./text.js";
 import { watchFile } from "./file-watch.js";
 
 export const FOLLOW_KEY = "bottom-output.follow";
@@ -17,11 +18,6 @@ const SOURCES_REFRESH_MS = 30000;
 // A space on another machine has no folder watch here, so its log is polled.
 const REMOTE_POLL_MS = 3000;
 const FONT_SIZE = 12;
-const ROW_HEIGHT = 18;
-// A monospace character's advance, as a share of the font size.
-const CHAR_WIDTH = 0.6;
-const ROWS_PADDING = 10;
-const SCROLLBAR_WIDTH = 12;
 
 const MESSAGES = {
   noSpace: "No space is open.",
@@ -43,15 +39,15 @@ export default class Output extends View {
   init(_props, cx) {
     this.finder = createSourceFinder({ exec: herdr.exec, readTextFile: herdr.readTextFile });
     this.spaceId = null; this.on = null; this.sources = null; this.source = null;
-    this.lines = null; this.message = null; this.follow = true; this.width = 0;
+    this.lines = null; this.message = null; this.follow = true; this.shown = null; this.matches = 0;
     this.loading = false; this.reloadAgain = false; this.finding = 0; this.wantedIssue = null; this.unfound = null; this.stopWatch = null;
     this.picks = readJson(PICKS_KEY, {});
     this.handledAt = Number(localStorage.getItem(HANDLED_KEY) ?? 0);
-    this.view = { key: null, rows: [] };
-    this.scroll = VirtualListScrollHandle.new();
+    this.log = EditorState.new({ language: "txt", readonly: true, value: "", line_numbers: false, folding: false, soft_wrap: true,
+      font_family: herdr.settings().font_family, font_size: FONT_SIZE });
     this.menuOpen = false; this.menuFocus = cx.focus_handle(); this.triggerFocus = cx.focus_handle();
     this.filter = InputState.new({ placeholder: "Filter" });
-    this.filter.on("change", (_event, cx) => cx.notify());
+    this.filter.on("change", (_event, cx) => { this.showLines(); cx.notify(); });
     if (herdr.checking()) return;
     cx.timer.every(SOURCES_REFRESH_MS, (cx) => this.findSources(cx));
   }
@@ -99,6 +95,7 @@ export default class Output extends View {
     this.stopWatch?.();
     this.stopWatch = null;
     this.source = source; this.lines = null; this.message = null; this.follow = true;
+    this.showLines();
     if (!source) return;
     this.load(cx);
     this.stopWatch = this.on
@@ -117,6 +114,7 @@ export default class Output extends View {
         if (source !== this.source) return;
         this.lines = lines;
         this.message = lines ? null : source.kind === SOURCE_KINDS.factory ? MESSAGES.noFactoryOutput : MESSAGES.noLaravelLog;
+        this.showLines();
       } catch {
         if (source === this.source) this.message = MESSAGES.unreadable;
       } finally {
@@ -146,21 +144,29 @@ export default class Output extends View {
     }
   }
 
-  // The drawn rows, worked out again only when the lines, the filter or the width change.
-  rows() {
-    const filter = this.filter.value();
-    const columns = this.width > 0 ? Math.floor((this.width - 2 * ROWS_PADDING - SCROLLBAR_WIDTH) / (FONT_SIZE * CHAR_WIDTH)) : Infinity;
-    const key = [this.lines, filter, columns];
-    if (key.some((part, index) => part !== this.view.key?.[index])) {
-      this.view = { key, rows: wrapRows(matching(this.lines ?? [], filter), columns) };
-      if (this.follow) this.scroll.scroll_to_bottom();
+  // Puts the matching lines in the log, unless text is selected there: the next read or filter change catches up.
+  showLines() {
+    const range = this.log.selected_range();
+    if (range.start !== range.end) return;
+    const lines = matching(this.lines ?? [], this.filter.value());
+    const text = lines.join("\n");
+    this.matches = lines.length;
+    if (text !== this.shown) {
+      this.shown = text;
+      this.log.set_value(text);
     }
-    return this.view.rows;
+    if (this.follow) this.toEnd();
+  }
+
+  toEnd() {
+    const end = this.log.value().length;
+    this.log.set_selected_range({ start: end, end });
   }
 
   jumpToEnd(cx) {
     this.follow = true;
-    this.scroll.scroll_to_bottom();
+    this.showLines();
+    this.toEnd();
     cx.notify();
   }
 
@@ -204,23 +210,20 @@ export default class Output extends View {
     if (this.message) return this.message;
     if (!this.lines) return null;
     if (this.lines.length === 0) return MESSAGES.empty;
-    return this.view.rows.length === 0 ? MESSAGES.noMatch : null;
+    return this.matches === 0 ? MESSAGES.noMatch : null;
   }
 
   render(cx) {
     const t = herdr.theme();
     if (!herdr.checking()) this.sync(cx);
-    const rows = this.rows();
     const note = this.note();
+    const unfollow = (cx) => { if (this.follow) { this.follow = false; cx.notify(); } };
     return v_flex().id("output").size_full().min_h(0).bg(t.background).text_color(t.foreground).text_size(13)
-      .on_size_change((size, cx) => { if (size.width !== this.width) { this.width = size.width; cx.notify(); } })
       .child(this.toolbar(t))
-      .child(div().flex_1().min_h(0).relative().font_family(herdr.settings().font_family ?? "JetBrains Mono").text_size(FONT_SIZE)
-        .on_scroll_wheel((e, cx) => { if (e.delta.y > 0 && this.follow) { this.follow = false; cx.notify(); } })
-        .child(v_virtual_list("output-rows", rows.length, ROW_HEIGHT, (index) => String(index),
-          (range) => rows.slice(range.start, range.end).map((row) => div().h(ROW_HEIGHT).px(ROWS_PADDING).whitespace_nowrap().overflow_hidden().child(row)))
-          .track_scroll(this.scroll).size_full())
-        .child(Scrollbar.vertical("output-rows").viewport_from_layout().absolute().inset_0())
+      .child(div().flex_1().min_h(0).relative()
+        .on_scroll_wheel((e, cx) => { if (e.delta.y > 0) unfollow(cx); })
+        .on_mouse_down("left", (_e, cx) => unfollow(cx))
+        .child(Editor.new(this.log).size_full())
         .when(Boolean(note), (el) => el.child(div().absolute().top(8).px(12).text_size(12).text_color(t.dim).child(note))));
   }
 }

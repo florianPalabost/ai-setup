@@ -22,20 +22,6 @@ export function matching(lines, filter) {
   return needle ? lines.filter((line) => line.toLowerCase().includes(needle)) : lines;
 }
 
-// The rows a monospace view of `columns` characters draws: a long line takes several.
-export function wrapRows(lines, columns) {
-  const width = Math.max(1, columns);
-  const rows = [];
-  for (const line of lines) {
-    if (line.length <= width) {
-      rows.push(line);
-      continue;
-    }
-    for (let start = 0; start < line.length; start += width) rows.push(line.slice(start, start + width));
-  }
-  return rows;
-}
-
 // An absolute path with its "." and ".." steps resolved, so it matches the paths a folder watch reports.
 export function normalizePath(path) {
   const parts = [];
