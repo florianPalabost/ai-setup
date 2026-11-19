@@ -1,5 +1,5 @@
 // What the Factory board shows, free of the herdr runtime so it can run under
-// `node --test`. Mirrors the Orca plugin's Factory panel (orca-plugins/orch-dag/panel/factory.js).
+// `node --test`.
 
 export const LANES = Object.freeze([
   { state: "ready-for-human", key: "human", title: "Needs you" },

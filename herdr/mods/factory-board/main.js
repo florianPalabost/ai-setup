@@ -1,5 +1,4 @@
-// The Factory board: the factory's tickets as a kanban, as the Orca plugin's
-// Factory panel shows them (orca-plugins/orch-dag). Lanes: Needs you, Working,
+// The Factory board: the factory's tickets as a kanban. Lanes: Needs you, Working,
 // Done · draft PR, Ready. A blocked ticket sits under the one blocking it, and
 // the ticket `factory next` would pick is marked "next up".
 import { View, div } from "gpui-kit";

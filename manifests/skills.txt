@@ -12,9 +12,6 @@
 #                                               like a git line; <skill>=<name> renames one.
 
 skills  humanlayer/skills         show-me
-skills  stablyai/orca             orca-computer-use
-skills  stablyai/orca             orca-cli
-skills  stablyai/orca             orchestration
 skills  vercel-labs/agent-skills  vercel-react-best-practices
 skills  vercel-labs/agent-skills  web-design-guidelines
 skills  vercel-labs/skills        find-skills
