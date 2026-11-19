@@ -50,9 +50,10 @@ async function refreshOrcaSidebar(root, log) {
 /**
  * Removes the worktree and local branch of every ticket whose PR is merged.
  * Keeps a worktree with uncommitted changes, or whose branch moved past the merged commit.
+ * Then refreshes Orca's sidebar, unless `refreshOrca` is false because the caller (the Orca plugin) does it.
  * @returns {Promise<{ removed: number[], kept: { issueNumber: number, reason: string }[] }>}
  */
-export async function cleanMergedWorktrees({ repo, log, dryRun = false }) {
+export async function cleanMergedWorktrees({ repo, log, dryRun = false, refreshOrca = true }) {
     const worktrees = await factoryWorktrees(repo.root)
     if (worktrees.length === 0) {
         return { removed: [], kept: [] }
@@ -86,7 +87,7 @@ export async function cleanMergedWorktrees({ repo, log, dryRun = false }) {
         removed.push(issueNumber)
     }
 
-    if (removed.length > 0 && !dryRun) {
+    if (removed.length > 0 && !dryRun && refreshOrca) {
         await refreshOrcaSidebar(repo.root, log)
     }
 
