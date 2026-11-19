@@ -128,8 +128,10 @@ patch_applies() {
 }
 
 # The layout is edited as JSON because herdr may reorder its keys, which a text patch can't follow.
-# An entry of the edit with a "feature" applies only when $4, the chosen panel
-# features separated by spaces, has it.
+# "blocks" points blocks at other mods, "add" appends children to a container, and
+# "wrap" puts a node in a new container, first, followed by the wrap's "after"
+# nodes; the container takes the node's size. An entry of the edit with a
+# "feature" applies only when $4, the chosen panel features separated by spaces, has it.
 edited_layout() {
   py3 - "$@" <<'PY'
 import json, sys
@@ -154,7 +156,17 @@ for container, entries in spec.get("add", {}).items():
     kept = [without_feature(entry) for entry in entries if wanted(entry)]
     if kept:
         added[container] = kept
+wraps = {id: wrap for id, wrap in spec.get("wrap", {}).items() if wanted(wrap)}
+SIZE_KEYS = ("size", "min", "max")
 ids = set()
+
+def wrapped(node):
+    wrap = wraps[node["id"]]
+    container = {key: value for key, value in without_feature(wrap).items() if key != "after"}
+    container.update({key: node.pop(key) for key in SIZE_KEYS if key in node})
+    container["children"] = [node, *wrap.get("after", [])]
+    seen.add(node["id"])
+    return container
 
 def visit(node):
     ids.add(node.get("id"))
@@ -167,14 +179,20 @@ def visit(node):
         seen.add(node["id"])
     for child in node.get("children", []):
         visit(child)
+    if "children" in node:
+        node["children"] = [wrapped(child) if child.get("id") in wraps else child for child in node["children"]]
     if node.get("id") in added:
         node["children"] = node.get("children", []) + added[node["id"]]
         seen.add(node["id"])
 
+def node_ids(node):
+    return {node["id"]} | {id for child in node.get("children", []) for id in node_ids(child)}
+
 seen = set()
 visit(layout)
-new_ids = {block["id"] for blocks_added in added.values() for block in blocks_added}
-if seen != set(blocks) | set(added) or ids & new_ids:
+new_nodes = [node for nodes in added.values() for node in nodes] + [{"id": wrap["id"], "children": wrap.get("after", [])} for wrap in wraps.values()]
+new_ids = {id for node in new_nodes for id in node_ids(node)}
+if seen != set(blocks) | set(added) | set(wraps) or ids & new_ids:
     sys.exit(EXIT_EDIT_DOES_NOT_APPLY)
 dst.write_text(json.dumps(layout, indent=2) + "\n")
 PY

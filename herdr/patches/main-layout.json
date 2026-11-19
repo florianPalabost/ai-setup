@@ -9,5 +9,17 @@
       { "feature": "find", "id": "find", "type": "block", "content": { "mod": "find" } },
       { "feature": "factory", "id": "factory", "type": "block", "content": { "mod": "factory-board", "props": { "panel": true } } }
     ]
+  },
+  "wrap": {
+    "main": {
+      "feature": "bottom", "id": "main-column", "type": "column", "gap": 8,
+      "after": [
+        {
+          "id": "bottom", "type": "stack", "header": "tabs", "active": "output",
+          "size": { "px": 240 }, "min": 120, "hidden": true,
+          "children": [{ "id": "output", "type": "block", "content": { "mod": "bottom-output" } }]
+        }
+      ]
+    }
   }
 }
