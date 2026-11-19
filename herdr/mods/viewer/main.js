@@ -1,13 +1,15 @@
-// The Viewer: a tab showing one file read-only, at the line quick open or
-// search picked. Each pick replaces the file; agent edits reload it in place.
+// The Viewer: a tab showing one file at the line quick open or search picked,
+// editable, saved with ctrl-s. Each pick replaces the file, unless it has
+// unsaved edits; edits on disk reload it, unless it has unsaved edits.
 import { View, div } from "gpui-kit";
-import { v_flex, h_flex, Editor } from "gpui-base";
+import { v_flex, Editor } from "gpui-base";
 import * as herdr from "herdr";
-import { targetFor } from "./target.js";
-import { isBinary, lineAt, rangeFor, shown } from "./text.js";
+import { targetFor, CLOSE_AFTER_OPEN_MS } from "./target.js";
+import { isBinary, lineAt, rangeFor, shown, MAX_CHARS } from "./text.js";
 import { createCode } from "./code.js";
 import { watchFile } from "./file-watch.js";
 import { openInVsCode } from "./vscode.js";
+import { viewerHeader } from "./header.js";
 
 export const VIEWER_ERROR_CODES = Object.freeze({
   missing: "viewer_file_missing",
@@ -21,23 +23,30 @@ const MESSAGES = {
   [VIEWER_ERROR_CODES.unreadable]: "Cannot read this file (too large or unreadable)",
 };
 
+// herdr sends it when pane.go lands here.
+const FOCUS = "focus";
+// The picking popup still holds the keyboard until it closes, CLOSE_AFTER_OPEN_MS
+// after the pick, and herdr sends no "focus" then, so take it a bit later.
+const TAKE_KEYBOARD_AFTER_MS = CLOSE_AFTER_OPEN_MS + 100;
+
 const fileOf = (target) => `${target.root}/${target.path}`;
 
 export default class Viewer extends View {
   init(_props, cx) {
-    this.seq = null; this.target = null; this.file = null; this.text = null;
-    this.code = null; this.error = null; this.stopWatch = null;
+    this.seq = null; this.target = null; this.file = null; this.code = null; this.stopWatch = null;
+    this.disk = null; this.text = null; this.readonly = false; this.dirty = false;
+    this.error = null; this.conflict = false; this.saveError = null; this.pending = null;
+    this.handle = cx.focus_handle();
     this.follow(cx);
+    if (herdr.checking()) return;
+    cx.spawn(async () => {
+      for (;;) if ((await herdr.nextCommand()) === FOCUS) this.takeKeyboard();
+    });
   }
 
-  // Loads the space's newest target; an older load still running drops its result.
-  follow(cx) {
-    const target = targetFor(herdr, this.space());
-    if (!target || target.seq === this.seq) return;
-    this.seq = target.seq;
-    cx.spawn(async (cx) => {
-      try { await this.load(target, cx); } catch { this.fail(VIEWER_ERROR_CODES.unreadable, target, cx); }
-    });
+  takeKeyboard() {
+    if (this.code) this.code.focus();
+    else this.handle.focus();
   }
 
   async close() {
@@ -48,20 +57,33 @@ export default class Viewer extends View {
     return herdr.props()?.space ?? herdr.spaces().find((space) => space.active)?.id;
   }
 
+  // Loads the space's newest target; an older load still running drops its result.
+  follow(cx) {
+    const target = targetFor(herdr, this.space());
+    if (!target || target.seq === this.seq) return;
+    this.seq = target.seq;
+    if (this.dirty && fileOf(target) !== this.file) { this.pending = target; return; }
+    this.pending = null;
+    if (this.dirty) { this.target = target; this.select(target, cx); return; }
+    cx.spawn(async (cx) => {
+      try { await this.load(target, cx); } catch { this.fail(VIEWER_ERROR_CODES.unreadable, target, cx); }
+    });
+  }
+
   async read(file) {
-    let text;
-    try { text = await herdr.readTextFile(file); } catch { return { error: VIEWER_ERROR_CODES.unreadable }; }
-    if (text === null) return { error: VIEWER_ERROR_CODES.missing };
-    return isBinary(text) ? { error: VIEWER_ERROR_CODES.binary } : { text: shown(text) };
+    let disk;
+    try { disk = await herdr.readTextFile(file); } catch { return { error: VIEWER_ERROR_CODES.unreadable }; }
+    if (disk === null) return { error: VIEWER_ERROR_CODES.missing };
+    return isBinary(disk) ? { error: VIEWER_ERROR_CODES.binary } : { disk };
   }
 
   async load(target, cx) {
     const file = fileOf(target);
-    const { text, error } = await this.read(file);
+    const { disk, error } = await this.read(file);
     if (this.seq !== target.seq) return;
     if (error) return this.fail(error, target, cx);
     this.target = target; this.error = null;
-    this.show(file, text, target, cx);
+    this.show(file, disk, target, cx);
     cx.notify();
   }
 
@@ -72,53 +94,125 @@ export default class Viewer extends View {
     cx.notify();
   }
 
-  show(file, text, target, cx) {
+  show(file, disk, target, cx) {
+    const text = shown(disk);
     if (this.file !== file || !this.code) {
       this.forget();
       this.file = file;
-      this.code = createCode(target.path, text);
+      this.readonly = disk.length > MAX_CHARS;
+      this.code = createCode(target.path, text, { readonly: this.readonly });
+      this.code.on("change", (_event, cx) => this.edited(cx));
       this.stopWatch = watchFile(herdr, cx, file, (cx) => this.reload(file, cx));
-    } else if (text !== this.text) {
+    } else if (text !== this.code.value()) {
       this.code.set_value(text);
     }
-    this.text = text;
-    this.code.set_selected_range(rangeFor(text, target));
+    this.disk = disk; this.text = text; this.dirty = false; this.conflict = false; this.saveError = null;
+    this.select(target, cx);
+  }
+
+  select(target, cx) {
+    this.code.set_selected_range(rangeFor(this.code.value(), target));
     this.code.focus();
+    cx.timer.after(TAKE_KEYBOARD_AFTER_MS, () => this.takeKeyboard());
+  }
+
+  edited(cx) {
+    const dirty = this.code.value() !== this.text;
+    if (dirty === this.dirty) return;
+    this.dirty = dirty;
+    cx.notify();
   }
 
   reload(file, cx) {
     cx.spawn(async (cx) => {
-      const { text, error } = await this.read(file);
-      if (this.file !== file || !this.code || text === this.text) return;
+      const { disk, error } = await this.read(file);
+      if (this.file !== file || !this.code || disk === this.disk) return;
+      if (this.dirty) { this.conflict = true; cx.notify(); return; }
       if (error) { this.error = error; cx.notify(); return; }
-      const line = lineAt(this.text, this.code.selected_range().start);
-      this.code.set_value(text);
-      this.code.set_selected_range(rangeFor(text, { line }));
-      this.text = text; this.error = null;
+      this.replace(disk);
       cx.notify();
     });
+  }
+
+  // Shows `disk` as the saved text, staying on the cursor's line.
+  replace(disk) {
+    const line = lineAt(this.code.value(), this.code.selected_range().start);
+    const text = shown(disk);
+    this.code.set_value(text);
+    this.code.set_selected_range(rangeFor(text, { line }));
+    this.disk = disk; this.text = text; this.dirty = false; this.conflict = false; this.saveError = null; this.error = null;
+  }
+
+  // Writes the edits unless the file changed since it was read; `overwrite`
+  // writes over whatever is there now.
+  async save(cx, { overwrite = false } = {}) {
+    if (!this.code || this.readonly || this.error) return false;
+    const file = this.file;
+    const text = this.code.value();
+    const expected = overwrite ? await herdr.readTextFile(file).catch(() => null) : this.disk;
+    try {
+      await herdr.writeTextFile(file, text, expected);
+    } catch (error) {
+      const now = await herdr.readTextFile(file).catch(() => null);
+      if (now !== this.disk) this.conflict = true;
+      else this.saveError = `${error?.message ?? error}`;
+      cx.notify();
+      return false;
+    }
+    if (this.file !== file) return true;
+    this.disk = text; this.text = text; this.dirty = this.code.value() !== text;
+    this.conflict = false; this.saveError = null;
+    cx.notify();
+    return true;
+  }
+
+  reloadFromDisk(cx) {
+    cx.spawn(async (cx) => {
+      const file = this.file;
+      const { disk, error } = await this.read(file);
+      if (this.file !== file || !this.code) return;
+      if (error) { this.error = error; cx.notify(); return; }
+      this.replace(disk);
+      cx.notify();
+    });
+  }
+
+  continueTo(cx) {
+    this.pending = null; this.dirty = false;
+    this.seq = null;
+    this.follow(cx);
+    cx.notify();
+  }
+
+  actions() {
+    return {
+      save: (cx) => { cx.spawn((cx) => this.save(cx)); },
+      overwrite: (cx) => { cx.spawn((cx) => this.save(cx, { overwrite: true })); },
+      reload: (cx) => this.reloadFromDisk(cx),
+      saveAndContinue: (cx) => {
+        cx.spawn(async (cx) => { if (await this.save(cx)) this.continueTo(cx); });
+      },
+      dropAndContinue: (cx) => this.continueTo(cx),
+      openInVsCode: () => { openInVsCode(herdr, this.target.root, this.file, this.currentLine()); },
+    };
   }
 
   forget() {
     this.stopWatch?.(); this.stopWatch = null;
     this.code?.release(); this.code = null;
-    this.file = null; this.text = null;
+    this.file = null; this.disk = null; this.text = null; this.dirty = false;
+    this.conflict = false; this.saveError = null; this.readonly = false;
   }
 
   currentLine() {
-    if (!this.code || this.text === null) return this.target?.line ?? 1;
-    return lineAt(this.text, this.code.selected_range().start);
+    if (!this.code) return this.target?.line ?? 1;
+    return lineAt(this.code.value(), this.code.selected_range().start);
   }
 
-  header(t) {
-    const target = this.target;
-    return h_flex().h(36).flex_none().px(12).gap(10).items_center().border_b(1).border_color(t.border)
-      .child(div().flex_1().min_w(0).truncate().text_color(target ? t.foreground : t.dim).child(target?.path ?? "Viewer"))
-      .when(Boolean(target) && !this.error, (el) => el.child(
-        div().id("viewer-vscode").flex_none().px(8).py(3).rounded(6).text_size(12).cursor_pointer()
-          .bg(t.raised).hover((s) => s.bg(t.hover))
-          .on_click(() => { openInVsCode(herdr, target.root, fileOf(target), this.currentLine()); })
-          .child("Open in VS Code")));
+  onKey(event, cx) {
+    if (event.key !== "s" || !event.modifiers.control) return;
+    cx.stop_propagation();
+    if (this.dirty) cx.spawn((cx) => this.save(cx));
   }
 
   body(t) {
@@ -131,8 +225,13 @@ export default class Viewer extends View {
   render(cx) {
     this.follow(cx);
     const t = herdr.theme();
-    return v_flex().id("viewer").size_full().min_h(0).bg(t.background).text_color(t.foreground).text_size(13)
-      .child(this.header(t))
+    const state = {
+      path: this.target?.path ?? null, dirty: this.dirty, readonly: this.readonly, error: this.error,
+      conflict: this.conflict, saveError: this.saveError, pending: this.pending,
+    };
+    return v_flex().id("viewer").track_focus(this.handle).size_full().min_h(0).bg(t.background).text_color(t.foreground).text_size(13)
+      .on_key_down((event, cx) => this.onKey(event, cx))
+      .child(viewerHeader(state, this.actions(), t))
       .child(this.body(t));
   }
 }
