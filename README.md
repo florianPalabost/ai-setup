@@ -40,8 +40,8 @@ cd ~/dev/ai-setup
 5. Symlinks the skills/commands/agents from `plugins/*/` into `~/.claude/`
 6. Adds the marketplaces and installs the plugins listed in [`manifests/plugins.txt`](manifests/plugins.txt)
 7. Installs the third-party skills listed in [`manifests/skills.txt`](manifests/skills.txt)
-8. Sets up [herdr](https://herdr.dev) with its Git panel (see below)
-9. Lists what an earlier version of this repo installed but the current one dropped (permission rules, plugins, skills, dangling links, herdr mods, clones and key bindings) and asks before removing it. Removed skills, links and herdr files go to the backup dir, and herdr leaves a layout being removed first; `--dry-run` or a non-interactive run only lists them
+8. Sets up [herdr](https://herdr.dev) with the features you pick (see below)
+9. Lists what an earlier version of this repo installed but the current one dropped (permission rules, plugins, skills, dangling links, herdr mods, clones and key bindings), plus the herdr features you turned off, and asks before removing it. Removed skills, links and herdr files go to the backup dir, and herdr leaves a layout being removed first; `--dry-run` or a non-interactive run only lists them
 
 A plain install only adds what's missing; versions already installed are left alone (that's `--update`'s job).
 
@@ -58,18 +58,22 @@ Links there are native symlinks where Windows permits them (Developer Mode or ad
 
 #### The herdr step
 
-On a machine with no herdr, one run leaves the [Git panel](GLOSSARY.md) active:
+On a machine with no herdr, one run installs the herdr features you pick and leaves their panels active:
 
 1. On Linux or WSL with neither `DISPLAY` nor `WAYLAND_DISPLAY` set, skips the whole step with one line. The rest of the setup still installs
-2. Installs herdr with [its official installer](https://herdr.dev) if `herdr-app` is missing. If that fails, it warns and carries on without the panel
-3. Installs `gh` where that needs no prompt: `brew`, `winget`, or `apt` with passwordless sudo. Otherwise the panel's PR sections say what to do
-4. Links the mods from `herdr/mods/` into `~/.config/herdr-app/mods/`: the Git panel, its Graph tab, and the Run graph and Factory tabs (`orch-graph`, `factory-board`), which the panel's header opens. Those two show a [`factory`](factory) run as a graph of its steps, and the factory's tickets as a kanban
-   - It also links three mods for reading code in herdr. [Quick open](GLOSSARY.md) on `ctrl-p` finds a file by fuzzy name. [Search](GLOSSARY.md) on `ctrl-alt-f` finds text in files, with regex and whole-word toggles. [Find](GLOSSARY.md) is a side panel beside Files and Git that does both at once
-   - A pick opens in the [Viewer](GLOSSARY.md), a tab that can edit and save the file (`ctrl-s`). Shift+Enter or Shift+click opens it in a Pinned Viewer, a tab that keeps that file. Ctrl+Enter or Ctrl+click opens the folder in VS Code at that line
-   - Binds those two keys in `~/.config/herdr-app/keys.json`. A key already bound to something else stays as it is, with a warning
-5. If the Git panel's layout isn't showing or herdr's shipped files are missing, starts the herdr window if it isn't running and waits for `herdr-app status` to answer, for up to 60 seconds. Once the layout is active, re-runs don't open a window
-6. Builds any missing [clones](docs/adr/0002-herdr-clones-are-patches-on-shipped-files.md), and rebuilds any whose patch has changed since, then switches to the layout. If a patch no longer applies, it warns and stays on the current layout
-7. Ends with "run `gh auth login`" if `gh` isn't signed in
+2. Installs herdr with [its official installer](https://herdr.dev) if `herdr-app` is missing. If that fails, it warns and carries on without it
+3. Lists the [herdr features](GLOSSARY.md) and lets you untick the ones you don't want. Each run shows your last choice, everything ticked the first time. A dry run or a run without a terminal keeps the last choice without asking
+   - **Git panel**: the git and GitHub side panel, and the Graph tab it opens
+   - **Factory panel**: the [`factory`](factory)'s tickets by lane, with links to the Factory tab (the full kanban) and the Run graph tab (a run as a graph of its steps)
+   - **Find panel**: file names and text in files at once
+   - **Quick open** on `ctrl-p`: a file by fuzzy name
+   - **Search** on `ctrl-alt-f`: text in files, with regex and whole-word toggles
+4. With the Git panel, installs `gh` where that needs no prompt: `brew`, `winget`, or `apt` with passwordless sudo. Otherwise the panel's PR sections say what to do
+5. Links the chosen features' mods from `herdr/mods/` into `~/.config/herdr-app/mods/`, and binds their keys in `~/.config/herdr-app/keys.json`. A key already bound to something else stays as it is, with a warning
+   - A pick in Find, Quick open or Search opens in the [Viewer](GLOSSARY.md), a tab named after the file that can edit and save it (`ctrl-s`). Shift+Enter or Shift+click opens it in a Pinned Viewer, a tab that keeps that file. Ctrl+Enter or Ctrl+click opens the folder in VS Code at that line
+6. With at least one panel chosen, if the layout isn't showing or herdr's shipped files are missing, starts the herdr window if it isn't running and waits for `herdr-app status` to answer, for up to 60 seconds. Once the layout is active, re-runs don't open a window
+7. Builds any missing [clones](docs/adr/0002-herdr-clones-are-patches-on-shipped-files.md), and rebuilds any whose patch or chosen panels have changed since, then switches to the layout. The tab bar gets a button for each chosen panel. If a patch no longer applies, it warns and stays on the current layout
+8. Ends with "run `gh auth login`" if `gh` isn't signed in
 
 `--dry-run` shows all of this and starts or installs nothing. On a machine where herdr has never run, there are no shipped files to check the patches against, so it lists what a real run would build without checking them.
 

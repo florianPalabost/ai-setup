@@ -24,6 +24,14 @@ _Avoid_: copy, shadow
 The herdr side panel that gathers git and GitHub information for the current branch and for the user's work.
 _Avoid_: Git tab
 
+**Herdr feature**:
+One part of the herdr setup that install offers to tick or untick: the Git panel, the Factory panel, the Find panel, Quick open or Search.
+_Avoid_: module, component, plugin
+
+**Factory panel**:
+The herdr side panel that lists the factory's tickets by lane and opens the Factory tab and the Run graph tab.
+_Avoid_: Factory tab, board
+
 **Section**:
 One collapsible part of the Git panel.
 
