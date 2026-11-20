@@ -175,11 +175,11 @@ export default class FactoryBoard extends View {
 
   lane(lane, isNextTicket, t) {
     const color = laneColor(t, lane.key);
-    return v_flex().id(`lane-${lane.key}`).flex_1().min_w(LANE_MIN_WIDTH).min_h(0).gap(6)
+    return v_flex().id(`lane-${lane.key}`).flex_1().min_w(LANE_MIN_WIDTH).h_full().min_h(0).gap(6)
       .child(h_flex().flex_none().pb(4).gap(6).border_b(2).border_color(color)
         .child(div().flex_1().font_semibold().text_color(color).child(lane.title))
         .child(div().text_color(t.dim).child(String(lane.cards.length))))
-      .child(v_flex().id(`lane-body-${lane.key}`).flex_1().min_h(0).gap(6).overflow_y_scroll()
+      .child(v_flex().id(`lane-body-${lane.key}`).flex_1().min_h(0).gap(6).overflow_y_scrollbar()
         .children(lane.cards.length ? lane.cards.map(({ ticket, depth }) => this.card(ticket, depth, isNextTicket(ticket), t, color))
           : [div().text_size(11).text_color(t.dim).child("None")]));
   }
@@ -193,7 +193,7 @@ export default class FactoryBoard extends View {
       return root.child(div().p(16).text_color(t.dim).child(message));
     }
     const next = nextUp(this.data.tickets);
-    return root.child(h_flex().id("factory-lanes").flex_1().min_h(0).p(10).gap(12).items_start().overflow_x_scroll()
+    return root.child(h_flex().id("factory-lanes").flex_1().min_h(0).p(10).gap(12).items_start().overflow_x_scrollbar()
       .children(boardLanes(this.data.tickets).map((lane) => this.lane(lane, (ticket) => ticket === next, t))));
   }
 }
