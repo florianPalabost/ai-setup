@@ -12,6 +12,8 @@ const CONFIG_FILE = ".factory.json";
 const FACTORY_CLI = "factory";
 const CLI_TIMEOUT_MS = 90000;
 const GITHUB_REFRESH_MS = 60000;
+// `factory clean` asks GitHub for merged PRs; a merged ticket's worktree can wait this long.
+const CLEAN_INTERVAL_MS = 10 * 60000;
 const REPOS_REFRESH_MS = 5 * 60000;
 
 const factoryError = (code, message) => Object.assign(new Error(message), { code });
@@ -19,6 +21,9 @@ const factoryError = (code, message) => Object.assign(new Error(message), { code
 export function createFactorySource({ exec, readTextFile, spaces, panes, now = () => Date.now() }) {
   const githubByRoot = new Map();
   const cleaningRoots = new Set();
+  const cleanedAt = new Map();
+  // Roots whose next status skips gh's cache: after a Start or a manual refresh.
+  const freshRoots = new Set();
   let repos = { at: 0, list: [] };
 
   async function factoryJson(repo, args) {
@@ -53,19 +58,21 @@ export function createFactorySource({ exec, readTextFile, spaces, panes, now = (
     return repos.list;
   }
 
-  // Removes merged tickets' worktrees in the background, one cleanup per repo at a time; a failure waits for the next refresh.
+  // Removes merged tickets' worktrees in the background, one cleanup per repo at a time, at most every CLEAN_INTERVAL_MS.
   function cleanMergedWorktrees(repo) {
-    if (cleaningRoots.has(repo.root)) return;
+    if (cleaningRoots.has(repo.root) || now() - (cleanedAt.get(repo.root) ?? 0) < CLEAN_INTERVAL_MS) return;
     cleaningRoots.add(repo.root);
+    cleanedAt.set(repo.root, now());
     factoryJson(repo, ["clean"]).catch(() => {}).finally(() => cleaningRoots.delete(repo.root));
   }
 
-  // GitHub at most once a minute; the local runs on every call.
+  // GitHub at most once a minute, through gh's cache that every board and the Output panel share; the local runs on every call.
   async function githubState(repo) {
     const cached = githubByRoot.get(repo.root);
     if (cached && now() - cached.at < GITHUB_REFRESH_MS) return cached;
     cleanMergedWorktrees(repo);
-    const fresh = { at: now(), state: await factoryJson(repo, ["status"]) };
+    const skipCache = freshRoots.delete(repo.root);
+    const fresh = { at: now(), state: await factoryJson(repo, skipCache ? ["status", "--fresh"] : ["status"]) };
     githubByRoot.set(repo.root, fresh);
     return fresh;
   }
@@ -87,6 +94,6 @@ export function createFactorySource({ exec, readTextFile, spaces, panes, now = (
     logPath,
     forgetRepos: () => { repos = { at: 0, list: [] }; },
     // Makes the next getFactory read GitHub again for that repo.
-    forgetGithub: (root) => { githubByRoot.delete(root); },
+    forgetGithub: (root) => { githubByRoot.delete(root); freshRoots.add(root); },
   };
 }

@@ -139,7 +139,7 @@ export default class FactoryBoard extends View {
     if (repos.length > 1) header = header.child(button("repo-next", "›", (cx) => this.pickRepo(1, cx)));
     return header
       .child(div().flex_1().min_w(0).truncate().text_right().text_size(11).text_color(this.error ? t.ansi1 : t.dim).child(status))
-      .child(button("factory-refresh", "↻", (cx) => { this.source.forgetRepos(); this.refresh(cx); }));
+      .child(button("factory-refresh", "↻", (cx) => { this.source.forgetRepos(); if (this.data?.repo) this.source.forgetGithub(this.data.repo.root); this.refresh(cx); }));
   }
 
   steps(t, ticketRun) {
