@@ -8,7 +8,7 @@ Runs GitHub tickets through Claude, one at a time: implement, check, review, rew
 | --- | --- |
 | `factory doctor` | Checks `git`, `gh`, `claude`, the sandbox tools, that `bwrap` can create a sandbox on Linux, `gh auth` and the repo's `.factory.json`, and prints the install command for what's missing, or the AppArmor fix when Ubuntu blocks `bwrap` |
 | `factory init` | Creates the `agent-working` and `agent-done` labels in the repo |
-| `factory status [--json] [--local]` | Lists the tickets the factory tracks, with their PR, blockers, worktree and latest run. `--local` reads only the runs under `.git/factory` and makes no GitHub calls |
+| `factory status [--json] [--local]` | Lists the tickets the factory tracks, with their PR, blockers, worktree and latest run. `--local` reads only the runs under `.git/factory` and makes no GitHub calls. With `--json`, GitHub's answer comes from one GraphQL call and is reused for a minute (gh's cache), so the boards polling it share it; `--fresh` asks GitHub again |
 | `factory run <issue>` | Runs one ticket |
 | `factory next` | Runs the oldest `ready-for-agent` ticket with no open blocker |
 | `factory watch <issue>` | Follows the ticket's latest run: each step, and the agent's transcript as readable lines. Stops when the run ends |

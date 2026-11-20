@@ -80,42 +80,72 @@ export async function ensureFactoryLabels({ cwd }) {
     }
 }
 
-/** Open issues that block this one, from GitHub's native issue dependencies. */
-async function openBlockers(issueNumber, { cwd }) {
-    const blockers = await ghJson(['api', `repos/{owner}/{repo}/issues/${issueNumber}/dependencies/blocked_by`], { cwd })
+/** How long `factory status` reuses gh's cached answer, so the boards polling it share one GitHub call a minute. */
+export const STATUS_CACHE = '60s'
+const PAGE_SIZE = 100
 
-    return blockers.filter((blocker) => blocker.state === 'open').map((blocker) => blocker.number)
+/** Tracked issues and, on the first page only, the open PRs: one GraphQL call per 100 tickets, blockers included. */
+const FACTORY_STATE_QUERY = `query($owner: String!, $name: String!, $labels: [String!], $after: String, $withPrs: Boolean!) {
+  repository(owner: $owner, name: $name) {
+    issues(states: OPEN, labels: $labels, first: ${PAGE_SIZE}, after: $after) {
+      pageInfo { hasNextPage endCursor }
+      nodes {
+        number title url
+        labels(first: 20) { nodes { name } }
+        blockedBy(first: 20) { nodes { number state } }
+      }
+    }
+    pullRequests(states: OPEN, first: ${PAGE_SIZE}, orderBy: { field: CREATED_AT, direction: DESC }) @include(if: $withPrs) {
+      nodes { number url isDraft headRefName }
+    }
+  }
+}`
+
+async function factoryStatePage({ labels, after, cache }, { cwd }) {
+    const args = ['api', 'graphql', ...(cache ? ['--cache', cache] : []), '-F', 'owner={owner}', '-F', 'name={repo}', '-F', `withPrs=${after === null}`, '-f', `query=${FACTORY_STATE_QUERY}`]
+    labels.forEach((label) => args.push('-f', `labels[]=${label}`))
+    if (after !== null) {
+        args.push('-f', `after=${after}`)
+    }
+
+    return (await ghJson(args, { cwd })).data.repository
 }
 
 /**
  * Every open issue carrying a factory label, joined with the open PR on its agent branch and the open issues blocking it.
  * This is the factory's whole state on GitHub; run progress lives in .git/factory.
+ * `cache` is a gh duration ("60s") during which every caller gets the same answer without asking GitHub again.
  * @returns {Promise<{ number: number, title: string, url: string, state: string, pr: { number: number, url: string, isDraft: boolean } | null, blockedBy: number[] }[]>}
  */
-export async function factoryState({ cwd }) {
+export async function factoryState({ cwd, cache = null }) {
     const trackedLabels = Object.values(LABELS)
-    const [issues, prs] = await Promise.all([
-        ghPaginatedItems(['-X', 'GET', 'repos/{owner}/{repo}/issues', '-f', 'state=open', '-f', 'per_page=100'], { cwd }),
-        ghJson(['pr', 'list', '--state', 'open', '--limit', '200', '--json', 'number,url,isDraft,headRefName'], { cwd }),
-    ])
+    const issues = []
+    let prs = []
+    for (let after = null; ; ) {
+        const page = await factoryStatePage({ labels: trackedLabels, after, cache }, { cwd })
+        issues.push(...page.issues.nodes)
+        prs = page.pullRequests?.nodes ?? prs
+        if (!page.issues.pageInfo.hasNextPage) {
+            break
+        }
+        after = page.issues.pageInfo.endCursor
+    }
     const prsByBranch = new Map(prs.map(({ headRefName, ...pr }) => [headRefName, pr]))
-    const tracked = issues
-        .filter((issue) => !issue.pull_request)
-        .map((issue) => ({ ...issue, labels: issue.labels.map((label) => label.name) }))
-        .filter((issue) => issue.labels.some((label) => trackedLabels.includes(label)))
 
-    const tickets = await Promise.all(
-        tracked.map(async (issue) => ({
-            number: issue.number,
-            title: issue.title,
-            url: issue.html_url,
-            state: trackedLabels.find((label) => issue.labels.includes(label)),
-            pr: prsByBranch.get(branchForIssue(issue.number)) ?? null,
-            blockedBy: issue.issue_dependencies_summary?.blocked_by > 0 ? await openBlockers(issue.number, { cwd }) : [],
-        })),
-    )
+    return issues
+        .map((issue) => {
+            const labels = issue.labels.nodes.map((label) => label.name)
 
-    return tickets.sort((left, right) => left.number - right.number)
+            return {
+                number: issue.number,
+                title: issue.title,
+                url: issue.url,
+                state: trackedLabels.find((label) => labels.includes(label)),
+                pr: prsByBranch.get(branchForIssue(issue.number)) ?? null,
+                blockedBy: issue.blockedBy.nodes.filter((blocker) => blocker.state === 'OPEN').map((blocker) => blocker.number),
+            }
+        })
+        .sort((left, right) => left.number - right.number)
 }
 
 /**

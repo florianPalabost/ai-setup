@@ -33,7 +33,8 @@ Options:
   --no-sandbox      run claude without srt (worktree isolation only)
   --force           take over a ticket already labelled ${LABELS.working}; with resume: resume while the run goes on
   --step <name>     with resume or log: the step to use (e.g. "review 1")
-  --local           with status --json: only the runs in .git/factory, no GitHub calls`
+  --local           with status --json: only the runs in .git/factory, no GitHub calls
+  --fresh           with status --json: ask GitHub now instead of reusing the answer of the last minute`
 
 const REQUIRED_TOOLS = ['git', 'gh', 'claude']
 const SANDBOX_TOOLS = ['srt', 'bwrap', 'socat', 'rg']
@@ -94,8 +95,8 @@ async function doctor(repo) {
     }
 }
 
-async function status(repo, { json, local }) {
-    const state = await factoryStatus(repo, { local: json && local })
+async function status(repo, { json, local, fresh }) {
+    const state = await factoryStatus(repo, { local: json && local, cached: json && !fresh })
     if (json) {
         console.log(JSON.stringify(state, null, 2))
         return
@@ -151,6 +152,7 @@ async function main() {
             json: { type: 'boolean', default: false },
             step: { type: 'string' },
             local: { type: 'boolean', default: false },
+            fresh: { type: 'boolean', default: false },
             help: { type: 'boolean', short: 'h', default: false },
         },
     })
@@ -183,7 +185,7 @@ async function main() {
             log('labels ready')
             return
         case 'status':
-            return status(repo, { json: values.json, local: values.local })
+            return status(repo, { json: values.json, local: values.local, fresh: values.fresh })
         case 'watch':
             process.stdout.on('error', (error) => {
                 if (error.code === 'EPIPE') {
