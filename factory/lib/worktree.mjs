@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { ERROR_CODES, FactoryError } from './constants.mjs'
@@ -43,5 +44,11 @@ export async function prepareWorktree({ root, path, branch, base }) {
 export async function commitsAhead({ root, base, branch }) {
     return Number((await git(['rev-list', '--count', `origin/${base}..${branch}`], { cwd: root })).trim())
 }
+
+/**
+ * Whether git can reach origin, asked on the terminal so ssh or a credential helper can prompt now,
+ * while someone is there, rather than at the push an hour later.
+ */
+export const canReachOrigin = ({ root }) => spawnSync('git', ['ls-remote', '--exit-code', 'origin', 'HEAD'], { cwd: root, stdio: ['inherit', 'ignore', 'inherit'] }).status === 0
 
 export const pushBranch = ({ root, branch }) => git(['push', '-u', 'origin', branch], { cwd: root })
