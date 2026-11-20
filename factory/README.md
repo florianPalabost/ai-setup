@@ -20,7 +20,7 @@ Runs GitHub tickets through Claude, one at a time: implement, check, review, rew
 
 ## A run
 
-1. Labels the ticket `agent-working` and creates its worktree at `<repo>-factory/issue-<n>` on the branch `agent/issue-<n>`, from `origin/<baseBranch>`. If that worktree already exists, the run carries on in it.
+1. Checks that git can reach `origin`, so ssh asks for your key passphrase now rather than at the push. Then labels the ticket `agent-working` and creates its worktree at `<repo>-factory/issue-<n>` on the branch `agent/issue-<n>`, from `origin/<baseBranch>`. If that worktree already exists, the run carries on in it.
 2. On a new worktree, runs the `setup` commands.
 3. **implement**: Claude runs `/implement` on the ticket. With no commits, the ticket goes to `ready-for-human`.
 4. **checks**: runs the `checks` commands. **review**: if they pass, `/matt-code-review` runs read-only. On a failure, **rework** sends the findings back to the implementing model, at most `maxReworks` times.
