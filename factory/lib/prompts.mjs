@@ -18,7 +18,9 @@ export const PR_BODY_SCHEMA = Object.freeze({
     required: ['body'],
 })
 
-const READ_ONLY_TOOLS = ['Read', 'Grep', 'Glob', 'Bash(git diff *)', 'Bash(git log *)', 'Bash(git show *)', 'Bash(git rev-parse *)']
+const READ_ONLY_GIT_COMMANDS = ['git diff', 'git log', 'git show', 'git rev-parse']
+/** Each git command also as `rtk git …`: the rtk hook rewrites commands to that form before permissions are checked. */
+const READ_ONLY_TOOLS = ['Read', 'Grep', 'Glob', ...READ_ONLY_GIT_COMMANDS.flatMap((command) => [`Bash(${command} *)`, `Bash(rtk ${command} *)`])]
 
 /** Read-only tools plus the Skill and Agent tools /matt-code-review needs for its two parallel sub-agents; it runs under dontAsk, so anything else is refused. */
 export const REVIEW_ALLOWED_TOOLS = Object.freeze([...READ_ONLY_TOOLS, 'Skill', 'Agent'])
