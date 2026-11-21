@@ -11,6 +11,7 @@
 #                                               .claude-plugin/plugin.json ships is linked
 #                                               like a git line; <skill>=<name> renames one.
 
+skills  DnzzL/herdr-automations  herdr-automations
 skills  herdrdev/herdr-core       herdr-core
 skills  humanlayer/skills         show-me
 skills  vercel-labs/agent-skills  vercel-react-best-practices
