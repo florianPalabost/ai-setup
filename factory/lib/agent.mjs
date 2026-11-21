@@ -1,5 +1,5 @@
-import { createWriteStream } from 'node:fs'
-import { writeFile } from 'node:fs/promises'
+import { createWriteStream, existsSync } from 'node:fs'
+import { readFile, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { ERROR_CODES, FactoryError } from './constants.mjs'
@@ -54,6 +54,15 @@ const resultEvent = (stdout, { wantsStructuredOutput }) => {
     return structured ?? results.at(-1) ?? null
 }
 
+/** The final message of a finished agent transcript, or null when it has none. */
+export async function transcriptResult(path) {
+    if (!existsSync(path)) {
+        return null
+    }
+
+    return resultEvent(await readFile(path, 'utf8'), { wantsStructuredOutput: false })?.result || null
+}
+
 /** An agent step's transcript file in the run directory. */
 export const agentLogName = (step) => `${step}.jsonl`
 
@@ -65,10 +74,13 @@ const closeStream = (stream) => new Promise((resolve) => stream.end(resolve))
  * Sessions persist, so `claude --resume <sessionId>` from the worktree replays a run.
  * @returns {Promise<{ result: string, structuredOutput: unknown, costUsd: number|null, sessionId: string|null }>}
  */
-export async function runClaude({ cwd, prompt, model, permissionMode, allowedTools, jsonSchema, settingsPath, timeoutMinutes, logPath }) {
+export async function runClaude({ cwd, prompt, model, permissionMode, allowedTools, disallowedTools, jsonSchema, settingsPath, timeoutMinutes, logPath }) {
     const claudeArgs = ['-p', '--output-format', 'stream-json', '--verbose', '--model', model, '--permission-mode', permissionMode, '--permission-prompts', 'none']
     if (allowedTools?.length) {
         claudeArgs.push('--allowedTools', ...allowedTools)
+    }
+    if (disallowedTools?.length) {
+        claudeArgs.push('--disallowedTools', ...disallowedTools)
     }
     if (jsonSchema) {
         claudeArgs.push('--json-schema', JSON.stringify(jsonSchema))

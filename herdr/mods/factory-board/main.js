@@ -19,6 +19,7 @@ const PAGER_SCRIPT = 'exec "${PAGER:-less}" "$1"';
 // The Bottom panel's Output tab follows the ticket this shared value names (bottom-output/main.js).
 const OUTPUT_FOLLOW_KEY = "bottom-output.follow";
 const BOTTOM_PANEL = "bottom";
+const CONTINUE_ARGS = ["--from", "checks", "--force"];
 
 const activeSpace = () => spaces().find((space) => space.active) ?? null;
 
@@ -34,7 +35,7 @@ export default class FactoryBoard extends View {
     this.source = createFactorySource({ exec, readTextFile, spaces, panes });
     this.openUrl = createOpener({ platform: () => window().platform, readTextFile, exec, warn: (body) => this.warn("Link not opened", body) });
     this.data = null; this.error = null; this.loading = false; this.panel = Boolean(props()?.panel);
-    // Tickets whose Start was just clicked, by startKey: { root, number, state, at }.
+    // Tickets whose Start or Continue was just clicked, by startKey: { root, number, state, at }.
     this.starting = new Map();
     this.root = localStorage.getItem(REPO_KEY);
     this.spaceId = null; this.refreshAgain = false;
@@ -92,9 +93,9 @@ export default class FactoryBoard extends View {
     }
   }
 
-  start(ticket, cx) {
+  start(ticket, cx, extraArgs = []) {
     const { root } = this.data.repo;
-    this.openTerminal(ticket, "run", root);
+    this.openTerminal(ticket, "run", root, extraArgs);
     this.starting.set(startKey(root, ticket.number), { root, number: ticket.number, state: ticket.state, at: Date.now() });
     this.source.forgetGithub(root);
     cx.notify();
@@ -117,8 +118,8 @@ export default class FactoryBoard extends View {
     else run("space.new", { folder: ticket.worktree, machine: on ?? undefined });
   }
 
-  openTerminal(ticket, command, folder = ticket.worktree) {
-    run("terminal.open", { argv: ["factory", command, String(ticket.number), "--repo", this.data.repo.root], folder, place: "tab" });
+  openTerminal(ticket, command, folder = ticket.worktree, extraArgs = []) {
+    run("terminal.open", { argv: ["factory", command, String(ticket.number), "--repo", this.data.repo.root, ...extraArgs], folder, place: "tab" });
   }
 
   // In the Bottom panel's Output tab when the layout has it, else in a terminal tab.
@@ -132,6 +133,7 @@ export default class FactoryBoard extends View {
     const repo = this.data?.repo;
     if (!repo) return;
     if (action === ACTIONS.start) return this.start(ticket, cx);
+    if (action === ACTIONS.continue) return this.start(ticket, cx, CONTINUE_ARGS);
     if (action === ACTIONS.worktree) return this.openWorktree(ticket);
     if (action === ACTIONS.watch) return this.watch(ticket);
     if (action === ACTIONS.resume) return this.openTerminal(ticket, action);

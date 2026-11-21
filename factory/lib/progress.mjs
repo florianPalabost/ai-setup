@@ -22,6 +22,7 @@ export const RUN_ABANDONED = 'abandoned'
 
 /** The names a run gives its steps, in the order it runs them. */
 export const STEP_NAMES = Object.freeze({
+    baseline: 'baseline',
     setup: 'setup',
     implement: 'implement',
     checks: (attempt) => `checks ${attempt}`,
