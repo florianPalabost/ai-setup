@@ -136,7 +136,7 @@ export default class Automations extends View {
 
   edit(original, cx) {
     const a = this.list?.automations.find((x) => x.name === original) ?? {
-      name: "", cron: "0 9 * * 1-5", repo: "", workspace: "worktree", agent: "claude", prompt: "", timeout_minutes: 60,
+      name: "", cron: "0 9 * * 1-5", repo: "", workspace: "worktree", agent: "claude", model: "sonnet", prompt: "", timeout_minutes: 60,
     };
     const field = (value, placeholder) => {
       const s = InputState.new({ placeholder, value: value ?? "" });
