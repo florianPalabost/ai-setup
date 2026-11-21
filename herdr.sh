@@ -16,6 +16,9 @@ HERDR_SRC="$REPO_DIR/herdr"
 # Icons of linked mods, copied as real files: herdr refuses an svg path that a link
 # leads out of its home. "<folder in herdr/mods/> <folder in the herdr home>"
 HERDR_MOD_ICONS=("git-graph/icons git-graph-icons")
+# Mods copied rather than linked: herdr doesn't reload a linked folder whose
+# files change. A re-run replaces a copy that differs.
+HERDR_COPIED_MODS=(automations)
 # "<shipped mod> <clone> <patch in herdr/patches/>"
 HERDR_MOD_CLONES=("tabs tabs-git tabs.patch" "menu menu-git menu.patch" "files files-git files.patch")
 HERDR_LAYOUT_SHIPPED=main
@@ -218,12 +221,36 @@ warn_build_failed() {
   fi
 }
 
-# Linked as $HERDR_HOME/mods/<name>.
+herdr_copied_mod() {
+  local name
+  for name in "${HERDR_COPIED_MODS[@]}"; do
+    [[ "$name" == "$1" ]] && return 0
+  done
+  return 1
+}
+
+# Linked as $HERDR_HOME/mods/<name>, or copied there if HERDR_COPIED_MODS has it.
 link_herdr_mods() {
   local name
   while IFS= read -r name; do
-    link "$HERDR_SRC/mods/$name" "$HERDR_HOME/mods/$name"
+    if herdr_copied_mod "$name"; then
+      copy_herdr_mod "$name"
+    else
+      link "$HERDR_SRC/mods/$name" "$HERDR_HOME/mods/$name"
+    fi
   done < <(herdr_mods wanted)
+}
+
+# Copy herdr/mods/$1 over $HERDR_HOME/mods/$1 unless they already match.
+copy_herdr_mod() {
+  local src="$HERDR_SRC/mods/$1" dst="$HERDR_HOME/mods/$1"
+  if [[ -d "$dst" && ! -L "$dst" ]] && diff -r "$src" "$dst" >/dev/null 2>&1; then
+    return 0
+  fi
+  run rm -rf "$dst"
+  run mkdir -p "$HERDR_HOME/mods"
+  run cp -R "$src" "$dst"
+  ((DRY_RUN)) || info "copied $dst"
 }
 
 # Bind the chosen features' keys in keys.json's global section, leaving a key
@@ -513,7 +540,7 @@ layout_outdated() {
 #   herdr-layout  dropped layout clone
 #   herdr-key     dropped binding still in keys.json, as "<key> <command>"
 # Mods and keys of features not chosen count as dropped, mods only while linked
-# into this repo.
+# into this repo or, for HERDR_COPIED_MODS, copied there.
 # Only those named above qualify, so mods and layouts of the user's own never do,
 # and neither does anything installed.json records as shipped, nor a key the
 # user bound to another command.
@@ -525,14 +552,15 @@ herdr_stale_entries() {
   while IFS= read -r line; do
     grep -qxF "$line" <<<"$wanted_keys" || unchosen_keys+=("$line")
   done < <(herdr_keys all)
-  py3 - "$HERDR_HOME" "$REPO_DIR" "${HERDR_DROPPED_MODS[*]}" "${HERDR_DROPPED_LAYOUTS[*]}" "$unchosen_mods" \
+  py3 - "$HERDR_HOME" "$REPO_DIR" "${HERDR_DROPPED_MODS[*]}" "${HERDR_DROPPED_LAYOUTS[*]}" "$unchosen_mods" "${HERDR_COPIED_MODS[*]}" \
     ${HERDR_DROPPED_KEYS[@]+"${HERDR_DROPPED_KEYS[@]}"} ${unchosen_keys[@]+"${unchosen_keys[@]}"} <<'PY'
 import json, os, sys
 from pathlib import Path
 
 home, repo, mods, layouts = Path(sys.argv[1]), sys.argv[2], sys.argv[3].split(), sys.argv[4].split()
 unchosen_mods = sys.argv[5].split()
-dropped_keys = sys.argv[6:]
+copied_mods = sys.argv[6].split()
+dropped_keys = sys.argv[7:]
 
 try:
     shipped = set(json.loads((home / "installed.json").read_text()))
@@ -546,7 +574,9 @@ for name in mods:
 
 for name in unchosen_mods:
     path = home / "mods" / name
-    if path.is_symlink() and os.readlink(path).startswith(repo + "/"):
+    linked = path.is_symlink() and os.readlink(path).startswith(repo + "/")
+    copied = name in copied_mods and path.is_dir() and not path.is_symlink() and name not in shipped
+    if linked or copied:
         print(f"herdr-mod\t{path}")
 
 for path in sorted((home / "mods").glob("*")):

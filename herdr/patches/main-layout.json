@@ -7,7 +7,8 @@
   "add": {
     "panel-body": [
       { "feature": "find", "id": "find", "type": "block", "content": { "mod": "find" } },
-      { "feature": "factory", "id": "factory", "type": "block", "content": { "mod": "factory-board", "props": { "panel": true } } }
+      { "feature": "factory", "id": "factory", "type": "block", "content": { "mod": "factory-board", "props": { "panel": true } } },
+      { "feature": "automations", "id": "automations", "type": "block", "content": { "mod": "automations" } }
     ]
   },
   "wrap": {
