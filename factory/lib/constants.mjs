@@ -26,6 +26,7 @@ export const ERROR_CODES = Object.freeze({
     runInProgress: 'run_in_progress',
     noSession: 'no_session',
     noWorktree: 'no_worktree',
+    stackNotConfigured: 'stack_not_configured',
     remoteUnreachable: 'remote_unreachable',
 })
 

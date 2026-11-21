@@ -12,6 +12,7 @@ import { resumeSession, watchRun } from '../lib/session.mjs'
 import { factoryStatus } from '../lib/status.mjs'
 import { writeRunMarkdown } from '../lib/transcript.mjs'
 import { hasCommand, succeeds } from '../lib/shell.mjs'
+import { MAIN_CHECKOUT, checkoutLabel, stackConfigProblems, stackDown, stackUp } from '../lib/stack.mjs'
 import { locateRepo } from '../lib/worktree.mjs'
 
 const USAGE = `factory: run agent tickets from GitHub, one at a time
@@ -26,12 +27,17 @@ Usage:
   factory resume <issue>          open Claude on the run's last coding session, in the worktree
   factory log <issue> [--json]    write the latest run as readable Markdown (run.md) and print its path
   factory clean [--dry-run] [--json] remove the worktrees and branches of tickets whose PR is merged (also runs before run/next)
+  factory up <issue> | --main     move the stack to the ticket's worktree (or the main checkout): down, up, then serve
+  factory down                    stop the stack where it is up
 
 Options:
   --repo <path>     repository to work on (default: current directory)
   --dry-run         show what would happen; no GitHub writes, no agents
   --no-sandbox      run claude without srt (worktree isolation only)
-  --force           take over a ticket already labelled ${LABELS.working}; with resume: resume while the run goes on
+  --force           take over a ticket already labelled ${LABELS.working}; with resume: resume while the run goes on;
+                    with up: carry on when down fails
+  --main            with up: the main checkout instead of a ticket's worktree
+  --no-serve        with up: start the stack but not the serve command
   --step <name>     with resume or log: the step to use (e.g. "review 1")
   --local           with status --json: only the runs in .git/factory, no GitHub calls
   --fresh           with status --json: ask GitHub now instead of reusing the answer of the last minute`
@@ -77,6 +83,7 @@ async function doctor(repo) {
         ...(bwrapWorks === null ? [] : [['bwrap sandbox', bwrapWorks, 'bwrap is installed but cannot create a sandbox (see below)']]),
         ['gh auth', succeeds('gh', ['auth', 'status']), 'run: gh auth login'],
         ['.factory.json', Boolean(config.path), 'optional: setup and check commands for this repo'],
+        ...stackConfigProblems(config).map((problem) => ['stack config', false, problem]),
     ]
     rows.forEach(([name, ok, hint]) => console.log(`${ok ? '✓' : '✗'} ${name.padEnd(14)} ${ok ? '' : hint}`))
     console.log(`\nrepo ${repo.root} · base ${config.baseBranch} · ${config.setup.length} setup / ${config.checks.length} check command(s)`)
@@ -95,11 +102,20 @@ async function doctor(repo) {
     }
 }
 
+const clockTime = (iso) => {
+    const date = new Date(iso)
+
+    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
 async function status(repo, { json, local, fresh }) {
     const state = await factoryStatus(repo, { local: json && local, cached: json && !fresh })
     if (json) {
         console.log(JSON.stringify(state, null, 2))
         return
+    }
+    if (state.stack) {
+        console.log(`stack: ${checkoutLabel(state.stack.checkout)} (since ${clockTime(state.stack.since)})`)
     }
     if (state.tickets.length === 0) {
         console.log('No open tickets carry a factory label.')
@@ -132,6 +148,17 @@ async function cleanBeforeRun(repo, { options }) {
     await cleanMergedWorktrees({ repo, log }).catch((error) => log(`skipped worktree cleanup: ${error.message}`))
 }
 
+function stackCheckoutFrom(argument, { main }) {
+    if (main && argument === undefined) {
+        return MAIN_CHECKOUT
+    }
+    if (main || argument === undefined) {
+        throw new FactoryError(ERROR_CODES.usage, 'factory up needs an issue number or --main')
+    }
+
+    return issueNumberFrom(argument, 'up')
+}
+
 function issueNumberFrom(argument, command) {
     const issueNumber = Number(argument)
     if (!Number.isInteger(issueNumber) || issueNumber <= 0) {
@@ -153,6 +180,8 @@ async function main() {
             step: { type: 'string' },
             local: { type: 'boolean', default: false },
             fresh: { type: 'boolean', default: false },
+            main: { type: 'boolean', default: false },
+            'no-serve': { type: 'boolean', default: false },
             help: { type: 'boolean', short: 'h', default: false },
         },
     })
@@ -217,6 +246,10 @@ async function main() {
         case 'next':
             await cleanBeforeRun(repo, runOptions)
             return next(repo, runOptions)
+        case 'up':
+            return stackUp({ repo, config, checkout: stackCheckoutFrom(issueArgument, { main: values.main }), serve: !values['no-serve'], force: values.force, log })
+        case 'down':
+            return stackDown({ repo, config, log })
         default:
             throw new FactoryError(ERROR_CODES.usage, `unknown command "${command}"\n\n${USAGE}`)
     }

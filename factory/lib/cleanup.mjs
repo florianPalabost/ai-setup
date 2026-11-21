@@ -1,6 +1,7 @@
 import { branchForIssue } from './constants.mjs'
 import { mergedAgentPrs } from './github.mjs'
 import { run } from './shell.mjs'
+import { readStack } from './stack.mjs'
 import { worktreePathFor } from './worktree.mjs'
 
 const git = (args, { cwd }) => run('git', args, { cwd })
@@ -19,9 +20,18 @@ async function factoryWorktrees(root) {
         .filter(({ path, issueNumber }) => issueNumber > 0 && path === worktreePathFor(root, issueNumber))
 }
 
+async function unmergedWorkReason(path, pr) {
+    if ((await git(['status', '--porcelain'], { cwd: path })).trim() !== '') {
+        return 'uncommitted changes'
+    }
+    const head = (await git(['rev-parse', 'HEAD'], { cwd: path })).trim()
+
+    return head !== pr.headRefOid ? `commits after PR #${pr.number} merged` : null
+}
+
 /**
  * Removes the worktree and local branch of every ticket whose PR is merged.
- * Keeps a worktree with uncommitted changes, or whose branch moved past the merged commit.
+ * Keeps a worktree with uncommitted changes, whose branch moved past the merged commit, or that has the stack.
  * @returns {Promise<{ removed: number[], kept: { issueNumber: number, reason: string }[] }>}
  */
 export async function cleanMergedWorktrees({ repo, log, dryRun = false }) {
@@ -31,6 +41,7 @@ export async function cleanMergedWorktrees({ repo, log, dryRun = false }) {
     }
 
     const merged = await mergedAgentPrs(worktrees.map(({ issueNumber }) => branchForIssue(issueNumber)), { cwd: repo.root })
+    const stack = await readStack(repo.gitDir)
     const removed = []
     const kept = []
 
@@ -41,9 +52,7 @@ export async function cleanMergedWorktrees({ repo, log, dryRun = false }) {
             continue
         }
 
-        const dirty = (await git(['status', '--porcelain'], { cwd: path })).trim() !== ''
-        const head = (await git(['rev-parse', 'HEAD'], { cwd: path })).trim()
-        const reason = dirty ? 'uncommitted changes' : head !== pr.headRefOid ? `commits after PR #${pr.number} merged` : null
+        const reason = stack?.path === path ? 'stack is up' : await unmergedWorkReason(path, pr)
         if (reason) {
             kept.push({ issueNumber, reason })
             log(`keeping ${path}: ${reason}`)

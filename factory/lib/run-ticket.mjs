@@ -115,7 +115,7 @@ export async function runTicket({ repo, issueNumber, config, options, log }) {
                 for (const command of config.setup) {
                     log(`setup: ${command}`)
                     await progress.record({ step: STEP_NAMES.setup, status: STEP_STATUSES.running, detail: command })
-                    await runShellCommand(command, { cwd: worktreePath })
+                    await runShellCommand(command, { cwd: worktreePath, key: 'setup' })
                 }
             })
         } else {

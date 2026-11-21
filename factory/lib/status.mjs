@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs'
 import { basename } from 'node:path'
 import { STATUS_CACHE, factoryState } from './github.mjs'
 import { issuesWithRuns, latestRun } from './progress.mjs'
+import { readStack } from './stack.mjs'
 import { worktreePathFor } from './worktree.mjs'
 
 async function latestRuns(repo) {
@@ -12,13 +13,13 @@ async function latestRuns(repo) {
 }
 
 /**
- * The factory's state for `factory status`: tickets from GitHub with their worktree and latest run.
+ * The factory's state for `factory status`: tickets from GitHub with their worktree and latest run, and the checkout running the stack.
  * `local` skips GitHub and returns only the runs, cheap enough to poll every few seconds.
  * `cached` reuses gh's answer from the last STATUS_CACHE, so every board polling it shares one GitHub call.
  */
 export async function factoryStatus(repo, { local = false, cached = false } = {}) {
     const runs = await latestRuns(repo)
-    const summary = { repo: basename(repo.root), root: repo.root }
+    const summary = { repo: basename(repo.root), root: repo.root, stack: await readStack(repo.gitDir) }
     if (local) {
         return { ...summary, runs }
     }
