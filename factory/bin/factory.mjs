@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { cleanMergedWorktrees } from '../lib/cleanup.mjs'
 import { loadConfig } from '../lib/config.mjs'
-import { ERROR_CODES, FACTORY_LABELS, FactoryError, LABELS } from '../lib/constants.mjs'
+import { ERROR_CODES, FACTORY_LABELS, FactoryError, LABELS, RESUME_STEPS } from '../lib/constants.mjs'
 import { ensureFactoryLabels, listReadyIssues } from '../lib/github.mjs'
 import { STEP_STATUSES } from '../lib/progress.mjs'
 import { runTicket } from '../lib/run-ticket.mjs'
@@ -21,7 +21,7 @@ Usage:
   factory doctor                  check tools, gh login and the repo's .factory.json
   factory init                    create the ${FACTORY_LABELS.map((label) => label.name).join(' / ')} labels
   factory status [--json]         tickets the factory tracks, with their PRs and latest run
-  factory run <issue> [options]   implement → review → draft PR for one ticket
+  factory run <issue> [options]   implement → review → draft PR for one ticket (--from <step> to continue one)
   factory next [options]          run the oldest unblocked ${LABELS.ready} ticket
   factory watch <issue>           follow the ticket's latest run: steps and the agent's transcript
   factory resume <issue>          open Claude on the run's last coding session, in the worktree
@@ -34,6 +34,8 @@ Options:
   --repo <path>     repository to work on (default: current directory)
   --dry-run         show what would happen; no GitHub writes, no agents
   --no-sandbox      run claude without srt (worktree isolation only)
+  --from <step>     with run: carry on in the ticket's worktree from a step (${Object.values(RESUME_STEPS).join(', ')}),
+                    skipping setup and implement; takes over a ${LABELS.working} ticket whose run has ended
   --force           take over a ticket already labelled ${LABELS.working}; with resume: resume while the run goes on;
                     with up: carry on when down fails
   --main            with up: the main checkout instead of a ticket's worktree
@@ -159,6 +161,20 @@ function stackCheckoutFrom(argument, { main }) {
     return issueNumberFrom(argument, 'up')
 }
 
+function resumeStepFrom(step, command) {
+    if (step === undefined) {
+        return undefined
+    }
+    if (command !== 'run') {
+        throw new FactoryError(ERROR_CODES.usage, '--from only goes with factory run')
+    }
+    if (!Object.values(RESUME_STEPS).includes(step)) {
+        throw new FactoryError(ERROR_CODES.usage, `unknown step "${step}" for --from (one of: ${Object.values(RESUME_STEPS).join(', ')})`)
+    }
+
+    return step
+}
+
 function issueNumberFrom(argument, command) {
     const issueNumber = Number(argument)
     if (!Number.isInteger(issueNumber) || issueNumber <= 0) {
@@ -178,6 +194,7 @@ async function main() {
             force: { type: 'boolean', default: false },
             json: { type: 'boolean', default: false },
             step: { type: 'string' },
+            from: { type: 'string' },
             local: { type: 'boolean', default: false },
             fresh: { type: 'boolean', default: false },
             main: { type: 'boolean', default: false },
@@ -196,7 +213,7 @@ async function main() {
     const runOptions = {
         config,
         log,
-        options: { dryRun: values['dry-run'], sandbox: !values['no-sandbox'], force: values.force },
+        options: { dryRun: values['dry-run'], sandbox: !values['no-sandbox'], force: values.force, from: resumeStepFrom(values.from, command) },
     }
 
     if (['run', 'next'].includes(command) && !values['dry-run']) {

@@ -29,6 +29,14 @@ export const ERROR_CODES = Object.freeze({
     stackNotConfigured: 'stack_not_configured',
     remoteUnreachable: 'remote_unreachable',
     baseRed: 'base_red',
+    noCommits: 'no_commits',
+})
+
+/** The steps `factory run --from` can continue a ticket from. */
+export const RESUME_STEPS = Object.freeze({
+    checks: 'checks',
+    review: 'review',
+    pr: 'pr',
 })
 
 export const REVIEW_VERDICTS = Object.freeze({

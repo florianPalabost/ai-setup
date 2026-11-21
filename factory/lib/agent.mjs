@@ -1,5 +1,5 @@
-import { createWriteStream } from 'node:fs'
-import { writeFile } from 'node:fs/promises'
+import { createWriteStream, existsSync } from 'node:fs'
+import { readFile, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { ERROR_CODES, FactoryError } from './constants.mjs'
@@ -52,6 +52,15 @@ const resultEvent = (stdout, { wantsStructuredOutput }) => {
     const structured = wantsStructuredOutput ? results.findLast((event) => event.structured_output != null) : undefined
 
     return structured ?? results.at(-1) ?? null
+}
+
+/** The final message of a finished agent transcript, or null when it has none. */
+export async function transcriptResult(path) {
+    if (!existsSync(path)) {
+        return null
+    }
+
+    return resultEvent(await readFile(path, 'utf8'), { wantsStructuredOutput: false })?.result || null
 }
 
 /** An agent step's transcript file in the run directory. */
