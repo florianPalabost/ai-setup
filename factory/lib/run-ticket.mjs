@@ -4,7 +4,7 @@ import { agentLogName, runClaude, sandboxSettings, writeSandboxSettings } from '
 import { ERROR_CODES, FactoryError, LABELS, REVIEW_VERDICTS, branchForIssue } from './constants.mjs'
 import { RUN_STEP, STEP_NAMES, STEP_STATUSES, progressRecorder } from './progress.mjs'
 import { commentOnIssue, createDraftPr, editPrBody, findOpenPrForBranch, swapLabels, viewIssue } from './github.mjs'
-import { PR_BODY_ALLOWED_TOOLS, PR_BODY_SCHEMA, REVIEW_ALLOWED_TOOLS, REVIEW_SCHEMA, implementPrompt, prBodyPrompt, reviewPrompt, reworkPrompt } from './prompts.mjs'
+import { CODING_DISALLOWED_TOOLS, PR_BODY_ALLOWED_TOOLS, PR_BODY_SCHEMA, REVIEW_ALLOWED_TOOLS, REVIEW_SCHEMA, implementPrompt, prBodyPrompt, reviewPrompt, reworkPrompt } from './prompts.mjs'
 import { writeWatchLog } from './session.mjs'
 import { runCheckCommand, runShellCommand } from './shell.mjs'
 import { canReachOrigin, commitsAhead, prepareWorktree, pushBranch, worktreePathFor } from './worktree.mjs'
@@ -133,7 +133,7 @@ export async function runTicket({ repo, issueNumber, config, options, log }) {
         log(`implementing with ${config.models.implement}…`)
         const implementation = await progress.track(
             STEP_NAMES.implement,
-            () => agentRun('implement', { prompt: implementPrompt({ issue, base, checks: config.checks }), model: config.models.implement, permissionMode: config.permissionMode }),
+            () => agentRun('implement', { prompt: implementPrompt({ issue, base, checks: config.checks }), model: config.models.implement, permissionMode: config.permissionMode, disallowedTools: CODING_DISALLOWED_TOOLS }),
             { log: agentLogName('implement') },
         )
 
@@ -184,7 +184,7 @@ export async function runTicket({ repo, issueNumber, config, options, log }) {
             log(`rework ${reworks}/${config.maxReworks} with ${config.models.implement}…`)
             await progress.track(
                 STEP_NAMES.rework(reworks, config.maxReworks),
-                () => agentRun(`rework-${reworks}`, { prompt: reworkPrompt({ issue, findings: review.findings, checks: config.checks }), model: config.models.implement, permissionMode: config.permissionMode }),
+                () => agentRun(`rework-${reworks}`, { prompt: reworkPrompt({ issue, findings: review.findings, checks: config.checks }), model: config.models.implement, permissionMode: config.permissionMode, disallowedTools: CODING_DISALLOWED_TOOLS }),
                 { log: agentLogName(`rework-${reworks}`) },
             )
         }

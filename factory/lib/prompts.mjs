@@ -28,6 +28,9 @@ export const REVIEW_ALLOWED_TOOLS = Object.freeze([...READ_ONLY_TOOLS, 'Skill', 
 /** Read-only tools plus Skill for /pr and /unslop. */
 export const PR_BODY_ALLOWED_TOOLS = Object.freeze([...READ_ONLY_TOOLS, 'Skill'])
 
+/** In `claude -p` these let the agent go idle until a wake-up, and the step's time budget runs out while it waits. */
+export const CODING_DISALLOWED_TOOLS = Object.freeze(['ScheduleWakeup', 'CronCreate', 'Monitor'])
+
 function ticketSection(issue) {
     const comments = issue.comments.map((comment) => `**${comment.author}:**\n${comment.body}`).join('\n\n---\n\n')
 
@@ -47,6 +50,7 @@ function checksSection(checks) {
 }
 
 const UNATTENDED_RULES = `# Rules
+- Run the checks in the foreground and wait for them to finish. Never start them in the background to come back later.
 - You are running unattended. Nobody will answer questions, and any tool call that would need approval is refused. Wherever a skill tells you to ask or confirm with the user, decide yourself and record the decision in your final message.
 - You have no network access except the model API. Do not push, open PRs, or call GitHub. The ticket is given above: do not fetch it.
 - Read CLAUDE.md / AGENTS.md first and follow the repository's conventions.

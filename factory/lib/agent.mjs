@@ -65,10 +65,13 @@ const closeStream = (stream) => new Promise((resolve) => stream.end(resolve))
  * Sessions persist, so `claude --resume <sessionId>` from the worktree replays a run.
  * @returns {Promise<{ result: string, structuredOutput: unknown, costUsd: number|null, sessionId: string|null }>}
  */
-export async function runClaude({ cwd, prompt, model, permissionMode, allowedTools, jsonSchema, settingsPath, timeoutMinutes, logPath }) {
+export async function runClaude({ cwd, prompt, model, permissionMode, allowedTools, disallowedTools, jsonSchema, settingsPath, timeoutMinutes, logPath }) {
     const claudeArgs = ['-p', '--output-format', 'stream-json', '--verbose', '--model', model, '--permission-mode', permissionMode, '--permission-prompts', 'none']
     if (allowedTools?.length) {
         claudeArgs.push('--allowedTools', ...allowedTools)
+    }
+    if (disallowedTools?.length) {
+        claudeArgs.push('--disallowedTools', ...disallowedTools)
     }
     if (jsonSchema) {
         claudeArgs.push('--json-schema', JSON.stringify(jsonSchema))
