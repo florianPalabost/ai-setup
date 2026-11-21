@@ -69,7 +69,7 @@ test("the first look may use gh's cache", async () => {
   assert.equal(usedCache(ghCalls()[0]), true);
 });
 
-test("a cd asks GitHub again, skipping gh's cache", async () => {
+test("a cd asks again, through gh's cache", async () => {
   // Arrange
   const copy = await openCopy();
   workIn("/repo-b");
@@ -79,10 +79,10 @@ test("a cd asks GitHub again, skipping gh's cache", async () => {
 
   // Assert
   assert.equal(ghCalls().length, 2);
-  assert.equal(usedCache(ghCalls()[1]), false);
+  assert.equal(usedCache(ghCalls()[1]), true);
 });
 
-test("a branch change asks GitHub again, skipping gh's cache", async () => {
+test("a branch change asks again, through gh's cache", async () => {
   // Arrange
   const copy = await openCopy();
   workIn("/repo-a", "feat/x");
@@ -92,7 +92,7 @@ test("a branch change asks GitHub again, skipping gh's cache", async () => {
 
   // Assert
   assert.equal(ghCalls().length, 2);
-  assert.equal(usedCache(ghCalls()[1]), false);
+  assert.equal(usedCache(ghCalls()[1]), true);
 });
 
 test("a render in the same place asks nothing", async () => {

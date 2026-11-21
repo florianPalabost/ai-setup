@@ -30,7 +30,8 @@ class MyPrs {
   follow(cx) {
     const { slot } = this, key = placeKey(here(herdr));
     const due = refreshDue(slot, key, { active: herdr.window()?.active ?? true, now: Date.now(), interval: prsInterval(slot.value) });
-    if (due) startRefresh(slot, key, () => loadMyPrs(herdr.exec, due));
+    // The list is the same everywhere, so even a cd may take gh's 30 s answer: flicking between spaces asks GitHub once.
+    if (due) startRefresh(slot, key, () => loadMyPrs(herdr.exec, { cache: true }));
     this.watcher.watch(cx);
   }
 
