@@ -54,7 +54,7 @@ jobs:
           mkdir -p "$home"
           /bin/bash -c 'echo "bash $BASH_VERSION"'
           HOME="$home" /bin/bash install.sh --dry-run | tee "$RUNNER_TEMP/out"
-          grep -F 'Herdr Git panel (' "$RUNNER_TEMP/out"
+          grep -F 'Herdr (' "$RUNNER_TEMP/out"
           test -z "$(ls -A "$home")"
       - name: Dry-run install.ps1 in an empty home
         if: runner.os == 'Windows'
@@ -66,7 +66,7 @@ jobs:
           $out = Join-Path $env:RUNNER_TEMP 'out.txt'
           .\install.ps1 -DryRun | Tee-Object -FilePath $out
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          if (-not (Select-String -Path $out -SimpleMatch -Quiet 'Herdr Git panel (')) { exit 1 }
+          if (-not (Select-String -Path $out -SimpleMatch -Quiet 'Herdr (')) { exit 1 }
           if (Get-ChildItem -Force -LiteralPath $env:HOME) { exit 1 }
 
   plugins:
