@@ -19,8 +19,9 @@ herdr_with_prototypes() {
   printf '{"layout":"main-proto"}' >"$HERDR/shared.json"
 }
 
-# Runs the install on a terminal, typing $1 at the leftover prompt, and leaves its
-# output in $OUT. The prompt only appears on a terminal.
+# Runs the install on a terminal, keeping the saved features and typing $1 at the
+# leftover prompt, and leaves its output in $OUT. The prompts only appear on a
+# terminal.
 install_answering() {
   OUT="$SANDBOX/out"
   in_sandbox python3 -c '
@@ -32,7 +33,7 @@ reply, command = sys.argv[1], sys.argv[2:]
 pid, terminal = pty.fork()
 if pid == 0:
     os.execvp(command[0], command)
-seen, answered, deadline = b"", False, time.time() + TIMEOUT_SECONDS
+seen, answered, features_answered, deadline = b"", False, False, time.time() + TIMEOUT_SECONDS
 while time.time() < deadline:
     if select.select([terminal], [], [], 1)[0]:
         try:
@@ -42,6 +43,9 @@ while time.time() < deadline:
         if not chunk:
             break
         seen += chunk
+        if not features_answered and b"Numbers to tick or untick" in seen:
+            os.write(terminal, b"\n")
+            features_answered = True
         if not answered and b"Remove these?" in seen:
             os.write(terminal, reply.encode() + b"\n")
             answered = True

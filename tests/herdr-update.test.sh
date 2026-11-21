@@ -42,7 +42,7 @@ test_update_rebuilds_what_an_older_herdr_built() {
   assert_eq 0 "$code" "exit code"
   assert_eq "$NEW_VERSION" "$(json_get "$HERDR/mods/tabs-git/mod.json" cloned_from.version)" "tabs-git version"
   assert_contains "$HERDR/mods/tabs-git/main.js" "$RELEASE_MARK"
-  assert_contains "$HERDR/mods/tabs-git/main.js" 'panelButton("changes", "Git"'
+  assert_contains "$HERDR/mods/tabs-git/main.js" '{ id: "changes", label: "Git"'
   assert_eq "$NEW_VERSION" "$(json_get "$HERDR/layouts/main-git.json" cloned_from.version)" "main-git version"
   assert_eq "True" "$(json_get "$HERDR/layouts/main-git.json" new_in_release)" "main-git follows the release"
   assert_eq "git" "$(json_get "$HERDR/layouts/main-git.json" '#changes.content.mod')" "changes slot"
