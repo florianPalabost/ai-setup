@@ -139,8 +139,7 @@ export default class Output extends View {
     if ((space?.id ?? null) !== this.spaceId) {
       this.spaceId = space?.id ?? null;
       this.sources = null;
-      this.open(null, cx);
-      cx.timer.after(0, (cx) => this.findSources(cx));
+      cx.timer.after(0, (cx) => { this.open(null, cx); this.findSources(cx); });
     }
   }
 
