@@ -53,14 +53,18 @@ export function boardLanes(tickets) {
 export const withLocalRuns = (tickets, runs) => tickets.map((ticket) => ({ ...ticket, run: runs[ticket.number] ?? ticket.run }));
 
 // The buttons a card gets, in order: { label, action } with action one of ACTIONS.
-export const ACTIONS = Object.freeze({ start: "start", worktree: "worktree", watch: "watch", resume: "resume", issue: "issue", pr: "pr", log: "log" });
+export const ACTIONS = Object.freeze({ start: "start", continue: "continue", worktree: "worktree", watch: "watch", resume: "resume", issue: "issue", pr: "pr", log: "log" });
 
-// `starting`: Start was just clicked and no poll has shown the run yet.
+// A ticket handed to you by a run that stopped on an error, with a worktree to carry on in.
+const continuable = (ticket) => ticket.state === "ready-for-human" && ticket.run?.outcome === "error" && Boolean(ticket.worktree);
+
+// `starting`: Start or Continue was just clicked and no poll has shown the run yet.
 export function cardActions(ticket, { starting = false } = {}) {
   const actions = [];
   const running = ticket.run && !ticket.run.finishedAt;
   const startable = isUnblockedReady(ticket) || ticket.state === "ready-for-human";
   if (startable && !starting && !running) actions.push({ label: "Start", action: ACTIONS.start });
+  if (continuable(ticket) && !starting) actions.push({ label: "Continue", action: ACTIONS.continue });
   if (ticket.worktree) {
     actions.push({ label: "Worktree", action: ACTIONS.worktree });
     if (ticket.run && !ticket.run.finishedAt) actions.push({ label: "Watch", action: ACTIONS.watch });
