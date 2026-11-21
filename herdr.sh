@@ -848,6 +848,7 @@ install_herdr() {
   link_herdr_mods
   copy_herdr_mod_icons
   install_herdr_keys
+  sync_automations
   if ! herdr_wants_panel; then
     info "no panel chosen: the layout stays as it is"
     return 0
