@@ -1,6 +1,6 @@
 --- a/main.js
 +++ b/main.js
-@@ -3 +3,20 @@
+@@ -3 +3,22 @@
 -import { spaces, panes, run, openOverlay, theme, window, shared, layout, settings } from "herdr";
 +import { spaces, panes, run, openOverlay, theme, window, shared, layout, settings, nextCommand, checking, exec, home, watchFolder } from "herdr";
 +
@@ -17,25 +17,29 @@
 +// The Automations button counts the finished runs no one has opened yet.
 +const AUTOMATIONS = "herdr-automations";
 +const FINISHED = new Set(["done", "failed", "cancelled"]);
++// How often to look again for a CLI that wasn't there, as install.sh can add it to an open window.
++const AUTOMATIONS_RETRY_MS = 30000;
 +
 +function showPanel(id) {
 +  run("layout.select", { stack: "panel-body", child: id });
 +  run("layout.show", { id: "panel" });
 +}
-@@ -31 +50 @@
+@@ -31 +52 @@
 -  init() {
 +  init(_props, cx) {
-@@ -36,0 +56,9 @@
+@@ -36,0 +58,11 @@
 +    this.unread = 0;
 +    if (checking()) return;
++    this.watching = false;
 +    cx.spawn(async (cx) => this.watchAutomations(cx));
++    cx.timer.every(AUTOMATIONS_RETRY_MS, (cx) => { if (!this.watching) cx.spawn(async (cx) => this.watchAutomations(cx)); });
 +    cx.spawn(async () => {
 +      for (;;) {
 +        const c = await nextCommand();
 +        if (c.startsWith(SHOW_COMMAND)) showPanel(c.slice(SHOW_COMMAND.length));
 +      }
 +    });
-@@ -61,0 +90,33 @@
+@@ -61,0 +94,35 @@
 +  // Where the Automations panel finds the CLI: on PATH, else where its installer puts it.
 +  async automationsBin() {
 +    try { if ((await exec(AUTOMATIONS, ["version"])).code === 0) return AUTOMATIONS; } catch {}
@@ -44,8 +48,9 @@
 +  }
 +
 +  // Count the unread runs now, then again each time the history folder changes.
-+  // Without the CLI there is no count and nothing to watch.
++  // Without the CLI there is no count and nothing to watch, until a retry finds it.
 +  async watchAutomations(cx) {
++    if (this.watching) return;
 +    const bin = await this.automationsBin();
 +    const json = async (args) => {
 +      const r = await exec(bin, args);
@@ -61,23 +66,24 @@
 +    };
 +    let state;
 +    try { state = (await json(["ls", "--json"])).state; } catch { return; }
++    if (!state || this.watching) return;
++    this.watching = true;
 +    await count();
-+    if (!state) return;
 +    for (;;) {
 +      try { await watchFolder(state); } catch { return; }
 +      await count();
 +    }
 +  }
 +
-@@ -119 +180 @@
+@@ -119 +186 @@
 -        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openOverlay({ mod: "menu", kind: "popup", width: 200, props: { tab: "tab", target: { id: c.id, space: space.id } } }); })
 +        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openOverlay({ mod: "menu-git", kind: "popup", width: 200, props: { tab: "tab", target: { id: c.id, space: space.id } } }); })
-@@ -132 +193,3 @@
+@@ -132 +199,3 @@
 -    const enabled = shared("workspace.panels") ?? ["files", "changes"];
 +    // The welcome's list decides Files only: it can leave out the panels above.
 +    const added = PANELS.filter(p => body?.children?.some(child => child.id === p.id));
 +    const enabled = [...(shared("workspace.panels") ?? ["files"]).filter(id => id === "files"), ...added.map(p => p.id)];
-@@ -133,0 +197,7 @@
+@@ -133,0 +203,7 @@
 +    // The Bottom panel sits under the active tab, not in the side panel.
 +    const bottom = find(root, "bottom");
 +    const bottomButton = () => h_flex().id("panel-bottom").h(26).px(8).gap(5).flex_none().items_center().rounded(6)
@@ -85,16 +91,16 @@
 +      .hover(s => s.bg(t.hover)).on_mouse_down("left", stop)
 +      .on_click(() => run("layout.toggle", { id: "bottom" }))
 +      .child(svg("mods/workspace-chrome/terminal.svg").size(14)).child("Output");
-@@ -135,0 +206 @@
+@@ -135,0 +212 @@
 +      const badge = id === "automations" ? this.unread : 0;
-@@ -141,2 +212,4 @@
+@@ -141,2 +218,4 @@
 -          else { run("layout.select", { stack: "panel-body", child: id }); run("layout.show", { id: "panel" }); }
 -        }).child(svg(icon).size(14)).child(label);
 +          else showPanel(id);
 +        }).child(svg(icon).size(14)).child(label)
 +        .when(badge > 0, el => el.child(div().h(15).min_w(15).px(4).rounded(8).flex().items_center().justify_center()
 +          .bg(t.accent).text_color(t.background).text_size(10).font_semibold().child(String(badge))));
-@@ -152 +225,2 @@
+@@ -152 +231,2 @@
 -      .when(enabled.includes("changes"), el => el.child(panelButton("changes", "Changes", "mods/changes/changes.svg")))
 +      .children(added.map(p => panelButton(p.id, p.label, p.icon)))
 +      .when(Boolean(bottom), el => el.child(bottomButton()))
