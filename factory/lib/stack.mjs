@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { ERROR_CODES, FactoryError } from './constants.mjs'
 import { latestRun } from './progress.mjs'
-import { runForegroundCommand, runShellCommand } from './shell.mjs'
+import { runShellCommand, runUntilInterrupted } from './shell.mjs'
 import { worktreePathFor } from './worktree.mjs'
 
 export const MAIN_CHECKOUT = 'main'
@@ -11,7 +11,6 @@ export const MAIN_CHECKOUT = 'main'
 const stackFile = (gitDir) => join(gitDir, 'factory', 'stack.json')
 
 /**
- * The checkout the stack was last started in, or null when factory has no record of it.
  * @returns {Promise<null | { checkout: 'main' | number, path: string, since: string }>}
  */
 export async function readStack(gitDir) {
@@ -27,7 +26,6 @@ async function writeStack(gitDir, stack) {
 
 export const checkoutLabel = (checkout) => (checkout === MAIN_CHECKOUT ? MAIN_CHECKOUT : `#${checkout}`)
 
-/** What's wrong with the up / down / serve keys of a config, one sentence per problem. */
 export function stackConfigProblems(config) {
     const problems = []
     if ((config.up.length === 0) !== (config.down.length === 0)) {
@@ -54,7 +52,6 @@ async function runCommands(key, commands, { cwd, log }) {
     }
 }
 
-/** The checkout to run `down` in: the recorded one, or the main checkout when there's no record or it's gone. */
 function downCheckoutPath(repo, stack, log) {
     if (!stack) {
         return repo.root
@@ -90,10 +87,6 @@ async function warnIfRunWorking(repo, checkout, log) {
     }
 }
 
-/**
- * Moves the repo's single stack to a checkout: `down` where it is now, `up` in the new one, then `serve` in the
- * foreground. stack.json points at the new checkout before `up` runs, so `factory down` can clean up a failed `up`.
- */
 export async function stackUp({ repo, config, checkout, serve, force, log }) {
     requireStackConfig(config, ['up', 'down'])
     const target = targetCheckout(repo, checkout)
@@ -122,11 +115,10 @@ export async function stackUp({ repo, config, checkout, serve, force, log }) {
         return
     }
     log(`serve: ${config.serve}`)
-    await runForegroundCommand(config.serve, { cwd: target.path, key: 'serve' })
+    await runUntilInterrupted(config.serve, { cwd: target.path, key: 'serve' })
     log(`serve stopped; stack still up in ${checkoutLabel(target.checkout)} (factory down to stop it)`)
 }
 
-/** Runs `down` where the stack is up (the main checkout with no record) and forgets it. */
 export async function stackDown({ repo, config, log }) {
     requireStackConfig(config, ['down'])
     const current = await readStack(repo.gitDir)

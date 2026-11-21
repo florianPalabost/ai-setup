@@ -52,7 +52,6 @@ export function run(command, args, { cwd, input, timeoutMs, onStdout } = {}) {
 
 const commandFailed = (key, exitCode, commandLine) => new FactoryError(ERROR_CODES.commandFailed, `${key} command failed (exit ${exitCode}): ${commandLine}`)
 
-/** Runs a command from the `key` list of .factory.json through sh, streaming its output to the terminal. */
 export function runShellCommand(commandLine, { cwd, key }) {
     return new Promise((resolve, reject) => {
         const child = spawn('sh', ['-c', commandLine], { cwd, stdio: ['ignore', 'inherit', 'inherit'] })
@@ -67,11 +66,7 @@ export function runShellCommand(commandLine, { cwd, key }) {
     })
 }
 
-/**
- * Runs a long-running command through sh with the terminal attached, until it ends or Ctrl+C stops it.
- * Ctrl+C reaches the command, while factory ignores it and resolves, so the caller can carry on after it.
- */
-export function runForegroundCommand(commandLine, { cwd, key }) {
+export function runUntilInterrupted(commandLine, { cwd, key }) {
     return new Promise((resolve, reject) => {
         let interrupted = false
         const onInterrupt = () => {

@@ -15,7 +15,6 @@ function git(args, cwd) {
   return execFileSync("git", args, { cwd, encoding: "utf8", env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" } });
 }
 
-/** A repo at <tmp>/app with the given .factory.json, a fake gh, and plain folders standing in for the worktrees. */
 function makeRepo(config, { worktrees = [], gh = "exit 1" } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "factory-stack-"));
   const root = join(dir, "app");
