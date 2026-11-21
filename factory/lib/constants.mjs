@@ -28,6 +28,7 @@ export const ERROR_CODES = Object.freeze({
     noWorktree: 'no_worktree',
     stackNotConfigured: 'stack_not_configured',
     remoteUnreachable: 'remote_unreachable',
+    baseRed: 'base_red',
 })
 
 export const REVIEW_VERDICTS = Object.freeze({

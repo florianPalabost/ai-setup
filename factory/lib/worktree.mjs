@@ -24,6 +24,28 @@ export async function locateRepo(cwd) {
 /** Worktrees live next to the repo, e.g. ~/dev/lara-vision-factory/issue-42. */
 export const worktreePathFor = (root, issueNumber) => join(dirname(root), `${basename(root)}-factory`, `issue-${issueNumber}`)
 
+const BASELINE_SHA_LENGTH = 12
+
+/** The throwaway checkout the baseline checks run in, beside the tickets' worktrees. */
+export const baselineWorktreePathFor = (root, sha) => join(dirname(root), `${basename(root)}-factory`, `baseline-${sha.slice(0, BASELINE_SHA_LENGTH)}`)
+
+/** Fetches origin/<base> and returns the commit it points at. */
+export async function fetchBase({ root, base }) {
+    await git(['fetch', 'origin', base], { cwd: root })
+
+    return (await git(['rev-parse', `origin/${base}`], { cwd: root })).trim()
+}
+
+export const removeWorktree = ({ root, path }) => git(['worktree', 'remove', '--force', path], { cwd: root })
+
+/** A detached checkout of `ref`, replacing one a crashed run left at `path`. */
+export async function addDetachedWorktree({ root, path, ref }) {
+    if (existsSync(path)) {
+        await removeWorktree({ root, path })
+    }
+    await git(['worktree', 'add', '--detach', path, ref], { cwd: root })
+}
+
 /**
  * Creates the ticket's worktree from origin/<base>, or reuses the existing one so a re-run continues the work.
  * @returns {Promise<{ created: boolean }>}

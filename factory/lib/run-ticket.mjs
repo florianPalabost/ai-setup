@@ -1,16 +1,16 @@
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
+import { baselineCachePath, baselineChecks, failingChecks } from './checks.mjs'
 import { agentLogName, runClaude, sandboxSettings, writeSandboxSettings } from './agent.mjs'
 import { ERROR_CODES, FactoryError, LABELS, REVIEW_VERDICTS, branchForIssue } from './constants.mjs'
 import { RUN_STEP, STEP_NAMES, STEP_STATUSES, progressRecorder } from './progress.mjs'
 import { commentOnIssue, createDraftPr, editPrBody, findOpenPrForBranch, swapLabels, viewIssue } from './github.mjs'
 import { CODING_DISALLOWED_TOOLS, PR_BODY_ALLOWED_TOOLS, PR_BODY_SCHEMA, REVIEW_ALLOWED_TOOLS, REVIEW_SCHEMA, implementPrompt, prBodyPrompt, reviewPrompt, reworkPrompt } from './prompts.mjs'
 import { writeWatchLog } from './session.mjs'
-import { runCheckCommand, runShellCommand } from './shell.mjs'
+import { runShellCommand } from './shell.mjs'
 import { canReachOrigin, commitsAhead, prepareWorktree, pushBranch, worktreePathFor } from './worktree.mjs'
 
 const READ_ONLY_PERMISSION_MODE = 'dontAsk'
-const CHECK_OUTPUT_TAIL_LINES = 40
 
 function parseReview(structuredOutput, logPath) {
     const verdict = structuredOutput?.verdict
@@ -29,25 +29,18 @@ function parsePrBody(structuredOutput, logPath) {
     return structuredOutput.body.trim()
 }
 
-const tail = (text, lines) => text.trimEnd().split('\n').slice(-lines).join('\n')
-
-/**
- * Runs the repo's checks on the host, so the factory never takes an agent's word that they pass.
- * @returns {Promise<string[]>} one finding per failing check
- */
-async function failingChecks({ checks, cwd, timeoutMs, runDir, attempt, log, progress, step }) {
-    const failures = []
-    for (const [index, command] of checks.entries()) {
-        log(`check: ${command}`)
-        await progress.record({ step, status: STEP_STATUSES.running, detail: command })
-        const { passed, output } = await runCheckCommand(command, { cwd, timeoutMs })
-        await writeFile(join(runDir, `checks-${attempt}-${index + 1}.log`), `$ ${command}\n\n${output}`)
-        if (!passed) {
-            failures.push(`Automated check \`${command}\` fails. Last lines of its output:\n\`\`\`\n${tail(output, CHECK_OUTPUT_TAIL_LINES)}\n\`\`\``)
-        }
+/** Stops the run when the base already fails a check, before an agent spends its time on failures it didn't cause. */
+async function requireGreenBase({ repo, config, runDir, log, progress }) {
+    const baseline = await progress.track(STEP_NAMES.baseline, () => baselineChecks({ repo, config, runDir, log, progress, step: STEP_NAMES.baseline }), {
+        statusOf: (result) => (result.failing.length > 0 ? STEP_STATUSES.fail : STEP_STATUSES.pass),
+    })
+    if (baseline.failing.length === 0) {
+        return
     }
 
-    return failures
+    const failing = baseline.failing.map((command) => `\`${command}\``).join(', ')
+    const where = baseline.cached ? `result cached in ${baselineCachePath(repo.gitDir, baseline.sha)}; delete it to check again` : `logs: ${baseline.runDir}`
+    throw new FactoryError(ERROR_CODES.baseRed, `origin/${config.baseBranch} (${baseline.sha.slice(0, 7)}) already fails ${failing} before any change: fix the base first (${where})`)
 }
 
 function reviewHeader(review, reworks) {
@@ -90,7 +83,7 @@ export async function runTicket({ repo, issueNumber, config, options, log }) {
     log(`#${issue.number} ${issue.title}`)
     log(`branch ${branch} · worktree ${worktreePath}`)
     if (options.dryRun) {
-        log(`dry run: would label ${LABELS.working}, set up the worktree (${config.setup.length} setup command(s)), /implement with ${config.models.implement}, run ${config.checks.length} check(s) and /matt-code-review with ${config.models.review} (≤${config.maxReworks} rework), push, write the body with /pr (${config.models.pr}) and open a draft PR into ${base}`)
+        log(`dry run: would label ${LABELS.working}, run the checks on ${base} once per base commit, set up the worktree (${config.setup.length} setup command(s)), /implement with ${config.models.implement}, run ${config.checks.length} check(s) and /matt-code-review with ${config.models.review} (≤${config.maxReworks} rework), push, write the body with /pr (${config.models.pr}) and open a draft PR into ${base}`)
         log(options.sandbox ? `srt settings:\n${JSON.stringify(settings, null, 2)}` : 'no sandbox: claude runs directly on the host')
 
         return { dryRun: true }
@@ -109,6 +102,9 @@ export async function runTicket({ repo, issueNumber, config, options, log }) {
 
     const watchLog = writeWatchLog({ repo, issueNumber: issue.number, runDir })
     try {
+        if (config.checks.length > 0) {
+            await requireGreenBase({ repo, config, runDir, log, progress })
+        }
         const { created } = await prepareWorktree({ root: repo.root, path: worktreePath, branch, base })
         if (created) {
             await progress.track(STEP_NAMES.setup, async () => {
@@ -150,9 +146,11 @@ export async function runTicket({ repo, issueNumber, config, options, log }) {
         let reworks = 0
         for (let attempt = 1; ; attempt++) {
             const checksStep = STEP_NAMES.checks(attempt)
-            const checkFailures = await progress.track(checksStep, () => failingChecks({ checks: config.checks, cwd: worktreePath, timeoutMs: config.checkTimeoutMinutes * 60_000, runDir, attempt, log, progress, step: checksStep }), {
-                statusOf: (failures) => (failures.length > 0 ? STEP_STATUSES.fail : STEP_STATUSES.pass),
-            })
+            const checkFailures = await progress.track(
+                checksStep,
+                async () => (await failingChecks({ checks: config.checks, cwd: worktreePath, timeoutMs: config.checkTimeoutMinutes * 60_000, runDir, attempt, log, progress, step: checksStep })).map(({ finding }) => finding),
+                { statusOf: (failures) => (failures.length > 0 ? STEP_STATUSES.fail : STEP_STATUSES.pass) },
+            )
             if (checkFailures.length > 0) {
                 review = { verdict: REVIEW_VERDICTS.fail, findings: checkFailures, report: '' }
                 log(`checks: ${checkFailures.length} failing, skipping the review`)
