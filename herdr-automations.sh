@@ -80,6 +80,69 @@ download_automations_bin() {
   return "$status"
 }
 
+# The starter config: runs open in the Herdr app (backend: hc), and the two
+# examples stay off until ticked in the panel.
+AUTOMATIONS_STARTER='backend: hc
+automations:
+  - name: issue-triage
+    cron: "0 9 * * 1-5"
+    repo: ~/Documents/dev/ai-setup
+    agent: claude
+    model: sonnet
+    prompt: |
+      Run /triage on the GitHub issues opened since the last run that have no
+      triage label yet.
+    disabled: true
+
+  - name: weekly-review
+    cron: "0 17 * * 5"
+    repo: ~/Documents/dev/ai-setup
+    workspace: root
+    agent: claude
+    model: sonnet
+    prompt: |
+      Run /code-review on this week'"'"'s commits on main
+      (git log --since="1 week ago" main).
+    disabled: true
+'
+
+# The automations.yaml the binary reads.
+automations_config_path() {
+  "$AUTOMATIONS_BIN" ls --json 2>/dev/null | py3 -c 'import json, sys; print(json.load(sys.stdin)["config"])'
+}
+
+# Write the starter config if there is none. If there is one, only put
+# `backend: hc` at its top when it sets no backend: without it, runs go to the
+# herdr TUI, not the app.
+seed_automations_config() {
+  local path
+  if ((DRY_RUN)) && [[ ! -x "$AUTOMATIONS_BIN" ]]; then
+    info "[dry-run] would write a starter automations.yaml (backend: hc, two disabled examples)"
+    return 0
+  fi
+  if ! path="$(automations_config_path)" || [[ -z "$path" ]]; then
+    warn "herdr-automations didn't name its automations.yaml: set \`backend: hc\` at its top by hand"
+    return 0
+  fi
+  if [[ ! -f "$path" ]]; then
+    if ((DRY_RUN)); then
+      info "[dry-run] would write a starter $path"
+    else
+      mkdir -p "$(dirname "$path")"
+      printf '%s' "$AUTOMATIONS_STARTER" >"$path"
+      info "wrote a starter $path, its examples disabled"
+    fi
+  elif ! grep -q '^backend:' "$path"; then
+    if ((DRY_RUN)); then
+      info "[dry-run] would put backend: hc at the top of $path"
+    else
+      backup "$path"
+      printf 'backend: hc\n' | cat - "$BACKUP_DIR/${path#"$HOME"/}" >"$path"
+      info "put backend: hc at the top of $path"
+    fi
+  fi
+}
+
 # Whether the scheduler service is installed. Without the binary, it can't be.
 automations_service_installed() {
   [[ -x "$AUTOMATIONS_BIN" ]] && "$AUTOMATIONS_BIN" service status 2>/dev/null | grep -qx 'service installed: true'
@@ -98,6 +161,7 @@ install_automations() {
     download_automations_bin "$tag" || return 0
     fresh=1
   fi
+  seed_automations_config
   if ((fresh)) || ! automations_service_installed; then
     automations_service install "installed"
   fi
