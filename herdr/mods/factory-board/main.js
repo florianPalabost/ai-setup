@@ -7,7 +7,7 @@ import { v_flex, h_flex } from "gpui-base";
 import { exec, readTextFile, spaces, panes, theme, run, notify, window, checking, props, layout, setShared } from "herdr";
 import { ACTIONS, STEP_MARKS, boardLanes, cardActions, cardTags, nextUp, sinceLabel, startSettled } from "./board.js";
 import { createOpener } from "./opener.js";
-import { createFactorySource } from "./source.js";
+import { createFactorySource, spaceFolders } from "./source.js";
 import { factoryPanel } from "./panel.js";
 
 const POLL_INTERVAL_MS = 5000;
@@ -19,6 +19,8 @@ const PAGER_SCRIPT = 'exec "${PAGER:-less}" "$1"';
 // The Bottom panel's Output tab follows the ticket this shared value names (bottom-output/main.js).
 const OUTPUT_FOLLOW_KEY = "bottom-output.follow";
 const BOTTOM_PANEL = "bottom";
+
+const activeSpace = () => spaces().find((space) => space.active) ?? null;
 
 const startKey = (root, number) => `${root}\0${number}`;
 
@@ -35,6 +37,7 @@ export default class FactoryBoard extends View {
     // Tickets whose Start was just clicked, by startKey: { root, number, state, at }.
     this.starting = new Map();
     this.root = localStorage.getItem(REPO_KEY);
+    this.spaceId = null; this.refreshAgain = false;
     if (checking()) return;
     this.refresh(cx);
     cx.timer.every(POLL_INTERVAL_MS, (cx) => this.refresh(cx));
@@ -43,7 +46,7 @@ export default class FactoryBoard extends View {
   warn(title, body) { notify({ title, body, level: "warning" }); }
 
   refresh(cx) {
-    if (this.loading) return;
+    if (this.loading) { this.refreshAgain = true; return; }
     this.loading = true;
     cx.spawn(async (cx) => {
       try {
@@ -55,7 +58,28 @@ export default class FactoryBoard extends View {
       } finally {
         this.loading = false;
         cx.notify();
+        if (this.refreshAgain) { this.refreshAgain = false; this.refresh(cx); }
       }
+    });
+  }
+
+  showRepo(root, cx) {
+    this.root = root;
+    localStorage.setItem(REPO_KEY, root);
+    this.refresh(cx);
+  }
+
+  // On a space switch, shows the factory repo the new space works in, if it has one.
+  followSpace(cx) {
+    const space = activeSpace();
+    const id = space?.id ?? null;
+    if (id === this.spaceId) return;
+    this.spaceId = id;
+    if (!space) return;
+    cx.spawn(async (cx) => {
+      const root = await this.source.repoOfSpace(space).catch(() => null);
+      if (!root || this.spaceId !== id) return;
+      if (root !== this.root || root !== this.data?.repo?.root) this.showRepo(root, cx);
     });
   }
 
@@ -80,17 +104,15 @@ export default class FactoryBoard extends View {
     const repos = this.data?.repos ?? [];
     if (repos.length < 2) return;
     const index = repos.findIndex((repo) => repo.root === this.data.repo?.root);
-    this.root = repos[(index + by + repos.length) % repos.length].root;
-    localStorage.setItem(REPO_KEY, this.root);
-    this.refresh(cx);
+    this.showRepo(repos[(index + by + repos.length) % repos.length].root, cx);
   }
 
   // The space already working in the worktree, else a new one there.
   openWorktree(ticket) {
     const { on } = this.data.repo;
     const inside = (folder) => folder === ticket.worktree || folder?.startsWith(`${ticket.worktree}/`);
-    const space = spaces().find((candidate) => (candidate.machine ?? null) === on
-      && (inside(candidate.folder) || panes().some((pane) => inside(pane.cwd) && candidate.tabs.some((tab) => tab.id === pane.tab))));
+    const allPanes = panes();
+    const space = spaces().find((candidate) => (candidate.machine ?? null) === on && spaceFolders(candidate, allPanes).some(inside));
     if (space) run("space.select", { id: space.id });
     else run("space.new", { folder: ticket.worktree, machine: on ?? undefined });
   }
@@ -184,8 +206,9 @@ export default class FactoryBoard extends View {
           : [div().text_size(11).text_color(t.dim).child("None")]));
   }
 
-  render(_cx) {
+  render(cx) {
     const t = theme();
+    if (!checking()) this.followSpace(cx);
     if (this.panel) return factoryPanel(this, laneColor, t);
     const root = v_flex().id("factory-board").size_full().min_h(0).bg(t.background).text_color(t.foreground).text_size(13).child(this.header(t));
     if (!this.data?.repo) {

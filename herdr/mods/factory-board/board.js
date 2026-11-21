@@ -11,9 +11,6 @@ export const LANES = Object.freeze([
 export const RUN_OUTCOMES = Object.freeze({ "agent-done": "done", "ready-for-human": "handed to you", error: "stopped on an error", abandoned: "stopped without finishing" });
 export const STEP_MARKS = Object.freeze({ done: "✓", pass: "✓", fail: "✗", error: "✗", running: "▸" });
 
-// A ticket's worktree, e.g. ~/dev/lara-vision-factory/issue-42: never a factory repo of its own.
-export const FACTORY_WORKTREE_PATTERN = /-factory[\\/]issue-\d+$/;
-
 export function sinceLabel(isoTime, now = Date.now()) {
   const minutes = Math.max(0, Math.round((now - new Date(isoTime).getTime()) / 60000));
   if (minutes < 60) return `${minutes}m ago`;

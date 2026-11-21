@@ -1,7 +1,7 @@
 // Where the Factory board's data comes from: the factory CLI (`factory`, linked
 // into ~/.local/bin by install.sh), run in each repo with a .factory.json among
 // herdr's spaces. Takes herdr's functions, so node can test it.
-import { FACTORY_WORKTREE_PATTERN, withLocalRuns } from "./board.js";
+import { withLocalRuns } from "./board.js";
 
 export const FACTORY_ERROR_CODES = Object.freeze({
   cliMissing: "factory_cli_missing",
@@ -15,16 +15,35 @@ const GITHUB_REFRESH_MS = 60000;
 // `factory clean` asks GitHub for merged PRs; a merged ticket's worktree can wait this long.
 const CLEAN_INTERVAL_MS = 10 * 60000;
 const REPOS_REFRESH_MS = 5 * 60000;
+// How long the copies of the mod share one space's repo lookup: long enough for one switch, short enough to see a cd.
+const SPACE_LOOKUP_REUSE_MS = 5000;
+
+// A main checkout's git dir; a worktree's common dir is its repo's, a submodule's sits elsewhere.
+const MAIN_GIT_DIR = /[\\/]\.git$/;
+
+const repoKey = (repo) => `${repo.on ?? ""}\0${repo.root}`;
+const sortRepos = (list) => [...list].sort((a, b) => a.name.localeCompare(b.name));
+
+// The folders a space works in: its own, then its terminals'.
+export function spaceFolders(space, allPanes) {
+  const tabs = new Set(space.tabs.map((tab) => tab.id));
+  return [...new Set([space.folder, ...allPanes.filter((pane) => tabs.has(pane.tab)).map((pane) => pane.cwd)].filter(Boolean))];
+}
 
 const factoryError = (code, message) => Object.assign(new Error(message), { code });
 
-export function createFactorySource({ exec, readTextFile, spaces, panes, now = () => Date.now() }) {
+// The repo list and the active space's lookup, one for every open copy of the mod: each copy gets its
+// own module instances, but globalThis is common to all of them (as in git/shared-result.js).
+const SHARED_SLOT = "__factoryBoardShared";
+const sharedSlot = (realm) => (realm[SHARED_SLOT] ??= { repos: { at: 0, list: [] }, spaceLookup: null });
+
+export function createFactorySource({ exec, readTextFile, spaces, panes, now = () => Date.now(), realm = globalThis }) {
+  const shared = sharedSlot(realm);
   const githubByRoot = new Map();
   const cleaningRoots = new Set();
   const cleanedAt = new Map();
   // Roots whose next status skips gh's cache: after a Start or a manual refresh.
   const freshRoots = new Set();
-  let repos = { at: 0, list: [] };
 
   async function factoryJson(repo, args) {
     let result;
@@ -37,25 +56,52 @@ export function createFactorySource({ exec, readTextFile, spaces, panes, now = (
     return JSON.parse(result.stdout);
   }
 
-  // The repo roots of the folders herdr's spaces work in, with a .factory.json and not a ticket's worktree.
+  // The repo a folder is in, when it has a .factory.json. A ticket's worktree is in the repo it was made from.
+  async function factoryRepoOf(folder, on) {
+    const git = await exec("git", ["rev-parse", "--path-format=absolute", "--show-toplevel", "--git-common-dir"], { cwd: folder, on }).catch(() => null);
+    if (git?.code !== 0) return null;
+    const [top, commonDir] = git.stdout.trim().split("\n");
+    const root = MAIN_GIT_DIR.test(commonDir) ? commonDir.replace(MAIN_GIT_DIR, "") : top;
+    if ((await readTextFile(`${root}/${CONFIG_FILE}`, { on }).catch(() => null)) === null) return null;
+    return { name: root.split("/").at(-1), root, on };
+  }
+
   async function factoryRepos() {
-    if (now() - repos.at < REPOS_REFRESH_MS) return repos.list;
+    if (now() - shared.repos.at < REPOS_REFRESH_MS) return shared.repos.list;
+    const allPanes = panes();
     const folders = new Map();
-    for (const space of spaces()) folders.set(`${space.machine ?? ""}\0${space.folder}`, { folder: space.folder, on: space.machine ?? null });
-    for (const pane of panes()) {
-      const space = spaces().find((candidate) => candidate.tabs.some((tab) => tab.id === pane.tab));
-      if (pane.cwd) folders.set(`${space?.machine ?? ""}\0${pane.cwd}`, { folder: pane.cwd, on: space?.machine ?? null });
+    for (const space of spaces()) {
+      for (const folder of spaceFolders(space, allPanes)) folders.set(`${space.machine ?? ""}\0${folder}`, { folder, on: space.machine ?? null });
     }
     const found = new Map();
-    await Promise.all([...folders.values()].filter(({ folder }) => folder).map(async ({ folder, on }) => {
-      const top = await exec("git", ["rev-parse", "--show-toplevel"], { cwd: folder, on }).catch(() => null);
-      const root = top?.code === 0 ? top.stdout.trim() : null;
-      if (!root || FACTORY_WORKTREE_PATTERN.test(root) || found.has(`${on ?? ""}\0${root}`)) return;
-      if ((await readTextFile(`${root}/${CONFIG_FILE}`, { on }).catch(() => null)) === null) return;
-      found.set(`${on ?? ""}\0${root}`, { name: root.split("/").at(-1), root, on });
+    await Promise.all([...folders.values()].map(async ({ folder, on }) => {
+      const repo = await factoryRepoOf(folder, on);
+      if (repo) found.set(repoKey(repo), repo);
     }));
-    repos = { at: now(), list: [...found.values()].sort((a, b) => a.name.localeCompare(b.name)) };
-    return repos.list;
+    shared.repos = { at: now(), list: sortRepos([...found.values()]) };
+    return shared.repos.list;
+  }
+
+  async function findRepoOfSpace(space) {
+    const on = space.machine ?? null;
+    for (const folder of spaceFolders(space, panes())) {
+      const repo = await factoryRepoOf(folder, on);
+      if (!repo) continue;
+      const { list } = shared.repos;
+      if (!list.some((known) => repoKey(known) === repoKey(repo))) shared.repos = { ...shared.repos, list: sortRepos([...list, repo]) };
+      return repo.root;
+    }
+    return null;
+  }
+
+  // The root of the factory repo a space works in, joining the repo list when no scan has seen it yet.
+  // Every copy asks on the same space switch; the first one's lookup answers them all.
+  function repoOfSpace(space) {
+    const recent = shared.spaceLookup;
+    if (recent?.spaceId === space.id && now() - recent.at < SPACE_LOOKUP_REUSE_MS) return recent.root;
+    const root = findRepoOfSpace(space).catch(() => null);
+    shared.spaceLookup = { spaceId: space.id, at: now(), root };
+    return root;
   }
 
   // Removes merged tickets' worktrees in the background, one cleanup per repo at a time, at most every CLEAN_INTERVAL_MS.
@@ -92,7 +138,8 @@ export function createFactorySource({ exec, readTextFile, spaces, panes, now = (
   return {
     getFactory,
     logPath,
-    forgetRepos: () => { repos = { at: 0, list: [] }; },
+    repoOfSpace,
+    forgetRepos: () => { shared.repos = { at: 0, list: [] }; shared.spaceLookup = null; },
     // Makes the next getFactory read GitHub again for that repo.
     forgetGithub: (root) => { githubByRoot.delete(root); freshRoots.add(root); },
   };
