@@ -50,14 +50,43 @@ export function run(command, args, { cwd, input, timeoutMs, onStdout } = {}) {
     })
 }
 
-/** Runs a repo-configured setup command through sh, streaming its output to the terminal. */
-export function runShellCommand(commandLine, { cwd }) {
+const commandFailed = (key, exitCode, commandLine) => new FactoryError(ERROR_CODES.commandFailed, `${key} command failed (exit ${exitCode}): ${commandLine}`)
+
+/** Runs a command from the `key` list of .factory.json through sh, streaming its output to the terminal. */
+export function runShellCommand(commandLine, { cwd, key }) {
     return new Promise((resolve, reject) => {
         const child = spawn('sh', ['-c', commandLine], { cwd, stdio: ['ignore', 'inherit', 'inherit'] })
         child.on('error', (error) => reject(new FactoryError(ERROR_CODES.commandFailed, `${commandLine}: ${error.message}`)))
         child.on('close', (exitCode) => {
             if (exitCode !== 0) {
-                reject(new FactoryError(ERROR_CODES.commandFailed, `setup command failed (exit ${exitCode}): ${commandLine}`))
+                reject(commandFailed(key, exitCode, commandLine))
+                return
+            }
+            resolve()
+        })
+    })
+}
+
+/**
+ * Runs a long-running command through sh with the terminal attached, until it ends or Ctrl+C stops it.
+ * Ctrl+C reaches the command, while factory ignores it and resolves, so the caller can carry on after it.
+ */
+export function runForegroundCommand(commandLine, { cwd, key }) {
+    return new Promise((resolve, reject) => {
+        let interrupted = false
+        const onInterrupt = () => {
+            interrupted = true
+        }
+        process.on('SIGINT', onInterrupt)
+        const child = spawn('sh', ['-c', commandLine], { cwd, stdio: 'inherit' })
+        child.on('error', (error) => {
+            process.off('SIGINT', onInterrupt)
+            reject(new FactoryError(ERROR_CODES.commandFailed, `${commandLine}: ${error.message}`))
+        })
+        child.on('close', (exitCode) => {
+            process.off('SIGINT', onInterrupt)
+            if (exitCode !== 0 && !interrupted) {
+                reject(commandFailed(key, exitCode, commandLine))
                 return
             }
             resolve()
