@@ -10,12 +10,13 @@ HERDR_FEATURES=(
   "quick-open|Quick open (ctrl-p): a file by fuzzy name|quick-open viewer|ctrl-p=mod.open:quick-open"
   "search|Search (ctrl-alt-f): text in files|search viewer|ctrl-alt-f=mod.open:search"
   "bottom|Bottom panel (ctrl-j): Output follows a factory run or the Laravel log|bottom-output|ctrl-j=layout.toggle:bottom"
+  "automations|Automations panel (ctrl-alt-a): scheduled agent prompts (installs a binary and a scheduler service)|automations|ctrl-alt-a=tabs-git.show-automations"
 )
 # The features whose panel is a node in the layout clone, with a button in the
 # tab bar clone.
-HERDR_PANEL_FEATURES=(git factory find bottom)
+HERDR_PANEL_FEATURES=(git factory find bottom automations)
 # The features that start unticked: those that install more than mods.
-HERDR_DEFAULT_OFF_FEATURES=()
+HERDR_DEFAULT_OFF_FEATURES=(automations)
 # One "<id> on|off" line per feature. A feature it doesn't list takes its
 # default: off if HERDR_DEFAULT_OFF_FEATURES has it, else on.
 HERDR_CHOICE_FILE="$HERDR_HOME/.ai-setup-features"
