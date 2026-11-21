@@ -14,7 +14,10 @@ HERDR_FEATURES=(
 # The features whose panel is a node in the layout clone, with a button in the
 # tab bar clone.
 HERDR_PANEL_FEATURES=(git factory find bottom)
-# One "<id> on|off" line per feature. A feature it doesn't list is on.
+# The features that start unticked: those that install more than mods.
+HERDR_DEFAULT_OFF_FEATURES=()
+# One "<id> on|off" line per feature. A feature it doesn't list takes its
+# default: off if HERDR_DEFAULT_OFF_FEATURES has it, else on.
 HERDR_CHOICE_FILE="$HERDR_HOME/.ai-setup-features"
 HERDR_CHOICE_ON=on
 HERDR_CHOICE_OFF=off
@@ -33,18 +36,35 @@ feature_field() {
   esac
 }
 
-# Whether the saved choice turns the feature $1 off.
-saved_off() {
-  [[ -f "$HERDR_CHOICE_FILE" ]] && grep -qxF "$1 $HERDR_CHOICE_OFF" "$HERDR_CHOICE_FILE"
+# Whether the saved choice sets the feature $1 to $2 (on or off).
+saved_as() {
+  [[ -f "$HERDR_CHOICE_FILE" ]] && grep -qxF "$1 $2" "$HERDR_CHOICE_FILE"
 }
 
-# Set HERDR_CHOSEN from the saved choice: everything the first time.
+default_off() {
+  local id
+  for id in "${HERDR_DEFAULT_OFF_FEATURES[@]+"${HERDR_DEFAULT_OFF_FEATURES[@]}"}"; do
+    [[ "$id" == "$1" ]] && return 0
+  done
+  return 1
+}
+
+# Whether the feature $1 is on: as saved, else by default.
+feature_on() {
+  saved_as "$1" "$HERDR_CHOICE_ON" && return 0
+  saved_as "$1" "$HERDR_CHOICE_OFF" && return 1
+  ! default_off "$1"
+}
+
+# Set HERDR_CHOSEN from the saved choice, the defaults for features it doesn't list.
 load_herdr_choice() {
   local spec id
   HERDR_CHOSEN=()
   for spec in "${HERDR_FEATURES[@]}"; do
     id="$(feature_field "$spec" 1)"
-    saved_off "$id" || HERDR_CHOSEN+=("$id")
+    if feature_on "$id"; then
+      HERDR_CHOSEN+=("$id")
+    fi
   done
 }
 
@@ -134,7 +154,7 @@ print_herdr_checklist() {
   done
 }
 
-# Ask which features to install, the saved choice ticked (everything the first
+# Ask which features to install, the saved choice ticked (the defaults the first
 # time), and save the answer. A dry run or a run without a terminal takes the
 # saved choice without asking.
 choose_herdr_features() {

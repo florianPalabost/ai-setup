@@ -62,7 +62,7 @@ On a machine with no herdr, one run installs the herdr features you pick and lea
 
 1. On Linux or WSL with neither `DISPLAY` nor `WAYLAND_DISPLAY` set, skips the whole step with one line. The rest of the setup still installs
 2. Installs herdr with [its official installer](https://herdr.dev) if `herdr-app` is missing. If that fails, it warns and carries on without it
-3. Lists the [herdr features](GLOSSARY.md) and lets you untick the ones you don't want. Each run shows your last choice, everything ticked the first time. A dry run or a run without a terminal keeps the last choice without asking
+3. Lists the [herdr features](GLOSSARY.md) and lets you untick the ones you don't want. Each run shows your last choice. The first time, everything is ticked but the features that install more than mods (Automations). A dry run or a run without a terminal keeps the last choice without asking
    - **Git panel**: the git and GitHub side panel, and the Graph tab it opens
    - **Factory panel**: the [`factory`](factory)'s tickets by lane, with links to the Factory tab (the full kanban) and the Run graph tab (a run as a graph of its steps)
    - **Find panel**: file names and text in files at once
