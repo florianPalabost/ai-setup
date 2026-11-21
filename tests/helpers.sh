@@ -35,6 +35,17 @@ new_sandbox() {
   mkdir -p "$SANDBOX_HOME" "$SANDBOX/bin"
   cp "$TESTS_DIR/fakes/herdr-app" "$TESTS_DIR/fakes/claude" "$TESTS_DIR/fakes/npx" "$TESTS_DIR/fakes/git" \
     "$TESTS_DIR/fakes/uname" "$TESTS_DIR/fakes/gh" "$TESTS_DIR/fakes/curl" "$TESTS_DIR/fakes/rtk" "$SANDBOX/bin/"
+  factory_tools_installed
+}
+
+# The factory's sandbox tools, so whether the machine running the tests has them
+# doesn't decide if the install reaches for brew, apt or npm.
+factory_tools_installed() {
+  local tool
+  for tool in srt bwrap socat rg; do
+    printf '#!/bin/sh\n' >"$SANDBOX/bin/$tool"
+    chmod +x "$SANDBOX/bin/$tool"
+  done
 }
 
 # Put fakes from tests/fakes on PATH that most tests must not have, such as the
