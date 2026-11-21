@@ -281,7 +281,7 @@ test_a_bare_machine_ends_on_the_git_panel() {
   assert_eq "1" "$(wc -l <"$HERDR/fake-launches.log" | tr -d ' ')" "launches"
   assert_eq "$REPO_COPY/herdr/mods/git" "$(readlink "$HERDR/mods/git")" "git mod link"
   assert_contains "$REPO_COPY/herdr/mods/git/changes.js" "herdr-version: 0.1.12"
-  assert_contains "$HERDR/mods/tabs-git/main.js" 'panelButton("changes", "Git"'
+  assert_contains "$HERDR/mods/tabs-git/main.js" '{ id: "changes", label: "Git"'
   assert_eq "git" "$(json_get "$HERDR/layouts/main-git.json" '#changes.content.mod')" "changes slot"
   assert_eq "main-git" "$(json_get "$HERDR/shared.json" layout)" "shown layout"
   assert_contains "$OUT" "main-git is active"

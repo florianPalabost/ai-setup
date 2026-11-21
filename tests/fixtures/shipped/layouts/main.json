@@ -3,6 +3,7 @@
   "type": "row",
   "children": [
     { "id": "tabs", "type": "block", "content": { "mod": "tabs" } },
+    { "id": "main", "type": "block" },
     {
       "id": "panel-body",
       "type": "stack",

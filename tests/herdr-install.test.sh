@@ -16,13 +16,13 @@ test_install_builds_the_git_panel() {
   # Assert
   assert_eq 0 "$code" "exit code"
   assert_eq "$REPO_COPY/herdr/mods/git" "$(readlink "$HERDR/mods/git")" "git mod link"
-  assert_contains "$HERDR/mods/tabs-git/main.js" 'panelButton("changes", "Git", "mods/workspace-chrome/git-branch.svg")'
-  assert_contains "$HERDR/mods/tabs-git/main.js" 'const enabled = [...(shared("workspace.panels") ?? ["files"]), "changes"];'
+  assert_contains "$HERDR/mods/tabs-git/main.js" '{ id: "changes", label: "Git", icon: "mods/workspace-chrome/git-branch.svg" }'
+  assert_contains "$HERDR/mods/tabs-git/main.js" '.children(added.map(p => panelButton(p.id, p.label, p.icon)))'
   assert_contains "$HERDR/mods/tabs-git/main.js" 'panelButton("files", "Files", "mods/files/file.svg")'
   assert_contains "$HERDR/mods/tabs-git/main.js" 'mods/tabs-git/win-min.svg'
   assert_eq "tabs" "$(json_get "$HERDR/mods/tabs-git/mod.json" cloned_from.name)" "tabs-git cloned_from"
   assert_eq "git" "$(json_get "$HERDR/layouts/main-git.json" '#changes.content.mod')" "changes slot"
-  assert_eq "files" "$(json_get "$HERDR/layouts/main-git.json" '#files.content.mod')" "files slot"
+  assert_eq "files-git" "$(json_get "$HERDR/layouts/main-git.json" '#files.content.mod')" "files slot"
   assert_eq "tabs-git" "$(json_get "$HERDR/layouts/main-git.json" '#tabs.content.mod')" "tabs block"
   assert_eq "main" "$(json_get "$HERDR/layouts/main-git.json" cloned_from.name)" "main-git cloned_from"
   assert_eq "main-git" "$(json_get "$HERDR/shared.json" layout)" "shown layout"
@@ -185,7 +185,7 @@ test_a_rebuild_replaces_the_clone_when_the_patch_applies() {
   # Assert
   assert_eq 0 "$code" "exit code"
   assert_eq "0.1.13" "$(json_get "$HERDR/mods/tabs-git/mod.json" cloned_from.version)" "clone version"
-  assert_contains "$HERDR/mods/tabs-git/main.js" 'panelButton("changes", "Git"'
+  assert_contains "$HERDR/mods/tabs-git/main.js" '{ id: "changes", label: "Git"'
 }
 
 test_a_failing_rebuild_keeps_the_last_good_changes_code() {

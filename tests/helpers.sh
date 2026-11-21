@@ -58,7 +58,7 @@ herdr_not_installed() {
 new_repo_copy() {
   REPO_COPY="$SANDBOX/repo"
   mkdir -p "$REPO_COPY"
-  cp -R "$REPO/install.sh" "$REPO/snapshot.sh" "$REPO/lib.sh" "$REPO/herdr.sh" "$REPO/herdr" \
+  cp -R "$REPO/install.sh" "$REPO/snapshot.sh" "$REPO/lib.sh" "$REPO/herdr.sh" "$REPO/herdr-features.sh" "$REPO/herdr" \
     "$REPO/global" "$REPO/plugins" "$REPO/manifests" "$REPO/.gitignore" "$REPO_COPY/"
   rm -f "$REPO_COPY/herdr/mods/git/changes.js"
   "$REAL_GIT" -C "$REPO_COPY" init --quiet
