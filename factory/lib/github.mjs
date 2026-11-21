@@ -44,19 +44,17 @@ export const commentOnIssue = (issueNumber, body, { cwd }) =>
 
 /**
  * Open ready-for-agent issues, oldest first, with their count of open blockers
- * from GitHub's native issue dependencies.
+ * from GitHub's native issue dependencies. Asks GitHub afresh: `next` starts a run on the first one.
  */
 export async function listReadyIssues({ cwd }) {
-    const issues = await ghPaginatedItems(['-X', 'GET', 'repos/{owner}/{repo}/issues', '-f', `labels=${LABELS.ready}`, '-f', 'state=open', '-f', 'sort=created', '-f', 'direction=asc'], { cwd })
+    const { issues } = await labelledIssues({ labels: [LABELS.ready], withPrs: false, cache: null }, { cwd })
 
-    return issues
-        .filter((issue) => !issue.pull_request)
-        .map((issue) => ({
-            number: issue.number,
-            title: issue.title,
-            openBlockers: issue.issue_dependencies_summary?.blocked_by ?? 0,
-            labels: issue.labels.map((label) => label.name),
-        }))
+    return issues.map((issue) => ({
+        number: issue.number,
+        title: issue.title,
+        openBlockers: openBlockerNumbers(issue).length,
+        labels: issue.labels.nodes.map((label) => label.name),
+    }))
 }
 
 export async function findOpenPrForBranch(branch, { cwd }) {
@@ -84,10 +82,10 @@ export async function ensureFactoryLabels({ cwd }) {
 export const STATUS_CACHE = '60s'
 const PAGE_SIZE = 100
 
-/** Tracked issues and, on the first page only, the open PRs: one GraphQL call per 100 tickets, blockers included. */
-const FACTORY_STATE_QUERY = `query($owner: String!, $name: String!, $labels: [String!], $after: String, $withPrs: Boolean!) {
+/** Open issues with any of the labels, oldest first, and on the first page the open PRs: one GraphQL call per 100 issues, blockers included. */
+const LABELLED_ISSUES_QUERY = `query($owner: String!, $name: String!, $labels: [String!], $after: String, $withPrs: Boolean!) {
   repository(owner: $owner, name: $name) {
-    issues(states: OPEN, labels: $labels, first: ${PAGE_SIZE}, after: $after) {
+    issues(states: OPEN, labels: $labels, first: ${PAGE_SIZE}, after: $after, orderBy: { field: CREATED_AT, direction: ASC }) {
       pageInfo { hasNextPage endCursor }
       nodes {
         number title url
@@ -101,8 +99,8 @@ const FACTORY_STATE_QUERY = `query($owner: String!, $name: String!, $labels: [St
   }
 }`
 
-async function factoryStatePage({ labels, after, cache }, { cwd }) {
-    const args = ['api', 'graphql', ...(cache ? ['--cache', cache] : []), '-F', 'owner={owner}', '-F', 'name={repo}', '-F', `withPrs=${after === null}`, '-f', `query=${FACTORY_STATE_QUERY}`]
+async function labelledIssuesPage({ labels, after, withPrs, cache }, { cwd }) {
+    const args = ['api', 'graphql', ...(cache ? ['--cache', cache] : []), '-F', 'owner={owner}', '-F', 'name={repo}', '-F', `withPrs=${withPrs && after === null}`, '-f', `query=${LABELLED_ISSUES_QUERY}`]
     labels.forEach((label) => args.push('-f', `labels[]=${label}`))
     if (after !== null) {
         args.push('-f', `after=${after}`)
@@ -110,6 +108,23 @@ async function factoryStatePage({ labels, after, cache }, { cwd }) {
 
     return (await ghJson(args, { cwd })).data.repository
 }
+
+/** Every page of LABELLED_ISSUES_QUERY: `{ issues, prs }`, prs empty unless `withPrs`. */
+async function labelledIssues({ labels, withPrs, cache }, { cwd }) {
+    const issues = []
+    let prs = []
+    for (let after = null; ; ) {
+        const page = await labelledIssuesPage({ labels, after, withPrs, cache }, { cwd })
+        issues.push(...page.issues.nodes)
+        prs = page.pullRequests?.nodes ?? prs
+        if (!page.issues.pageInfo.hasNextPage) {
+            return { issues, prs }
+        }
+        after = page.issues.pageInfo.endCursor
+    }
+}
+
+const openBlockerNumbers = (issue) => issue.blockedBy.nodes.filter((blocker) => blocker.state === 'OPEN').map((blocker) => blocker.number)
 
 /**
  * Every open issue carrying a factory label, joined with the open PR on its agent branch and the open issues blocking it.
@@ -119,17 +134,7 @@ async function factoryStatePage({ labels, after, cache }, { cwd }) {
  */
 export async function factoryState({ cwd, cache = null }) {
     const trackedLabels = Object.values(LABELS)
-    const issues = []
-    let prs = []
-    for (let after = null; ; ) {
-        const page = await factoryStatePage({ labels: trackedLabels, after, cache }, { cwd })
-        issues.push(...page.issues.nodes)
-        prs = page.pullRequests?.nodes ?? prs
-        if (!page.issues.pageInfo.hasNextPage) {
-            break
-        }
-        after = page.issues.pageInfo.endCursor
-    }
+    const { issues, prs } = await labelledIssues({ labels: trackedLabels, withPrs: true, cache }, { cwd })
     const prsByBranch = new Map(prs.map(({ headRefName, ...pr }) => [headRefName, pr]))
 
     return issues
@@ -142,18 +147,27 @@ export async function factoryState({ cwd, cache = null }) {
                 url: issue.url,
                 state: trackedLabels.find((label) => labels.includes(label)),
                 pr: prsByBranch.get(branchForIssue(issue.number)) ?? null,
-                blockedBy: issue.blockedBy.nodes.filter((blocker) => blocker.state === 'OPEN').map((blocker) => blocker.number),
+                blockedBy: openBlockerNumbers(issue),
             }
         })
         .sort((left, right) => left.number - right.number)
 }
 
 /**
- * Merged PRs from agent branches, keyed by branch, with the commit each was merged at.
+ * The merged PR of each of these agent branches, keyed by branch, with the commit it was merged at.
+ * One GraphQL call with a field per branch, instead of a search over every agent PR ever merged.
+ * @param {string[]} branches
  * @returns {Promise<Map<string, { number: number, headRefOid: string }>>}
  */
-export async function mergedAgentPrs({ cwd }) {
-    const prs = await ghJson(['pr', 'list', '--state', 'merged', '--limit', '200', '--search', 'head:agent/issue-', '--json', 'number,headRefName,headRefOid'], { cwd })
+export async function mergedAgentPrs(branches, { cwd }) {
+    if (branches.length === 0) {
+        return new Map()
+    }
+    const fields = branches.map((_, index) => `b${index}: pullRequests(headRefName: $b${index}, states: MERGED, first: 1, orderBy: { field: UPDATED_AT, direction: DESC }) { nodes { number headRefOid } }`)
+    const query = `query($owner: String!, $name: String!, ${branches.map((_, index) => `$b${index}: String!`).join(', ')}) { repository(owner: $owner, name: $name) { ${fields.join(' ')} } }`
+    const args = ['api', 'graphql', '-F', 'owner={owner}', '-F', 'name={repo}', '-f', `query=${query}`]
+    branches.forEach((branch, index) => args.push('-f', `b${index}=${branch}`))
+    const repository = (await ghJson(args, { cwd })).data.repository
 
-    return new Map(prs.map(({ headRefName, ...pr }) => [headRefName, pr]))
+    return new Map(branches.flatMap((branch, index) => (repository[`b${index}`].nodes[0] ? [[branch, repository[`b${index}`].nodes[0]]] : [])))
 }

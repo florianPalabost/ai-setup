@@ -30,7 +30,7 @@ export async function cleanMergedWorktrees({ repo, log, dryRun = false }) {
         return { removed: [], kept: [] }
     }
 
-    const merged = await mergedAgentPrs({ cwd: repo.root })
+    const merged = await mergedAgentPrs(worktrees.map(({ issueNumber }) => branchForIssue(issueNumber)), { cwd: repo.root })
     const removed = []
     const kept = []
 
