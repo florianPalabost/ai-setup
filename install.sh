@@ -8,7 +8,8 @@
 # installed but the current one dropped are listed, and removed only after you confirm.
 #
 # --update also pulls this repo, then moves every user-scope plugin,
-# marketplace and third-party skill to its latest upstream version.
+# marketplace and third-party skill, rtk, srt and herdr to its latest upstream
+# version. Tools already on their latest release aren't reinstalled.
 #
 # Where there's a display, it also installs herdr and the herdr features you pick
 # (see herdr-features.sh and herdr.sh).
@@ -37,7 +38,7 @@ PLUGINS_CHANGED=0
 ARGS=("$@")
 
 usage() {
-  sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 for arg in "$@"; do
@@ -135,6 +136,18 @@ link_global() {
 }
 
 RTK_INSTALLER_SH="https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh"
+RTK_LATEST_URL="https://github.com/rtk-ai/rtk/releases/latest"
+
+# The latest rtk release, resolved as its installer does: from the redirect of
+# /releases/latest, which GitHub's API rate limit doesn't cover. Empty if unreachable.
+rtk_latest_version() {
+  command -v curl >/dev/null 2>&1 || return 0
+  curl -fsSI "$RTK_LATEST_URL" 2>/dev/null | sed -n 's|^[Ll]ocation:.*/tag/v\{0,1\}\([^[:space:]]*\).*|\1|p'
+}
+
+rtk_installed_version() {
+  rtk --version | awk '{print $NF}'
+}
 
 run_rtk_installer() {
   local script status=0
@@ -195,7 +208,14 @@ install_rtk() {
         run winget install --id rtk-ai.rtk --exact --silent --accept-package-agreements --accept-source-agreements </dev/null || status=$?
       fi
       ;;
-    *) run_rtk_installer || status=$? ;;
+    *)
+      # Its installer downloads the latest release even when that's the one installed.
+      if ((installed)) && [[ "$(rtk_latest_version)" == "$(rtk_installed_version)" ]]; then
+        info "$(rtk --version) is the latest"
+        return 0
+      fi
+      run_rtk_installer || status=$?
+      ;;
   esac
   if ((status != 0)); then
     warn "could not install or update rtk: Claude Code's Bash hook fails until rtk is on PATH"
@@ -222,15 +242,29 @@ factory_system_tools() {
   fi
 }
 
+# The version of srt npm installed globally, empty if npm didn't install it.
+srt_installed_version() {
+  npm ls -g --depth=0 --parseable --long "$SANDBOX_RUNTIME_NPM" 2>/dev/null | sed -n 's/.*@\([^@]*\)$/\1/p'
+}
+
+# Whether npm's global srt is the latest release. False when either can't be told.
+srt_is_latest() {
+  local installed latest
+  command -v npm >/dev/null 2>&1 || return 1
+  installed="$(srt_installed_version)"
+  latest="$(npm view "$SANDBOX_RUNTIME_NPM" version 2>/dev/null)"
+  [[ -n "$installed" && "$installed" == "$latest" ]]
+}
+
 install_factory_tools() {
   is_windows && return 0
   log "Factory sandbox tools"
-  if [[ -z "$(linux_command srt)" ]] || ((UPDATE)); then
-    if require npm "srt (the factory's sandbox runtime)"; then
-      run npm install -g "$SANDBOX_RUNTIME_NPM" </dev/null || warn "could not install $SANDBOX_RUNTIME_NPM"
-    fi
-  else
+  if [[ -n "$(linux_command srt)" ]] && ((!UPDATE)); then
     info "srt already installed"
+  elif [[ -n "$(linux_command srt)" ]] && srt_is_latest; then
+    info "srt $(srt_installed_version) is the latest"
+  elif require npm "srt (the factory's sandbox runtime)"; then
+    run npm install -g "$SANDBOX_RUNTIME_NPM" </dev/null || warn "could not install $SANDBOX_RUNTIME_NPM"
   fi
 
   local tool package missing=()
