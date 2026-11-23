@@ -1,0 +1,26 @@
+--- a/main.js
++++ b/main.js
+@@ -297 +297 @@
+-    openOverlay({ mod: "menu", kind: "popup", width: 200, height: 260, props: { tab: "space", target: { id: w.id } } });
++    openOverlay({ mod: "menu-git", kind: "popup", width: 200, height: 260, props: { tab: "space", target: { id: w.id } } });
+@@ -386 +386 @@
+-          .flex_none().text_color(t.blocked).tooltip("Agents stop when you disconnect. Click for the fix.")
++          .flex_none().text_color(t.blocked).cursor_pointer().tooltip("Agents stop when you disconnect. Click for the fix.")
+@@ -395 +395 @@
+-              .hover(s => s.text_color(t.foreground))
++              .hover(s => s.text_color(t.foreground)).cursor_pointer()
+@@ -399 +399 @@
+-          .when(connected, el => el.child(div().id(`machine-add-${m ?? "local"}`).flex_none().px(4).rounded(4).hover(s => s.bg(t.hover).text_color(t.foreground))
++          .when(connected, el => el.child(div().id(`machine-add-${m ?? "local"}`).flex_none().px(4).rounded(4).hover(s => s.bg(t.hover).text_color(t.foreground)).cursor_pointer()
+@@ -404 +404 @@
+-        .text_size(12).text_color(t.dim).hover(s => s.bg(t.hover).text_color(t.foreground))
++        .text_size(12).text_color(t.dim).hover(s => s.bg(t.hover).text_color(t.foreground)).cursor_pointer()
+@@ -466 +466 @@
+-      .when(!on, (el) => el.hover((s) => s.bg(t.hover)))
++      .when(!on, (el) => el.hover((s) => s.bg(t.hover))).cursor_pointer()
+@@ -518 +518 @@
+-      .when(!w.active, (el) => el.hover((s) => s.bg(t.hover)))
++      .when(!w.active, (el) => el.hover((s) => s.bg(t.hover))).cursor_pointer()
+@@ -551 +551 @@
+-        .child(div().id("space-new").size(26).flex_none().flex().items_center().justify_center().rounded(6).hover(s => s.bg(t.hover).text_color(t.foreground))
++        .child(div().id("space-new").size(26).flex_none().flex().items_center().justify_center().rounded(6).hover(s => s.bg(t.hover).text_color(t.foreground)).cursor_pointer()
