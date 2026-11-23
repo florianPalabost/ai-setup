@@ -18,16 +18,16 @@ HERDR_CHOSEN=()
 HERDR_DEFAULT_OFF=off
 
 feature_part() {
-  local id label mods keys default
-  IFS='|' read -r id label mods keys default <<<"$1"
-  printf '%s' "${!2}"
+  local fields
+  IFS='|' read -r -a fields <<<"$1"
+  printf '%s' "${fields[$2]-}"
 }
 
-feature_id() { feature_part "$1" id; }
-feature_label() { feature_part "$1" label; }
-feature_mods() { feature_part "$1" mods; }
-feature_keys() { feature_part "$1" keys; }
-feature_default() { feature_part "$1" default; }
+feature_id() { feature_part "$1" 0; }
+feature_label() { feature_part "$1" 1; }
+feature_mods() { feature_part "$1" 2; }
+feature_keys() { feature_part "$1" 3; }
+feature_default() { feature_part "$1" 4; }
 
 saved_as() {
   [[ -f "$HERDR_CHOICE_FILE" ]] && grep -qxF "$1 $2" "$HERDR_CHOICE_FILE"
