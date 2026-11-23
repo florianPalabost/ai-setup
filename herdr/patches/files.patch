@@ -39,15 +39,17 @@
 +  }
 +}
 +
-@@ -46,0 +82,8 @@
+@@ -46,0 +82,10 @@
 +    this.viewer = false;
 +    cx.spawn(async () => { this.viewer = Boolean(await readTextFile(`${appHome()}/mods/${VIEWER_MOD}/mod.json`).catch(() => null)); });
 +  }
 +
 +  open(path, e, cx) {
-+    if (!this.on && e?.modifiers?.control) return openInVsCode(this.root, `${this.root}/${path}`);
-+    if (this.on || !this.viewer) return this.show(path, cx);
++    const remote = Boolean(this.on);
++    if (!remote && e?.modifiers?.control) return openInVsCode(this.root, `${this.root}/${path}`);
++    const previewHere = remote || !this.viewer;
++    if (previewHere) return this.show(path, cx);
 +    openViewer({ root: this.root, path, line: 1 }, { newTab: Boolean(e?.modifiers?.shift) });
-@@ -156 +199 @@
+@@ -156 +201 @@
 -        .on_click((_e, cx) => entry.dir ? this.toggle(path, cx) : this.show(path, cx))
 +        .on_click((e, cx) => entry.dir ? this.toggle(path, cx) : this.open(path, e, cx))
