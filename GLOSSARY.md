@@ -45,6 +45,14 @@ _Avoid_: channel, log tab
 **Section**:
 One collapsible part of the Git panel.
 
+**Status bar**:
+The herdr bar along the bottom of the work column, ending in the commands hint.
+_Avoid_: footer, sidebar footer
+
+**Usage meter**:
+The right end of the Status bar, showing how much of Claude's 5-hour and weekly limits is used and when each resets.
+_Avoid_: usage strip, usage footer
+
 **Graph tab**:
 The herdr tab that shows the full commit graph: one per space, reused if it's already open.
 
