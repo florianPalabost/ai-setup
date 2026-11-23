@@ -13,7 +13,7 @@
 +const SHOW_PANEL_PREFIX = "show-";
 +const AUTOMATIONS_CLI = "herdr-automations";
 +const FINISHED_RUN = new Set(["done", "failed", "cancelled"]);
-+const AUTOMATIONS_RETRY_MS = 30000;
++const RETRY_UNTIL_CLI_INSTALLED_MS = 30000;
 +
 +async function automationsCli() {
 +  try { if ((await exec(AUTOMATIONS_CLI, ["version"])).code === 0) return AUTOMATIONS_CLI; } catch {}
@@ -35,7 +35,7 @@
 +      if (!this.watchingAutomations && find(layout(), "automations")) cx.spawn(async (cx) => this.watchAutomations(cx));
 +    };
 +    watch(cx);
-+    cx.timer.every(AUTOMATIONS_RETRY_MS, watch);
++    cx.timer.every(RETRY_UNTIL_CLI_INSTALLED_MS, watch);
 +    cx.spawn(async () => {
 +      for (;;) {
 +        const c = await nextCommand();
