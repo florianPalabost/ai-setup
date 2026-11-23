@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { cleanMergedWorktrees } from '../lib/cleanup.mjs'
 import { loadConfig } from '../lib/config.mjs'
-import { ERROR_CODES, FACTORY_LABELS, FactoryError, LABELS, RESUME_STEPS } from '../lib/constants.mjs'
+import { ERROR_CODES, FACTORY_LABELS, FactoryError, LABELS, RESUME_STEPS, SYSTEM_ERROR_CODES } from '../lib/constants.mjs'
 import { ensureFactoryLabels, listReadyIssues } from '../lib/github.mjs'
 import { STEP_STATUSES } from '../lib/progress.mjs'
 import { runTicket } from '../lib/run-ticket.mjs'
@@ -234,7 +234,7 @@ async function main() {
             return status(repo, { json: values.json, local: values.local, fresh: values.fresh })
         case 'watch':
             process.stdout.on('error', (error) => {
-                if (error.code === 'EPIPE') {
+                if (error.code === SYSTEM_ERROR_CODES.brokenPipe) {
                     process.exit(0)
                 }
             })

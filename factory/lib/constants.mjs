@@ -32,6 +32,11 @@ export const ERROR_CODES = Object.freeze({
     noCommits: 'no_commits',
 })
 
+export const SYSTEM_ERROR_CODES = Object.freeze({
+    brokenPipe: 'EPIPE',
+    notPermitted: 'EPERM',
+})
+
 /** The steps `factory run --from` can continue a ticket from. */
 export const RESUME_STEPS = Object.freeze({
     checks: 'checks',

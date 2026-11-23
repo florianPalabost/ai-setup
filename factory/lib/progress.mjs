@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs'
 import { appendFile, open, readdir, readFile, stat } from 'node:fs/promises'
 import { join, relative } from 'node:path'
+import { SYSTEM_ERROR_CODES } from './constants.mjs'
 
 export const PROGRESS_FILE = 'progress.jsonl'
 
@@ -128,7 +129,7 @@ function isAlive(pid) {
 
         return true
     } catch (error) {
-        return error.code === 'EPERM'
+        return error.code === SYSTEM_ERROR_CODES.notPermitted
     }
 }
 
