@@ -29,6 +29,7 @@ HERDR_PATCH_MARK="herdr-patch:"
 HERDR_BUILT_FROM=".built-from"
 HERDR_INSTALLER_SH="https://releases.herdr.dev/app/install.sh"
 HERDR_INSTALLER_PS1="https://releases.herdr.dev/app/install.ps1"
+HERDR_LATEST_JSON="https://releases.herdr.dev/app/latest.json"
 # First answers took under a second, so these are only reached when something's wrong.
 HERDR_WINDOW_WAIT_SECS="${HERDR_WINDOW_WAIT_SECS:-60}"
 HERDR_STATUS_CALL_SECS="${HERDR_STATUS_CALL_SECS:-10}"
@@ -675,14 +676,51 @@ run_herdr_installer() {
   return "$status"
 }
 
-# Make herdr-app available to the rest of the run, installing it if it's missing.
-# Returns 1 if that fails. The installer's folders may not be on this shell's PATH.
+# The latest herdr release, read from the manifest its installer reads. Empty if
+# unreachable. Read with sed as the installer does: the manifest is flat enough.
+herdr_latest_version() {
+  command -v curl >/dev/null 2>&1 || return 0
+  curl -fsSL "$HERDR_LATEST_JSON" 2>/dev/null | tr -d '\n ' | sed -n 's/^{"version":"\([^"]*\)".*/\1/p'
+}
+
+# Move herdr to its latest release, unless it's there already. An open window keeps
+# running the old one, and the builds follow it (see outdated): they move to the
+# new release on the first update after the window restarts.
+update_herdr_app() {
+  local current latest
+  current="$(herdr_version)"
+  latest="$(herdr_latest_version)"
+  if [[ -z "$latest" ]]; then
+    warn "could not look up herdr's latest release, keeping $current"
+    return 0
+  fi
+  if [[ "$latest" == "$current" ]]; then
+    info "herdr $current is the latest"
+    return 0
+  fi
+  if ((DRY_RUN)); then
+    info "[dry-run] would update herdr $current to $latest"
+    return 0
+  fi
+  if run_herdr_installer; then
+    info "updated herdr $current to $(herdr_version): restart its window to run it"
+  else
+    warn "could not update herdr, keeping $current"
+  fi
+}
+
+# Make herdr-app available to the rest of the run, installing it if it's missing,
+# and on update moving it to its latest release. Returns 1 if installing fails.
+# The installer's folders may not be on this shell's PATH.
 install_herdr_app() {
   PATH="$PATH:$HOME/.local/bin"
   if [[ -n "${LOCALAPPDATA:-}" ]] && command -v cygpath >/dev/null 2>&1; then
     PATH="$PATH:$(cygpath -u "$LOCALAPPDATA")/Programs/herdr-app"
   fi
-  command -v herdr-app >/dev/null 2>&1 && return 0
+  if command -v herdr-app >/dev/null 2>&1; then
+    ((UPDATE)) && update_herdr_app
+    return 0
+  fi
   if ((DRY_RUN)); then
     if is_windows; then
       info "[dry-run] would install herdr from $HERDR_INSTALLER_PS1"
