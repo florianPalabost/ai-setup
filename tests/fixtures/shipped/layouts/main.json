@@ -2,8 +2,24 @@
   "id": "root",
   "type": "row",
   "children": [
+    {
+      "id": "sidebar",
+      "type": "column",
+      "children": [
+        { "id": "brand", "type": "block", "content": { "mod": "workspace-chrome" } },
+        {
+          "id": "sidebar-lists",
+          "type": "column",
+          "children": [
+            { "id": "spaces", "type": "block", "content": { "mod": "spaces" } },
+            { "id": "agents", "type": "block", "content": { "mod": "agents" } }
+          ]
+        },
+        { "id": "sidebar-footer", "type": "block", "content": { "mod": "workspace-chrome", "props": { "footer": true } } }
+      ]
+    },
     { "id": "tabs", "type": "block", "content": { "mod": "tabs" } },
-    { "id": "main", "type": "block" },
+    { "id": "main", "type": "block", "content": { "tab": "active", "pane": { "header": { "content": { "mod": "pane" }, "height": 30 } } } },
     {
       "id": "panel-body",
       "type": "stack",
