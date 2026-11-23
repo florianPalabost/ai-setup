@@ -1,5 +1,7 @@
 {
   "blocks": {
+    "brand": { "from": "workspace-chrome", "to": "workspace-chrome-git" },
+    "sidebar-footer": { "from": "workspace-chrome", "to": "workspace-chrome-git" },
     "tabs": { "from": "tabs", "to": "tabs-git" },
     "spaces": { "from": "spaces", "to": "spaces-git" },
     "main": { "from": "pane", "to": "pane-git", "pane_header": true },
