@@ -143,15 +143,36 @@ def wanted(entry):
 def without_feature(entry):
     return {key: value for key, value in entry.items() if key != "feature"}
 
-blocks = {id: change for id, change in spec["blocks"].items() if wanted(change)}
-added = {}
-for container, entries in spec.get("add", {}).items():
-    kept = [without_feature(entry) for entry in entries if wanted(entry)]
-    if kept:
-        added[container] = kept
-wraps = {id: wrap for id, wrap in spec.get("wrap", {}).items() if wanted(wrap)}
+def mod_swaps():
+    return {id: change for id, change in spec["blocks"].items() if wanted(change)}
+
+def children_to_add():
+    added = {}
+    for container, entries in spec.get("add", {}).items():
+        kept = [without_feature(entry) for entry in entries if wanted(entry)]
+        if kept:
+            added[container] = kept
+    return added
+
+def block_wraps():
+    return {id: wrap for id, wrap in spec.get("wrap", {}).items() if wanted(wrap)}
+
+swaps = mod_swaps()
+added = children_to_add()
+wraps = block_wraps()
 SIZE_KEYS = ("size", "min", "max")
 ids = set()
+seen = set()
+
+def swap_mod(node):
+    change = swaps.get(node.get("id"))
+    if not change:
+        return
+    content = node.get("content", {})
+    if content.get("mod") != change["from"]:
+        sys.exit(EXIT_EDIT_DOES_NOT_APPLY)
+    content["mod"] = change["to"]
+    seen.add(node["id"])
 
 def wrapped(node):
     wrap = wraps[node["id"]]
@@ -161,31 +182,30 @@ def wrapped(node):
     seen.add(node["id"])
     return container
 
-def visit(node):
-    ids.add(node.get("id"))
-    change = blocks.get(node.get("id"))
-    if change:
-        content = node.get("content", {})
-        if content.get("mod") != change["from"]:
-            sys.exit(EXIT_EDIT_DOES_NOT_APPLY)
-        content["mod"] = change["to"]
-        seen.add(node["id"])
-    for child in node.get("children", []):
-        visit(child)
+def wrap_children(node):
     if "children" in node:
         node["children"] = [wrapped(child) if child.get("id") in wraps else child for child in node["children"]]
+
+def add_children(node):
     if node.get("id") in added:
         node["children"] = node.get("children", []) + added[node["id"]]
         seen.add(node["id"])
 
+def visit(node):
+    ids.add(node.get("id"))
+    swap_mod(node)
+    for child in node.get("children", []):
+        visit(child)
+    wrap_children(node)
+    add_children(node)
+
 def node_ids(node):
     return {node["id"]} | {id for child in node.get("children", []) for id in node_ids(child)}
 
-seen = set()
 visit(layout)
 new_nodes = [node for nodes in added.values() for node in nodes] + [{"id": wrap["id"], "children": wrap.get("after", [])} for wrap in wraps.values()]
 new_ids = {id for node in new_nodes for id in node_ids(node)}
-if seen != set(blocks) | set(added) | set(wraps) or ids & new_ids:
+if seen != set(swaps) | set(added) | set(wraps) or ids & new_ids:
     sys.exit(EXIT_EDIT_DOES_NOT_APPLY)
 dst.write_text(json.dumps(layout, indent=2) + "\n")
 PY
