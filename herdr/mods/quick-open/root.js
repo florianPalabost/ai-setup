@@ -1,6 +1,3 @@
-// The folder quick open and search work in: the git root of the focused pane's
-// folder, else that folder; for a mod pane, the active space's folder the same
-// way. Takes the herdr module as `herdr`; search keeps a copy of this file.
 const GIT_TIMEOUT_MS = 5000;
 
 function startFolder(herdr) {

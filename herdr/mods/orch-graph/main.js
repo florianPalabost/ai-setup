@@ -1,6 +1,3 @@
-// The run graph: a factory run drawn as cards, one per step. The data comes from
-// `factory status --json --local` in the active space's repo, shaped by
-// run-graph.mjs; layout.js places the cards.
 import { View, div, PathBuilder } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { exec, spaces, theme, props, checking } from "herdr";
@@ -28,7 +25,6 @@ const statusColors = (t) => ({
 
 const runGraphError = (code, message) => Object.assign(new Error(message), { code });
 
-// The runs of the repo the active space works in: its main repo, also from inside a ticket's worktree.
 async function loadStatus() {
   const space = spaces().find((candidate) => candidate.active);
   if (!space?.folder) throw runGraphError(RUN_GRAPH_ERROR_CODES.noSpace, "No active space");

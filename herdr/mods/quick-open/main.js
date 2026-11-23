@@ -1,6 +1,3 @@
-// Quick open: a popup that finds a file in the root by fuzzy name, with a
-// preview. Enter shows it in the Viewer, shift-Enter in a Pinned Viewer,
-// ctrl-Enter opens it in VS Code.
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, Editor } from "gpui-base";
 import * as herdr from "herdr";

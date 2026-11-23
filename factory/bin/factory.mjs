@@ -46,7 +46,6 @@ Options:
 
 const REQUIRED_TOOLS = ['git', 'gh', 'claude']
 const SANDBOX_TOOLS = ['srt', 'bwrap', 'socat', 'rg']
-/** The apt package of each sandbox tool apt installs; srt comes from npm. */
 const SANDBOX_APT_PACKAGES = Object.freeze({ bwrap: 'bubblewrap', socat: 'socat', rg: 'ripgrep' })
 /** A sandbox shaped like srt's: an installed bwrap can still be refused user or network namespaces. */
 const BWRAP_PROBE_ARGS = ['--ro-bind', '/', '/', '--dev', '/dev', '--unshare-net', 'true']
@@ -74,7 +73,6 @@ const readSysctl = (path) => {
     }
 }
 
-/** null when there's nothing to probe: not Linux, or no bwrap. */
 const bwrapSandboxWorks = () => (process.platform === 'linux' && hasCommand('bwrap') ? succeeds('bwrap', BWRAP_PROBE_ARGS) : null)
 
 async function doctor(repo) {
@@ -142,7 +140,6 @@ async function next(repo, runOptions) {
     await runTicket({ repo, issueNumber: unblocked[0].number, ...runOptions })
 }
 
-/** Clears merged worktrees before a run; a failure here never blocks the run. */
 async function cleanBeforeRun(repo, { options }) {
     if (options.dryRun) {
         return

@@ -10,10 +10,6 @@ const ANTHROPIC_DOMAINS = ['api.anthropic.com', 'claude.ai', 'platform.claude.co
 
 const SECRET_PATHS = ['~/.ssh', '~/.config/gh', '~/.git-credentials', '~/.aws', '~/.docker', '~/.gnupg', '~/.composer/auth.json', '~/.config/composer/auth.json', '/mnt/c']
 
-/**
- * srt settings for one run: writes only to the worktree, the shared git dir (minus the files that
- * make git run programs on the host) and Claude's own login, and no network but Anthropic's.
- */
 export function sandboxSettings({ worktreePath, gitDir, extraAllowWrite = [], extraDenyRead = [] }) {
     const home = homedir()
 
@@ -54,7 +50,6 @@ const resultEvent = (stdout, { wantsStructuredOutput }) => {
     return structured ?? results.at(-1) ?? null
 }
 
-/** The final message of a finished agent transcript, or null when it has none. */
 export async function transcriptResult(path) {
     if (!existsSync(path)) {
         return null
@@ -63,14 +58,11 @@ export async function transcriptResult(path) {
     return resultEvent(await readFile(path, 'utf8'), { wantsStructuredOutput: false })?.result || null
 }
 
-/** An agent step's transcript file in the run directory. */
 export const agentLogName = (step) => `${step}.jsonl`
 
 const closeStream = (stream) => new Promise((resolve) => stream.end(resolve))
 
 /**
- * One headless Claude run, optionally wrapped in srt. The prompt goes in on stdin.
- * The transcript streams to `logPath` as JSON lines while the run works, so `factory status` can show what it is doing.
  * Sessions persist, so `claude --resume <sessionId>` from the worktree replays a run.
  * @returns {Promise<{ result: string, structuredOutput: unknown, costUsd: number|null, sessionId: string|null }>}
  */

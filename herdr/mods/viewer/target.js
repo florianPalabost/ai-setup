@@ -1,24 +1,17 @@
-// What the Viewer shows in each space, kept in shared state, and how a pick
-// gets there. herdr loads no module from outside a mod's folder, so quick-open,
-// search and find keep a copy of this file. Takes the herdr module as `herdr`.
+// herdr loads no module from outside a mod's folder, so quick-open, search and find keep a copy of this file.
 export const VIEWER_MOD = "viewer";
 export const TARGETS_KEY = "viewer.targets";
-// The Viewer tab of each space, which plain picks go to: { [space]: { claim, before, tab } }.
-// A copy cannot ask for its tab, so the copy given `claim` in its props records
-// the one Viewer tab that is not among `before`, the tabs there before it.
 export const TABS_KEY = "viewer.tabs";
 // A popup that closes right after openViewer takes the Viewer's first load down
 // with it (it stays on "Loading file…"), so close it this long afterwards.
 export const CLOSE_AFTER_OPEN_MS = 300;
 
-// A target: { root, path (relative to root), line (from 1), column?, length? }.
 export function targetFor(herdr, space) {
   return herdr.shared(TARGETS_KEY)?.[space] ?? null;
 }
 
 export const fileName = (path) => path.split("/").pop();
 
-// The space's Viewer tab, if it is still open.
 export function viewerTab(herdr, space) {
   const id = herdr.shared(TABS_KEY)?.[space.id]?.tab;
   const open = space.tabs.some((tab) => tab.id === id);
@@ -34,7 +27,6 @@ function openTab(herdr, space, target) {
   herdr.run("tab.new", { name: fileName(target.path), space: space.id, mod: VIEWER_MOD, props: { space: space.id, claim } });
 }
 
-// A Pinned Viewer keeps showing `target`: it does not follow picks.
 function openPinned(herdr, space, target) {
   const props = { space: space.id, target: { ...target, seq: 1 } };
   herdr.run("tab.new", { name: fileName(target.path), space: space.id, mod: VIEWER_MOD, props });

@@ -15,7 +15,6 @@ export const isBinary = (text) => text.includes("\0");
 
 export const shown = (text) => (text.length > MAX_CHARS ? text.slice(0, MAX_CHARS) + TRUNCATED : text);
 
-// The offset where line `line` (from 1) starts, clamped to the text.
 export function lineStart(text, line) {
   let offset = 0;
   for (let current = 1; current < line; current++) {
@@ -32,7 +31,6 @@ export function lineAt(text, offset) {
   return line;
 }
 
-// The range to select for a target: its match, else the start of its line.
 export function rangeFor(text, { line = 1, column = 0, length = 0 }) {
   const start = lineStart(text, line);
   const end = text.indexOf("\n", start);

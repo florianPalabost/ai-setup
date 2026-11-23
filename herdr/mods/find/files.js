@@ -1,6 +1,4 @@
 // A copy of quick-open/files.js: herdr loads no module from outside a mod's folder.
-// Every file under a root, as `rg --files` sees it: .gitignore respected,
-// untracked and hidden files in, .git out. Takes herdr's exec.
 export const FILES_ERROR_CODES = Object.freeze({
   rgMissing: "quick_open_rg_missing",
   rgFailed: "quick_open_rg_failed",

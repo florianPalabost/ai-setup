@@ -8,7 +8,6 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
 TIMEOUT_SECS=300
 TIMED_OUT=124
 
-# run_part <name> <command...>: runs the command, saying TIMEOUT <name> if it ran too long.
 run_part() {
   local name="$1" code
   shift

@@ -134,7 +134,6 @@ link_global() {
 
 RTK_INSTALLER_SH="https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh"
 
-# Run rtk's install script, which also upgrades an install it made.
 run_rtk_installer() {
   local script status=0
   require curl "rtk installer" || return 1
@@ -142,7 +141,6 @@ run_rtk_installer() {
     run sh "<$RTK_INSTALLER_SH>"
     return 0
   fi
-  # Not piped into sh: a download cut short must not run as half a script.
   script="$(mktemp)"
   if curl -fsSL -o "$script" "$RTK_INSTALLER_SH"; then
     sh "$script" </dev/null || status=$?
@@ -157,9 +155,6 @@ RTK_SOURCES_BREW="brew"
 RTK_SOURCES_WINGET="winget"
 RTK_SOURCES_SCRIPT="script"
 
-# Where rtk comes from: for an installed rtk, what installed it (brew only when
-# rtk sits under brew's prefix); otherwise brew if there is one, winget on Windows,
-# else rtk's install script.
 rtk_source() {
   local path
   path="$(command -v rtk 2>/dev/null)"
@@ -172,9 +167,6 @@ rtk_source() {
   fi
 }
 
-# rtk (https://github.com/rtk-ai/rtk) condenses Bash output before Claude reads
-# it. Its hook comes from global/settings.json and its instructions from
-# global/RTK.md, so `rtk init` isn't run. Installed, or upgraded on --update.
 install_rtk() {
   log "rtk"
   PATH="$PATH:$HOME/.local/bin"
@@ -210,8 +202,6 @@ install_rtk() {
   fi
 }
 
-# The factory CLI runs under WSL/Linux node, so Windows gets no link. The link is
-# the launcher, which finds nvm's node for apps started without the shell's PATH.
 link_factory() {
   is_windows && return 0
   log "Factory CLI"
@@ -220,11 +210,8 @@ link_factory() {
 }
 
 SANDBOX_RUNTIME_NPM="@anthropic-ai/sandbox-runtime"
-# What the factory's srt sandbox needs that only a password could install: printed at the end.
 FACTORY_TOOLS_COMMAND=""
 
-# "<command> <apt package>" for the srt sandbox on Linux. macOS sandboxes with
-# its own sandbox-exec and only needs ripgrep.
 factory_system_tools() {
   if [[ "$(uname -s)" == "Darwin" ]]; then
     echo "rg ripgrep"
@@ -233,9 +220,6 @@ factory_system_tools() {
   fi
 }
 
-# The tools the factory's srt sandbox runs on (see `factory doctor`). What needs
-# no password is installed: srt with npm, the rest with brew or passwordless
-# apt. Otherwise the apt command is printed at the end for the person to run.
 install_factory_tools() {
   is_windows && return 0
   log "Factory sandbox tools"

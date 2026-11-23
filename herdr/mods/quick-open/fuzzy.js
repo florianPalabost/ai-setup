@@ -1,6 +1,3 @@
-// VS Code-style fuzzy matching of a query against file paths: the query's
-// characters in order, scored higher at word starts, in the file name and in
-// runs. Pure, so node can test it.
 const BOUNDARY = 8;
 const SEPARATOR = 6;
 const CAMEL = 6;
@@ -32,7 +29,6 @@ function isSubsequence(query, lower) {
   return true;
 }
 
-// The score of the best way to match, or null. `query` is lowercase.
 export function match(query, path) {
   if (!query) return 0;
   const lower = path.toLowerCase();
@@ -58,7 +54,6 @@ export function match(query, path) {
   return best - cols * LENGTH_PENALTY - (cols - nameStart) * NAME_LENGTH_PENALTY;
 }
 
-// The paths matching `query`, best first.
 export function rank(query, paths, limit) {
   const lowered = query.toLowerCase().replace(/\s+/g, "");
   const hits = [];

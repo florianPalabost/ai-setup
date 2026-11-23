@@ -8,7 +8,6 @@ const git = (args, { cwd }) => run('git', args, { cwd })
 
 const ISSUE_WORKTREE_PATTERN = /\/issue-(\d+)$/
 
-/** The factory's worktrees, from `git worktree list`, with the issue each belongs to. */
 async function factoryWorktrees(root) {
     const porcelain = await git(['worktree', 'list', '--porcelain'], { cwd: root })
 
@@ -30,8 +29,6 @@ async function unmergedWorkReason(path, pr) {
 }
 
 /**
- * Removes the worktree and local branch of every ticket whose PR is merged.
- * Keeps a worktree with uncommitted changes, whose branch moved past the merged commit, or that has the stack.
  * @returns {Promise<{ removed: number[], kept: { issueNumber: number, reason: string }[] }>}
  */
 export async function cleanMergedWorktrees({ repo, log, dryRun = false }) {

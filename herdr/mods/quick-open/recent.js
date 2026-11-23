@@ -1,5 +1,3 @@
-// Files picked recently, newest first, one list per space, in shared state.
-// Kept as absolute paths so a list survives the root changing.
 const RECENT_KEY = "quick-open.recent";
 const KEEP = 30;
 
@@ -13,7 +11,6 @@ export function rememberFile(herdr, space, file) {
   herdr.setShared(RECENT_KEY, { ...all, [space]: list });
 }
 
-// The root's files with the recent ones first, for an empty query.
 export function recentFirst(recent, root, paths) {
   const prefix = `${root}/`;
   const present = new Set(paths);

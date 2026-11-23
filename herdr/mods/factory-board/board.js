@@ -1,5 +1,3 @@
-// What the Factory board shows, free of the herdr runtime so it can run under
-// `node --test`.
 
 export const LANES = Object.freeze([
   { state: "ready-for-human", key: "human", title: "Needs you" },
@@ -19,13 +17,11 @@ export function sinceLabel(isoTime, now = Date.now()) {
 
 const isUnblockedReady = (ticket) => ticket.state === "ready-for-agent" && ticket.blockedBy.length === 0;
 
-// The oldest unblocked ready ticket: the one `factory next` picks.
 export function nextUp(tickets) {
   return tickets.filter(isUnblockedReady)
     .sort((left, right) => left.number - right.number)[0] ?? null;
 }
 
-// Orders a lane so each ticket sits right under the ticket blocking it (chains read top to bottom).
 export function chainOrder(tickets) {
   const inLane = new Map(tickets.map((ticket) => [ticket.number, ticket]));
   const childrenOf = new Map();
@@ -44,21 +40,16 @@ export function chainOrder(tickets) {
   return ordered;
 }
 
-// The lanes, each with its tickets in chain order.
 export function boardLanes(tickets) {
   return LANES.map((lane) => ({ ...lane, cards: chainOrder(tickets.filter((ticket) => ticket.state === lane.state)) }));
 }
 
-// The GitHub tickets, each carrying its newest local run when there is one.
 export const withLocalRuns = (tickets, runs) => tickets.map((ticket) => ({ ...ticket, run: runs[ticket.number] ?? ticket.run }));
 
-// The buttons a card gets, in order: { label, action } with action one of ACTIONS.
 export const ACTIONS = Object.freeze({ start: "start", continue: "continue", worktree: "worktree", watch: "watch", resume: "resume", issue: "issue", pr: "pr", log: "log" });
 
-// A ticket handed to you by a run that stopped on an error, with a worktree to carry on in.
 const continuable = (ticket) => ticket.state === "ready-for-human" && ticket.run?.outcome === "error" && Boolean(ticket.worktree);
 
-// `starting`: Start or Continue was just clicked and no poll has shown the run yet.
 export function cardActions(ticket, { starting = false } = {}) {
   const actions = [];
   const running = ticket.run && !ticket.run.finishedAt;
@@ -76,18 +67,14 @@ export function cardActions(ticket, { starting = false } = {}) {
   return actions;
 }
 
-// How long a clicked Start stays hidden when no poll shows the run.
 export const START_MARK_MS = 2 * 60000;
 
-// Whether a "just started" mark { at, state } is done with: the ticket left the state it was
-// clicked in, has a run started after the click, or the mark expired. `ticket` is undefined when no poll shows it.
 export function startSettled(mark, ticket, now = Date.now()) {
   if (now - mark.at >= START_MARK_MS) return true;
   if (!ticket) return false;
   return ticket.state !== mark.state || Date.parse(ticket.run?.startedAt) >= mark.at;
 }
 
-// The small tags under a card's title.
 export function cardTags(ticket, { isNext, now = Date.now() }) {
   const tags = [];
   if (isNext) tags.push({ text: "next up", next: true });

@@ -1,7 +1,3 @@
-// The Viewer: a tab showing one file at the line quick open, search or find
-// picked, editable, saved with ctrl-s. Each pick replaces the file, unless it has
-// unsaved edits; edits on disk reload it, unless it has unsaved edits. A tab
-// opened with a target in its props keeps that file and ignores picks.
 import { View, div } from "gpui-kit";
 import { v_flex, Editor } from "gpui-base";
 import * as herdr from "herdr";
@@ -74,14 +70,12 @@ export default class Viewer extends View {
     if (added.length === 1) herdr.setShared(TABS_KEY, { ...herdr.shared(TABS_KEY), [this.space()]: { ...entry, tab: added[0].id } });
   }
 
-  // A Pinned Viewer keeps its target; otherwise only the space's Viewer tab follows picks.
   targetNow() {
     const pinned = herdr.props()?.target;
     if (pinned) return pinned;
     return this.claimed() ? targetFor(herdr, this.space()) : null;
   }
 
-  // Loads the space's newest target; an older load still running drops its result.
   follow(cx) {
     if (!herdr.checking()) this.recordTab();
     const target = this.targetNow();
@@ -161,7 +155,6 @@ export default class Viewer extends View {
     });
   }
 
-  // Shows `disk` as the saved text, staying on the cursor's line.
   replace(disk) {
     const line = lineAt(this.code.value(), this.code.selected_range().start);
     const text = shown(disk);
@@ -170,8 +163,6 @@ export default class Viewer extends View {
     this.disk = disk; this.text = text; this.dirty = false; this.conflict = false; this.saveError = null; this.error = null;
   }
 
-  // Writes the edits unless the file changed since it was read; `overwrite`
-  // writes over whatever is there now.
   async save(cx, { overwrite = false } = {}) {
     if (!this.code || this.readonly || this.error) return false;
     const file = this.file;

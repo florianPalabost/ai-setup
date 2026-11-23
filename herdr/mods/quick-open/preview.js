@@ -1,5 +1,3 @@
-// The read-only preview of the selected file, at a line. One load at a time
-// counts: a newer show() drops an older read's result.
 import { readTextFile } from "herdr";
 import { createCode } from "./code.js";
 import { isBinary, rangeFor, shown } from "./text.js";

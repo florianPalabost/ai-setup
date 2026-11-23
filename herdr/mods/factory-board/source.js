@@ -1,6 +1,3 @@
-// Where the Factory board's data comes from: the factory CLI (`factory`, linked
-// into ~/.local/bin by install.sh), run in each repo with a .factory.json among
-// herdr's spaces. Takes herdr's functions, so node can test it.
 import { withLocalRuns } from "./board.js";
 
 export const FACTORY_ERROR_CODES = Object.freeze({
@@ -12,10 +9,8 @@ const CONFIG_FILE = ".factory.json";
 const FACTORY_CLI = "factory";
 const CLI_TIMEOUT_MS = 90000;
 const GITHUB_REFRESH_MS = 60000;
-// `factory clean` asks GitHub for merged PRs; a merged ticket's worktree can wait this long.
 const CLEAN_INTERVAL_MS = 10 * 60000;
 const REPOS_REFRESH_MS = 5 * 60000;
-// How long the copies of the mod share one space's repo lookup: long enough for one switch, short enough to see a cd.
 const SPACE_LOOKUP_REUSE_MS = 5000;
 
 // A main checkout's git dir; a worktree's common dir is its repo's, a submodule's sits elsewhere.
@@ -24,7 +19,6 @@ const MAIN_GIT_DIR = /[\\/]\.git$/;
 const repoKey = (repo) => `${repo.on ?? ""}\0${repo.root}`;
 const sortRepos = (list) => [...list].sort((a, b) => a.name.localeCompare(b.name));
 
-// The folders a space works in: its own, then its terminals'.
 export function spaceFolders(space, allPanes) {
   const tabs = new Set(space.tabs.map((tab) => tab.id));
   return [...new Set([space.folder, ...allPanes.filter((pane) => tabs.has(pane.tab)).map((pane) => pane.cwd)].filter(Boolean))];
@@ -42,7 +36,6 @@ export function createFactorySource({ exec, readTextFile, spaces, panes, now = (
   const githubByRoot = new Map();
   const cleaningRoots = new Set();
   const cleanedAt = new Map();
-  // Roots whose next status skips gh's cache: after a Start or a manual refresh.
   const freshRoots = new Set();
 
   async function factoryJson(repo, args) {
@@ -56,7 +49,6 @@ export function createFactorySource({ exec, readTextFile, spaces, panes, now = (
     return JSON.parse(result.stdout);
   }
 
-  // The repo a folder is in, when it has a .factory.json. A ticket's worktree is in the repo it was made from.
   async function factoryRepoOf(folder, on) {
     const git = await exec("git", ["rev-parse", "--path-format=absolute", "--show-toplevel", "--git-common-dir"], { cwd: folder, on }).catch(() => null);
     if (git?.code !== 0) return null;
@@ -94,8 +86,6 @@ export function createFactorySource({ exec, readTextFile, spaces, panes, now = (
     return null;
   }
 
-  // The root of the factory repo a space works in, joining the repo list when no scan has seen it yet.
-  // Every copy asks on the same space switch; the first one's lookup answers them all.
   function repoOfSpace(space) {
     const recent = shared.spaceLookup;
     if (recent?.spaceId === space.id && now() - recent.at < SPACE_LOOKUP_REUSE_MS) return recent.root;
@@ -104,7 +94,6 @@ export function createFactorySource({ exec, readTextFile, spaces, panes, now = (
     return root;
   }
 
-  // Removes merged tickets' worktrees in the background, one cleanup per repo at a time, at most every CLEAN_INTERVAL_MS.
   function cleanMergedWorktrees(repo) {
     if (cleaningRoots.has(repo.root) || now() - (cleanedAt.get(repo.root) ?? 0) < CLEAN_INTERVAL_MS) return;
     cleaningRoots.add(repo.root);
@@ -112,7 +101,6 @@ export function createFactorySource({ exec, readTextFile, spaces, panes, now = (
     factoryJson(repo, ["clean"]).catch(() => {}).finally(() => cleaningRoots.delete(repo.root));
   }
 
-  // GitHub at most once a minute, through gh's cache that every board and the Output panel share; the local runs on every call.
   async function githubState(repo) {
     const cached = githubByRoot.get(repo.root);
     if (cached && now() - cached.at < GITHUB_REFRESH_MS) return cached;
@@ -132,7 +120,6 @@ export function createFactorySource({ exec, readTextFile, spaces, panes, now = (
     return { repos: summaries, repo, tickets: withLocalRuns(github.state.tickets, local.runs), githubCheckedAt: new Date(github.at).toISOString() };
   }
 
-  // Writes the ticket's latest run as Markdown with `factory log` and resolves with its path.
   const logPath = async (repo, issueNumber) => (await factoryJson(repo, ["log", String(issueNumber)])).path;
 
   return {
@@ -140,7 +127,6 @@ export function createFactorySource({ exec, readTextFile, spaces, panes, now = (
     logPath,
     repoOfSpace,
     forgetRepos: () => { shared.repos = { at: 0, list: [] }; shared.spaceLookup = null; },
-    // Makes the next getFactory read GitHub again for that repo.
     forgetGithub: (root) => { githubByRoot.delete(root); freshRoots.add(root); },
   };
 }

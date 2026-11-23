@@ -1,7 +1,4 @@
 # shellcheck shell=bash
-# The Automations feature's binary: herdr-automations schedules the prompts the
-# panel shows and keeps their files. Sourced by install.sh after herdr.sh, whose
-# HERDR_SRC it uses.
 
 AUTOMATIONS_REPO="DnzzL/herdr-automations"
 AUTOMATIONS_UPSTREAM_FILE="$HERDR_SRC/mods/automations/UPSTREAM"
@@ -14,7 +11,6 @@ upstream_automations_tag() {
   awk '$1 == "tag" { print $2 }' "$AUTOMATIONS_UPSTREAM_FILE"
 }
 
-# The release asset for this OS and arch. Returns 1 where there is none.
 automations_asset() {
   local os arch
   case "$(uname -s)" in
@@ -42,8 +38,6 @@ automations_bin_is_release() {
   [[ -x "$AUTOMATIONS_BIN" ]] && [[ "$("$AUTOMATIONS_BIN" version 2>/dev/null)" == "${1#v}" ]]
 }
 
-# Download the release $1's asset for this machine and install it as
-# AUTOMATIONS_BIN, refusing it unless it matches the release's checksums.
 download_automations_bin() {
   local tag="$1" asset base dir expected actual status=0
   if ! asset="$(automations_asset)"; then
@@ -79,7 +73,6 @@ download_automations_bin() {
   return "$status"
 }
 
-# The examples stay off until ticked in the panel.
 AUTOMATIONS_STARTER="$AUTOMATIONS_BACKEND_LINE"'
 automations:
   - name: issue-triage
@@ -104,8 +97,6 @@ automations:
     disabled: true
 '
 
-# The field $1 of `herdr-automations ls --json`: config (the automations.yaml
-# it reads) or state (the folder of its history and log).
 automations_listing() {
   "$AUTOMATIONS_BIN" ls --json 2>/dev/null | py3 -c 'import json, sys; print(json.load(sys.stdin)[sys.argv[1]])' "$1"
 }
@@ -121,8 +112,6 @@ make_automations_state_dir() {
   fi
 }
 
-# Write the starter config if there is none. If there is one, only put the
-# backend line at its top when it sets no backend.
 seed_automations_config() {
   local path
   if ((DRY_RUN)) && [[ ! -x "$AUTOMATIONS_BIN" ]]; then
@@ -146,13 +135,11 @@ seed_automations_config() {
   fi
 }
 
-# Print the line $1, then the file $2.
 prepend_line() {
   printf '%s\n' "$1"
   cat "$2"
 }
 
-# Whether the scheduler service is installed. Without the binary, it can't be.
 automations_service_installed() {
   [[ -x "$AUTOMATIONS_BIN" ]] && "$AUTOMATIONS_BIN" service status 2>/dev/null | grep -qx 'service installed: true'
 }
@@ -161,9 +148,6 @@ automations_scheduler_running() {
   "$AUTOMATIONS_BIN" service status 2>/dev/null | grep -q '^scheduler running: true'
 }
 
-# Install the binary of the vendored release if it isn't there, then the
-# scheduler service. A new binary reinstalls the service, which points at it,
-# and so does a scheduler found stopped, once, saying so.
 install_automations() {
   local tag fresh=0
   if is_windows; then
@@ -189,8 +173,6 @@ install_automations() {
   fi
 }
 
-# Remove the scheduler service of an unticked feature. The binary, the
-# automations and their history stay.
 uninstall_automations() {
   automations_service_installed || return 0
   automations_service uninstall

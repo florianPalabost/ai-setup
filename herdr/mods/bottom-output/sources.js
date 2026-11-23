@@ -1,6 +1,3 @@
-// The Output sources of a space, found by looking: one per factory ticket with a
-// run (its watch.log), and the newest Laravel log. Takes herdr's functions, so
-// node can test it.
 import { TAIL_BYTES, normalizePath, tailLines } from "./text.js";
 
 export const SOURCE_KINDS = Object.freeze({ factory: "factory", laravel: "laravel" });
@@ -10,17 +7,14 @@ const FACTORY_CLI = "factory";
 const WATCH_LOG = "watch.log";
 const CLI_TIMEOUT_MS = 90000;
 const GIT_TIMEOUT_MS = 5000;
-// `factory status` asks GitHub, so its tickets are kept this long.
 const FACTORY_REFRESH_MS = 60000;
 // The newest of storage/logs/laravel*.log, which the daily channel rolls over to a new file.
 const NEWEST_LARAVEL_LOG = 'ls -t "$1"/storage/logs/laravel*.log 2>/dev/null | head -n 1';
-// Prints the file's size, then its tail; exits MISSING_EXIT when there is no such file.
 const MISSING_EXIT = 3;
 const TAIL_SCRIPT = `[ -f "$1" ] || exit ${MISSING_EXIT}; wc -c < "$1"; tail -c ${TAIL_BYTES} "$1"`;
 
 export const factorySourceId = (issueNumber) => `${SOURCE_KINDS.factory}:${issueNumber}`;
 
-// Running runs first, then the most recent.
 function byRunRecency(left, right) {
   const running = Number(!right.run.finishedAt) - Number(!left.run.finishedAt);
   return running || String(right.run.updatedAt ?? right.run.startedAt).localeCompare(String(left.run.updatedAt ?? left.run.startedAt));
@@ -29,7 +23,6 @@ function byRunRecency(left, right) {
 export function createSourceFinder({ exec, readTextFile, now = () => Date.now() }) {
   const factoryByRoot = new Map();
 
-  // The repo root of the space's folder, else the folder itself.
   async function spaceRoot(space) {
     const on = space.machine ?? null;
     if (!space.folder) return null;
@@ -64,7 +57,6 @@ export function createSourceFinder({ exec, readTextFile, now = () => Date.now() 
     return path ? [{ id: SOURCE_KINDS.laravel, kind: SOURCE_KINDS.laravel, label: "Laravel", running: false, path }] : [];
   }
 
-  // The space's sources, with where they were found: { root, on, sources }.
   async function find(space) {
     const where = await spaceRoot(space);
     if (!where) return { root: null, on: null, sources: [] };
@@ -72,7 +64,6 @@ export function createSourceFinder({ exec, readTextFile, now = () => Date.now() 
     return { ...where, sources: [...factory, ...laravel] };
   }
 
-  // A source's last lines, or null when its file isn't there.
   async function read(source, on) {
     const result = await exec("sh", ["-c", TAIL_SCRIPT, "sh", source.path], { on });
     if (result.code === MISSING_EXIT) return null;

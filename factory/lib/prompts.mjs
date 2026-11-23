@@ -25,7 +25,6 @@ const READ_ONLY_TOOLS = ['Read', 'Grep', 'Glob', ...READ_ONLY_GIT_COMMANDS.flatM
 /** Read-only tools plus the Skill and Agent tools /matt-code-review needs for its two parallel sub-agents; it runs under dontAsk, so anything else is refused. */
 export const REVIEW_ALLOWED_TOOLS = Object.freeze([...READ_ONLY_TOOLS, 'Skill', 'Agent'])
 
-/** Read-only tools plus Skill for /pr and /unslop. */
 export const PR_BODY_ALLOWED_TOOLS = Object.freeze([...READ_ONLY_TOOLS, 'Skill'])
 
 /** In `claude -p` these let the agent go idle until a wake-up, and the step's time budget runs out while it waits. */

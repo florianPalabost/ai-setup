@@ -38,8 +38,6 @@ new_sandbox() {
   factory_tools_installed
 }
 
-# The factory's sandbox tools, so whether the machine running the tests has them
-# doesn't decide if the install reaches for brew, apt or npm.
 factory_tools_installed() {
   local tool
   for tool in srt bwrap socat rg; do

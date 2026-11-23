@@ -7,7 +7,6 @@ const RUN_OUTCOMES = Object.freeze({
     abandoned: 'stopped without finishing',
 })
 
-// A ticket's worktree, e.g. ~/dev/lara-vision-factory/issue-42, or a folder inside it.
 const ISSUE_WORKTREE_PATTERN = /-factory[\\/]issue-(\d+)(?:[\\/]|$)/
 
 export const issueOfFolder = (folder) => ISSUE_WORKTREE_PATTERN.exec(folder ?? '')?.[1] ?? null
@@ -18,11 +17,6 @@ function objectiveOf(issueNumber, run) {
     return `#${issueNumber} · ${state}`
 }
 
-/**
- * One factory run shaped for drawing, from `factory status --json --local`: each step a card after the one before it.
- * Picks `runId` (an issue number, or the demo), else the ticket whose worktree `folder` is in, else the newest run.
- * Imports nothing from herdr, so node can test it.
- */
 export function runGraph(status, { runId = null, folder = null, now = Date.now() } = {}) {
     const runs = Object.entries(status?.runs ?? {})
         .map(([issueNumber, run]) => ({ id: issueNumber, objective: objectiveOf(issueNumber, run), run }))
