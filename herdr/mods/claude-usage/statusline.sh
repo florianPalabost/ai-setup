@@ -11,14 +11,10 @@ SAME_WINDOW_SECS=60
 
 input="$(cat)"
 
-# Every session saves the limits of its own last reply, so an idle one still holds
-# an hour-old reading. A limit is only replaced by one further on: a later window,
-# or the same window (resets within a minute) with as much used or more.
-save_limits() {
+save_limits_further_on() {
   local old
   mkdir -p "$CACHE_DIR"
   find "$LOCK" -maxdepth 0 -mmin +"$STALE_LOCK_MINUTES" -exec rmdir {} + 2>/dev/null
-  # Another session holds the lock: its line is redrawn in a few seconds anyway.
   mkdir "$LOCK" 2>/dev/null || return 0
   trap 'rmdir "$LOCK" 2>/dev/null' EXIT
   trap 'exit 1' HUP INT TERM
@@ -43,7 +39,7 @@ save_limits() {
 }
 
 if printf '%s' "$input" | jq -e '.rate_limits | type == "object"' >/dev/null 2>&1; then
-  save_limits
+  save_limits_further_on
 fi
 
 printf '%s' "$input" | jq -r '
