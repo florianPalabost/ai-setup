@@ -222,11 +222,7 @@ warn_build_failed() {
 }
 
 herdr_copied_mod() {
-  local name
-  for name in "${HERDR_COPIED_MODS[@]}"; do
-    [[ "$name" == "$1" ]] && return 0
-  done
-  return 1
+  in_list "$1" "${HERDR_COPIED_MODS[@]}"
 }
 
 # Linked as $HERDR_HOME/mods/<name>, or copied there if HERDR_COPIED_MODS has it.
