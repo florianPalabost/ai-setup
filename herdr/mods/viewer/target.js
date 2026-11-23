@@ -18,12 +18,17 @@ export function viewerTab(herdr, space) {
   return open && herdr.panes().some((pane) => pane.mod === VIEWER_MOD && pane.tab === id) ? id : null;
 }
 
+function claimNextViewerTab(herdr, space) {
+  const claim = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  const tabsBefore = space.tabs.map((tab) => tab.id);
+  herdr.setShared(TABS_KEY, { ...(herdr.shared(TABS_KEY) ?? {}), [space.id]: { claim, before: tabsBefore, tab: null } });
+  return claim;
+}
+
 function openTab(herdr, space, target) {
   const id = viewerTab(herdr, space);
   if (id) return herdr.run("tab.select", { id });
-  const claim = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-  const before = space.tabs.map((tab) => tab.id);
-  herdr.setShared(TABS_KEY, { ...(herdr.shared(TABS_KEY) ?? {}), [space.id]: { claim, before, tab: null } });
+  const claim = claimNextViewerTab(herdr, space);
   herdr.run("tab.new", { name: fileName(target.path), space: space.id, mod: VIEWER_MOD, props: { space: space.id, claim } });
 }
 
