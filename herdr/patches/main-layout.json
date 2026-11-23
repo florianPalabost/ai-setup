@@ -6,6 +6,7 @@
     "spaces": { "from": "spaces", "to": "spaces-git" },
     "main": { "from": "pane", "to": "pane-git", "pane_header": true },
     "files": { "from": "files", "to": "files-git" },
+    "status": { "from": "workspace-status", "to": "workspace-status-git" },
     "changes": { "from": "changes", "to": "git", "feature": "git" }
   },
   "add": {

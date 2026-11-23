@@ -44,7 +44,7 @@ test_ticking_usage_sets_the_meters_status_line_and_places_the_meter() {
   assert_eq 0 "$code" "exit code"
   assert_eq "$(our_command)" "$(statusline_command)" "status line"
   assert_eq "row" "$(json_get "$HERDR/layouts/main-git.json" '#status-row.type')" "status row"
-  assert_eq "workspace-status" "$(json_get "$HERDR/layouts/main-git.json" '#status.content.mod')" "status bar"
+  assert_eq "workspace-status-git" "$(json_get "$HERDR/layouts/main-git.json" '#status.content.mod')" "status bar"
   assert_eq "claude-usage" "$(json_get "$HERDR/layouts/main-git.json" '#usage.content.mod')" "usage meter"
   assert_eq "$REPO_COPY/herdr/mods/claude-usage" "$(readlink "$HERDR/mods/claude-usage")" "mod link"
 }
