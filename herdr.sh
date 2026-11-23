@@ -102,14 +102,16 @@ herdr_window_layout() {
 }
 
 # Write to $3 the file $1 with the patch $2 applied. If it doesn't apply, return
-# 1 and leave $3 alone. $1 and $3 can be the same file.
+# 1 and leave $3 alone. $1 and $3 can be the same file. The patch names the file
+# by $1's name.
 patched_copy() {
-  local src="$1" patch="$2" dst="$3" dir status=0
+  local src="$1" patch="$2" dst="$3" dir name status=0
   dir="$(mktemp -d)"
-  cp "$src" "$dir/main.js"
+  name="$(basename "$src")"
+  cp "$src" "$dir/$name"
   # No fuzz: a patch fails exactly where an upstream change touches our edits.
   if patch -s -f -F0 -p1 -d "$dir" -i "$patch" >/dev/null 2>&1; then
-    cp "$dir/main.js" "$dst"
+    cp "$dir/$name" "$dst"
   else
     status=1
   fi
