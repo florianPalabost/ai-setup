@@ -149,7 +149,7 @@ automations_scheduler_running() {
 }
 
 install_automations() {
-  local tag fresh=0
+  local tag new_binary=0
   if is_windows; then
     info "Automations: install herdr-automations by hand on Windows (see its README), then run \`herdr-automations service install\`"
     return 0
@@ -157,14 +157,13 @@ install_automations() {
   tag="$(upstream_automations_tag)"
   if ! automations_bin_is_release "$tag"; then
     download_automations_bin "$tag" || return 0
-    fresh=1
+    new_binary=1
   fi
   seed_automations_config
   make_automations_state_dir
-  if ((!fresh)) && automations_service_installed && ! automations_scheduler_running; then
+  if ((!new_binary)) && automations_service_installed; then
+    automations_scheduler_running && return 0
     warn "the herdr-automations scheduler isn't running (see daemon.log in $(automations_listing state)): reinstalling its service"
-  elif ((!fresh)) && automations_service_installed; then
-    return 0
   fi
   automations_service install
   if ((!DRY_RUN)) && ! automations_scheduler_running; then
