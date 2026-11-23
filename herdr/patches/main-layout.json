@@ -4,6 +4,7 @@
     "sidebar-footer": { "from": "workspace-chrome", "to": "workspace-chrome-git" },
     "tabs": { "from": "tabs", "to": "tabs-git" },
     "spaces": { "from": "spaces", "to": "spaces-git" },
+    "agents": { "from": "agents", "to": "agents-git", "unless": "chat" },
     "main": { "from": "pane", "to": "pane-git", "pane_header": true },
     "files": { "from": "files", "to": "files-git" },
     "status": { "from": "workspace-status", "to": "workspace-status-git" },

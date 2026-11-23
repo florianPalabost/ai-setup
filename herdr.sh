@@ -17,7 +17,7 @@ HERDR_MOD_ICONS=("git-graph/icons git-graph-icons")
 # files change. A re-run replaces a copy that differs.
 HERDR_COPIED_MODS=(automations)
 # "<shipped mod> <clone> <patch in herdr/patches/>"
-HERDR_MOD_CLONES=("tabs tabs-git tabs.patch" "menu menu-git menu.patch" "new-menu new-menu-git new-menu.patch" "spaces spaces-git spaces.patch" "pane pane-git pane.patch" "workspace-chrome workspace-chrome-git workspace-chrome.patch" "workspace-status workspace-status-git workspace-status.patch" "files files-git files.patch")
+HERDR_MOD_CLONES=("tabs tabs-git tabs.patch" "menu menu-git menu.patch" "new-menu new-menu-git new-menu.patch" "spaces spaces-git spaces.patch" "agents agents-git agents.patch" "pane pane-git pane.patch" "workspace-chrome workspace-chrome-git workspace-chrome.patch" "workspace-status workspace-status-git workspace-status.patch" "files files-git files.patch")
 HERDR_LAYOUT_SHIPPED=main
 HERDR_LAYOUT=main-git
 HERDR_LAYOUT_EDIT="$HERDR_SRC/patches/main-layout.json"
@@ -139,11 +139,13 @@ chosen = set(sys.argv[4].split()) if len(sys.argv) > 4 else set()
 layout = json.loads(src.read_text())
 spec = json.loads(edit.read_text())
 
-def wanted(entry):
-    return entry.get("feature") in (None, *chosen)
+CONDITIONS = ("feature", "unless")
 
-def without_feature(entry):
-    return {key: value for key, value in entry.items() if key != "feature"}
+def wanted(entry):
+    return entry.get("feature") in (None, *chosen) and entry.get("unless") not in chosen
+
+def without_condition(entry):
+    return {key: value for key, value in entry.items() if key not in CONDITIONS}
 
 def mod_swaps():
     return {id: change for id, change in spec["blocks"].items() if wanted(change)}
@@ -151,7 +153,7 @@ def mod_swaps():
 def children_to_add():
     added = {}
     for container, entries in spec.get("add", {}).items():
-        kept = [without_feature(entry) for entry in entries if wanted(entry)]
+        kept = [without_condition(entry) for entry in entries if wanted(entry)]
         if kept:
             added[container] = kept
     return added
@@ -180,7 +182,7 @@ def swap_mod(node):
 
 def wrapped(node):
     wrap = wraps[node["id"]]
-    container = {key: value for key, value in without_feature(wrap).items() if key != "after"}
+    container = {key: value for key, value in without_condition(wrap).items() if key != "after"}
     container.update({key: node.pop(key) for key in SIZE_KEYS if key in node})
     container["children"] = [node, *wrap.get("after", [])]
     seen.add(node["id"])
@@ -439,7 +441,7 @@ build_layout() {
     warn "$shipped not found: start herdr once, then re-run install"
     return 1
   fi
-  if ! layout_edit_applies "$shipped" "$HERDR_LAYOUT_EDIT" "$(herdr_chosen_panels)"; then
+  if ! layout_edit_applies "$shipped" "$HERDR_LAYOUT_EDIT" "$(herdr_layout_features)"; then
     warn_build_failed "$HERDR_LAYOUT_EDIT" "$HERDR_LAYOUT" "$file"
     return 1
   fi
@@ -464,7 +466,7 @@ build_layout() {
     cp -p "$saved_clicks" "$clicks"
     rm -f "$saved_clicks"
   fi
-  if ! edited_layout "$file" "$HERDR_LAYOUT_EDIT" "$file" "$(herdr_chosen_panels)" 2>/dev/null; then
+  if ! edited_layout "$file" "$HERDR_LAYOUT_EDIT" "$file" "$(herdr_layout_features)" 2>/dev/null; then
     restore_backup "$file"
     show_layout_afresh "$before"
     warn_build_failed "$HERDR_LAYOUT_EDIT" "$HERDR_LAYOUT" "$file"
@@ -473,7 +475,7 @@ build_layout() {
   if [[ -n "$saved_clicks" ]]; then
     show_layout_afresh "$HERDR_LAYOUT"
   fi
-  patch_hash "$HERDR_LAYOUT_EDIT" "$(herdr_chosen_panels)" >"$(layout_built_from)"
+  patch_hash "$HERDR_LAYOUT_EDIT" "$(herdr_layout_features)" >"$(layout_built_from)"
   HERDR_LAYOUT_REBUILT=1
   info "built $HERDR_LAYOUT from $HERDR_LAYOUT_SHIPPED"
 }
@@ -534,7 +536,7 @@ mod_clone_outdated() {
 layout_outdated() {
   [[ -f "$HERDR_HOME/layouts/$HERDR_LAYOUT.json" ]] || return 1
   outdated "$HERDR_LAYOUT" "$(cloned_from_version "$HERDR_HOME/layouts/$HERDR_LAYOUT.json")" ||
-    patch_changed "$HERDR_LAYOUT" "$(cat "$(layout_built_from)" 2>/dev/null)" "$HERDR_LAYOUT_EDIT" "$(herdr_chosen_panels)"
+    patch_changed "$HERDR_LAYOUT" "$(cat "$(layout_built_from)" 2>/dev/null)" "$HERDR_LAYOUT_EDIT" "$(herdr_layout_features)"
 }
 
 # Print, in the format of stale_entries, what the repo no longer lists and is

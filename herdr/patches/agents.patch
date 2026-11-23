@@ -1,0 +1,26 @@
+--- a/main.js
++++ b/main.js
+@@ -159 +159 @@
+-        .hover((el) => el.bg(t.hover))
++        .hover((el) => el.bg(t.hover)).cursor_pointer()
+@@ -201 +201 @@
+-      .hover((s) => s.bg(t.hover))
++      .hover((s) => s.bg(t.hover)).cursor_pointer()
+@@ -319 +319 @@
+-          .hover((s) => s.bg(t.hover))
++          .hover((s) => s.bg(t.hover)).cursor_pointer()
+@@ -366 +366 @@
+-          .when(subs.length > 0, el => el.on_click((_e, cx) => {
++          .when(subs.length > 0, el => el.cursor_pointer().on_click((_e, cx) => {
+@@ -443 +443 @@
+-                .text_size(11)
++                .text_size(11).p(2).rounded(4)
+@@ -445 +445 @@
+-                .hover((s) => s.text_color(t.foreground))
++                .hover((s) => s.bg(t.hover).text_color(t.foreground)).cursor_pointer()
+@@ -465 +465 @@
+-                .text_size(13)
++                .text_size(13).px(4).rounded(4)
+@@ -467 +467 @@
+-                .hover((s) => s.text_color(t.foreground))
++                .hover((s) => s.bg(t.hover).text_color(t.foreground)).cursor_pointer()
