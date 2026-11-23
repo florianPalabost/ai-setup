@@ -1,13 +1,12 @@
 import { View, div } from "gpui-kit";
 import { h_flex, Popover } from "gpui-base";
 import { home, readTextFile, theme } from "herdr";
-import { SHOW_LEFT, SHOW_USED, limitBars, meterParts } from "./meter.js";
+import { SHOW_LEFT, SHOW_USED, limitBars, meterParts, toneColor } from "./meter.js";
 import { barsPanel } from "./bars.js";
 
 const CACHE_PATH = ".cache/claude-usage/limits.json";
 const SHOW_KEY = "claude-usage.show";
 const REFRESH_MS = 30000;
-const TONE_COLOR = { low: "ansi2", mid: "ansi3", high: "ansi1" };
 
 async function readSaved() {
   try {
@@ -48,7 +47,7 @@ export default class UsageMeter extends View {
   meter(t, parts) {
     const limit = (part) => h_flex().gap(5).items_center()
       .child(part.label)
-      .child(div().text_color(t[TONE_COLOR[part.tone]]).child(part.percent))
+      .child(div().text_color(toneColor(t, part.tone)).child(part.percent))
       .when(Boolean(part.resets), (el) => el.child(div().text_color(t.dim).child(part.resets)));
     const row = h_flex().id("meter").h_full().gap(8).items_center().cursor_pointer();
     parts.forEach((part, index) => {
@@ -69,6 +68,6 @@ export default class UsageMeter extends View {
     return bar.child(Popover.new("usage").anchor("bottom_right").open(this.open)
       .on_open_change((open, cx) => { this.open = open; cx.notify(); })
       .trigger(this.meter(t, parts))
-      .content(barsPanel(t, bars, TONE_COLOR, this.show, (show, cx) => this.setShow(show, cx))));
+      .content(barsPanel(t, bars, this.show, (show, cx) => this.setShow(show, cx))));
   }
 }
