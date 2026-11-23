@@ -70,11 +70,7 @@ load_herdr_choice() {
 }
 
 herdr_chosen() {
-  local id
-  for id in "${HERDR_CHOSEN[@]+"${HERDR_CHOSEN[@]}"}"; do
-    [[ "$id" == "$1" ]] && return 0
-  done
-  return 1
+  in_list "$1" ${HERDR_CHOSEN[@]+"${HERDR_CHOSEN[@]}"}
 }
 
 herdr_wants_panel() {

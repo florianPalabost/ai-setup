@@ -21,6 +21,16 @@ require() {
   fi
 }
 
+# Whether $1 is one of the other arguments.
+in_list() {
+  local needle="$1" item
+  shift
+  for item in "$@"; do
+    [[ "$item" == "$needle" ]] && return 0
+  done
+  return 1
+}
+
 is_windows() {
   case "$(uname -s)" in
     MINGW* | MSYS* | CYGWIN*) return 0 ;;
