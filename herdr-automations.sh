@@ -106,9 +106,20 @@ automations:
     disabled: true
 '
 
-# The automations.yaml the binary reads.
-automations_config_path() {
-  "$AUTOMATIONS_BIN" ls --json 2>/dev/null | py3 -c 'import json, sys; print(json.load(sys.stdin)["config"])'
+# The field $1 of `herdr-automations ls --json`: config (the automations.yaml
+# it reads) or state (the folder of its history and log).
+automations_listing() {
+  "$AUTOMATIONS_BIN" ls --json 2>/dev/null | py3 -c 'import json, sys; print(json.load(sys.stdin)[sys.argv[1]])' "$1"
+}
+
+# The service appends its log to a file in the state folder, and systemd can't
+# start it while that folder is missing.
+make_automations_state_dir() {
+  local dir
+  ((DRY_RUN)) && return 0
+  if dir="$(automations_listing state)" && [[ -n "$dir" ]]; then
+    mkdir -p "$dir"
+  fi
 }
 
 # Write the starter config if there is none. If there is one, only put
@@ -120,7 +131,7 @@ seed_automations_config() {
     info "[dry-run] would write a starter automations.yaml (backend: hc, two disabled examples)"
     return 0
   fi
-  if ! path="$(automations_config_path)" || [[ -z "$path" ]]; then
+  if ! path="$(automations_listing config)" || [[ -z "$path" ]]; then
     warn "herdr-automations didn't name its automations.yaml: set \`backend: hc\` at its top by hand"
     return 0
   fi
@@ -148,6 +159,10 @@ automations_service_installed() {
   [[ -x "$AUTOMATIONS_BIN" ]] && "$AUTOMATIONS_BIN" service status 2>/dev/null | grep -qx 'service installed: true'
 }
 
+automations_scheduler_running() {
+  "$AUTOMATIONS_BIN" service status 2>/dev/null | grep -q '^scheduler running: true'
+}
+
 # Install the binary of the vendored release if it isn't there, then the
 # scheduler service. A new binary reinstalls the service, which points at it.
 install_automations() {
@@ -162,7 +177,8 @@ install_automations() {
     fresh=1
   fi
   seed_automations_config
-  if ((fresh)) || ! automations_service_installed; then
+  make_automations_state_dir
+  if ((fresh)) || ! automations_service_installed || ! automations_scheduler_running; then
     automations_service install "installed"
   fi
 }
