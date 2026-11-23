@@ -35,6 +35,7 @@ HERDR_STATUS_CALL_SECS="${HERDR_STATUS_CALL_SECS:-10}"
 # Same code as timeout(1).
 HERDR_STATUS_STUCK=124
 HERDR_PANEL_WANTED=0
+HERDR_LAYOUT_REBUILT=0
 # What the leftover check offers to remove. These can't be read from the repo's
 # history: the prototypes were only ever on prototype/* branches. When a mod or
 # clone leaves the lists above, add it here.
@@ -423,6 +424,10 @@ show_layout_afresh() {
 # back to the layout that was showing. If anything fails, a clone already there
 # stays as it was. layout.clone drops the clicks made on a layout of that name, so
 # they're put back and read again.
+herdr_layout_rebuilt() {
+  ((HERDR_LAYOUT_REBUILT))
+}
+
 build_layout() {
   local shipped="$HERDR_HOME/layouts/$HERDR_LAYOUT_SHIPPED.json" file="$HERDR_HOME/layouts/$HERDR_LAYOUT.json" before
   local clicks="$HERDR_HOME/layouts/.state/$HERDR_LAYOUT.json" saved_clicks=""
