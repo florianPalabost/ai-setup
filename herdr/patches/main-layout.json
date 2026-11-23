@@ -24,7 +24,7 @@
     },
     "status": {
       "feature": "usage", "id": "status-row", "type": "row",
-      "after": [{ "id": "usage", "type": "block", "content": { "mod": "claude-usage" }, "size": { "px": 210 } }]
+      "after": [{ "id": "usage", "type": "block", "content": { "mod": "claude-usage" }, "size": { "px": 290 } }]
     }
   }
 }
