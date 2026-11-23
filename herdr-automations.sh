@@ -4,14 +4,14 @@
 # HERDR_SRC it uses.
 
 AUTOMATIONS_REPO="DnzzL/herdr-automations"
-# Records the release the vendored mod came from, which the binary must match.
-AUTOMATIONS_UPSTREAM="$HERDR_SRC/mods/automations/UPSTREAM"
+AUTOMATIONS_UPSTREAM_FILE="$HERDR_SRC/mods/automations/UPSTREAM"
 AUTOMATIONS_BIN="$HOME/.local/bin/herdr-automations"
 AUTOMATIONS_CHECKSUMS="checksums.txt"
+# Without it, runs go to the herdr TUI, not the app.
+AUTOMATIONS_BACKEND_LINE="backend: hc"
 
-# The release tag UPSTREAM records, e.g. v0.14.0.
-automations_tag() {
-  awk '$1 == "tag" { print $2 }' "$AUTOMATIONS_UPSTREAM"
+upstream_automations_tag() {
+  awk '$1 == "tag" { print $2 }' "$AUTOMATIONS_UPSTREAM_FILE"
 }
 
 # The release asset for this OS and arch. Returns 1 where there is none.
@@ -38,8 +38,7 @@ sha256_of() {
   fi
 }
 
-# Whether the installed binary is the release $1 (vX.Y.Z; it prints X.Y.Z).
-automations_bin_is() {
+automations_bin_is_release() {
   [[ -x "$AUTOMATIONS_BIN" ]] && [[ "$("$AUTOMATIONS_BIN" version 2>/dev/null)" == "${1#v}" ]]
 }
 
@@ -80,13 +79,12 @@ download_automations_bin() {
   return "$status"
 }
 
-# The starter config: runs open in the Herdr app (backend: hc), and the two
-# examples stay off until ticked in the panel.
-AUTOMATIONS_STARTER='backend: hc
+# The examples stay off until ticked in the panel.
+AUTOMATIONS_STARTER="$AUTOMATIONS_BACKEND_LINE"'
 automations:
   - name: issue-triage
     cron: "0 9 * * 1-5"
-    repo: ~/Documents/dev/ai-setup
+    repo: '"${REPO_DIR/#"$HOME"/\~}"'
     agent: claude
     model: sonnet
     prompt: |
@@ -96,7 +94,7 @@ automations:
 
   - name: weekly-review
     cron: "0 17 * * 5"
-    repo: ~/Documents/dev/ai-setup
+    repo: '"${REPO_DIR/#"$HOME"/\~}"'
     workspace: root
     agent: claude
     model: sonnet
@@ -116,42 +114,42 @@ automations_listing() {
 # start it while that folder is missing.
 make_automations_state_dir() {
   local dir
-  ((DRY_RUN)) && return 0
   if dir="$(automations_listing state)" && [[ -n "$dir" ]]; then
-    mkdir -p "$dir"
+    [[ -d "$dir" ]] || run mkdir -p "$dir"
+  elif ((DRY_RUN)); then
+    info "[dry-run] would create the herdr-automations state folder"
   fi
 }
 
-# Write the starter config if there is none. If there is one, only put
-# `backend: hc` at its top when it sets no backend: without it, runs go to the
-# herdr TUI, not the app.
+# Write the starter config if there is none. If there is one, only put the
+# backend line at its top when it sets no backend.
 seed_automations_config() {
   local path
   if ((DRY_RUN)) && [[ ! -x "$AUTOMATIONS_BIN" ]]; then
-    info "[dry-run] would write a starter automations.yaml (backend: hc, two disabled examples)"
+    info "[dry-run] would write a starter automations.yaml ($AUTOMATIONS_BACKEND_LINE, two disabled examples)"
     return 0
   fi
   if ! path="$(automations_listing config)" || [[ -z "$path" ]]; then
-    warn "herdr-automations didn't name its automations.yaml: set \`backend: hc\` at its top by hand"
+    warn "herdr-automations didn't name its automations.yaml: put \`$AUTOMATIONS_BACKEND_LINE\` at its top by hand"
     return 0
   fi
-  if [[ ! -f "$path" ]]; then
-    if ((DRY_RUN)); then
-      info "[dry-run] would write a starter $path"
-    else
-      mkdir -p "$(dirname "$path")"
-      printf '%s' "$AUTOMATIONS_STARTER" >"$path"
-      info "wrote a starter $path, its examples disabled"
-    fi
+  if [[ ! -f "$path" ]] && ((DRY_RUN)); then
+    info "[dry-run] would write a starter $path, its examples disabled"
+  elif [[ ! -f "$path" ]]; then
+    mkdir -p "$(dirname "$path")"
+    printf '%s' "$AUTOMATIONS_STARTER" >"$path"
+    info "wrote a starter $path, its examples disabled"
   elif ! grep -q '^backend:' "$path"; then
-    if ((DRY_RUN)); then
-      info "[dry-run] would put backend: hc at the top of $path"
-    else
-      backup "$path"
-      printf 'backend: hc\n' | cat - "$BACKUP_DIR/${path#"$HOME"/}" >"$path"
-      info "put backend: hc at the top of $path"
-    fi
+    backup "$path"
+    run_to "$path" prepend_line "$AUTOMATIONS_BACKEND_LINE" "$BACKUP_DIR/${path#"$HOME"/}"
+    ((DRY_RUN)) || info "put $AUTOMATIONS_BACKEND_LINE at the top of $path"
   fi
+}
+
+# Print the line $1, then the file $2.
+prepend_line() {
+  printf '%s\n' "$1"
+  cat "$2"
 }
 
 # Whether the scheduler service is installed. Without the binary, it can't be.
@@ -164,22 +162,30 @@ automations_scheduler_running() {
 }
 
 # Install the binary of the vendored release if it isn't there, then the
-# scheduler service. A new binary reinstalls the service, which points at it.
+# scheduler service. A new binary reinstalls the service, which points at it,
+# and so does a scheduler found stopped, once, saying so.
 install_automations() {
   local tag fresh=0
   if is_windows; then
     info "Automations: install herdr-automations by hand on Windows (see its README), then run \`herdr-automations service install\`"
     return 0
   fi
-  tag="$(automations_tag)"
-  if ! automations_bin_is "$tag"; then
+  tag="$(upstream_automations_tag)"
+  if ! automations_bin_is_release "$tag"; then
     download_automations_bin "$tag" || return 0
     fresh=1
   fi
   seed_automations_config
   make_automations_state_dir
-  if ((fresh)) || ! automations_service_installed || ! automations_scheduler_running; then
-    automations_service install "installed"
+  if ((!fresh)) && automations_service_installed && ! automations_scheduler_running; then
+    warn "the herdr-automations scheduler isn't running (see daemon.log in $(automations_listing state)): reinstalling its service"
+  elif ((!fresh)) && automations_service_installed; then
+    return 0
+  fi
+  automations_service install
+  if ((!DRY_RUN)) && ! automations_scheduler_running; then
+    sleep 1
+    automations_scheduler_running || warn "the herdr-automations scheduler still isn't running: see \`systemctl --user status herdr-automations\`"
   fi
 }
 
@@ -187,15 +193,14 @@ install_automations() {
 # automations and their history stay.
 uninstall_automations() {
   automations_service_installed || return 0
-  automations_service uninstall "removed"
+  automations_service uninstall
 }
 
-# Run `herdr-automations service $1` and say the service was $2.
 automations_service() {
   if ((DRY_RUN)); then
     info "[dry-run] would run herdr-automations service $1"
   elif "$AUTOMATIONS_BIN" service "$1" >/dev/null; then
-    info "$2 the herdr-automations scheduler service"
+    info "ran herdr-automations service $1"
   else
     warn "herdr-automations service $1 failed"
   fi
