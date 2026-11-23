@@ -1,18 +1,18 @@
 # shellcheck shell=bash
 
 CLAUDE_USAGE_STATUSLINE="$HERDR_SRC/mods/claude-usage/statusline.sh"
-# The status line the meter's replaced, put back when the feature is unticked.
 CLAUDE_USAGE_KEPT_STATUSLINE="$HERDR_HOME/.ai-setup-statusline.json"
 CLAUDE_USAGE_ON=on
 CLAUDE_USAGE_OFF=off
 
-# $1: on sets the meter's status line, keeping the one it replaces; off puts that one back.
 swap_claude_statusline() {
-  py3 - "$1" "$CLAUDE_DIR/settings.json" "$CLAUDE_USAGE_KEPT_STATUSLINE" "bash \"$CLAUDE_USAGE_STATUSLINE\"" "$BACKUP_DIR" "$DRY_RUN" <<'PY'
+  local turning_on=0
+  [[ "$1" == "$CLAUDE_USAGE_ON" ]] && turning_on=1
+  py3 - "$turning_on" "$CLAUDE_DIR/settings.json" "$CLAUDE_USAGE_KEPT_STATUSLINE" "bash \"$CLAUDE_USAGE_STATUSLINE\"" "$BACKUP_DIR" "$DRY_RUN" <<'PY'
 import json, shutil, sys
 from pathlib import Path
 
-mode, settings_path, kept_path, command, backup_dir, dry_run = sys.argv[1], Path(sys.argv[2]), Path(sys.argv[3]), sys.argv[4], Path(sys.argv[5]), sys.argv[6] == "1"
+turning_on, settings_path, kept_path, command, backup_dir, dry_run = sys.argv[1] == "1", Path(sys.argv[2]), Path(sys.argv[3]), sys.argv[4], Path(sys.argv[5]), sys.argv[6] == "1"
 ours = {"type": "command", "command": command}
 settings = json.loads(settings_path.read_text()) if settings_path.exists() else {}
 current = settings.get("statusLine")
@@ -25,7 +25,7 @@ def write(settings):
     settings_path.parent.mkdir(parents=True, exist_ok=True)
     settings_path.write_text(json.dumps(settings, indent=2) + "\n")
 
-if mode == "on":
+if turning_on:
     if current == ours:
         sys.exit(0)
     if dry_run:
