@@ -8,6 +8,8 @@ import { run } from './shell.mjs'
 /** Domains the Claude CLI needs for the model API and for OAuth token refresh on a subscription login. */
 const ANTHROPIC_DOMAINS = ['api.anthropic.com', 'claude.ai', 'platform.claude.com']
 
+const GIT_FILES_THAT_RUN_PROGRAMS = ['hooks', 'config', 'info']
+
 const SECRET_PATHS = ['~/.ssh', '~/.config/gh', '~/.git-credentials', '~/.aws', '~/.docker', '~/.gnupg', '~/.composer/auth.json', '~/.config/composer/auth.json', '/mnt/c']
 
 export function sandboxSettings({ worktreePath, gitDir, extraAllowWrite = [], extraDenyRead = [] }) {
@@ -17,7 +19,7 @@ export function sandboxSettings({ worktreePath, gitDir, extraAllowWrite = [], ex
         filesystem: {
             denyRead: [...SECRET_PATHS, ...extraDenyRead],
             allowWrite: [worktreePath, gitDir, join(home, '.claude'), join(home, '.claude.json'), '/tmp', ...extraAllowWrite],
-            denyWrite: [join(gitDir, 'hooks'), join(gitDir, 'config'), join(gitDir, 'info')],
+            denyWrite: GIT_FILES_THAT_RUN_PROGRAMS.map((name) => join(gitDir, name)),
         },
         network: {
             allowedDomains: ANTHROPIC_DOMAINS,
