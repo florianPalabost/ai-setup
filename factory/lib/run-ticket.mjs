@@ -13,7 +13,6 @@ import { canReachOrigin, commitsAhead, prepareWorktree, pushBranch, worktreePath
 
 const READ_ONLY_PERMISSION_MODE = 'dontAsk'
 
-/** The verdict a run continued with `--from pr` reports, having skipped the review. */
 const NOT_REVIEWED = 'not run'
 
 function parseReview(structuredOutput, logPath) {
@@ -33,7 +32,6 @@ function parsePrBody(structuredOutput, logPath) {
     return structuredOutput.body.trim()
 }
 
-/** Stops the run when the base already fails a check, before an agent spends its time on failures it didn't cause. */
 async function requireGreenBase({ repo, config, runDir, log, progress }) {
     const baseline = await progress.track(STEP_NAMES.baseline, () => baselineChecks({ repo, config, runDir, log, progress, step: STEP_NAMES.baseline }), {
         statusOf: (result) => (result.failing.length > 0 ? STEP_STATUSES.fail : STEP_STATUSES.pass),
@@ -62,7 +60,6 @@ async function setUpWorktree({ repo, path, branch, config, log, progress }) {
     })
 }
 
-/** With --from, the label alone doesn't stop a take-over: only a run whose process is still alive does. */
 async function requireNoLiveRun(repo, issueNumber) {
     const run = await latestRun({ root: repo.root, gitDir: repo.gitDir, issueNumber })
     if (run && !run.finishedAt) {
@@ -79,7 +76,6 @@ async function requireWorkToContinue({ repo, issueNumber, path, base, branch }) 
     }
 }
 
-/** The newest implement step's final message, for the PR body of a run that skipped implement. */
 async function lastImplementationReport(gitDir, issueNumber) {
     const runsDir = issueRunsDir(gitDir, issueNumber)
     const runNames = existsSync(runsDir) ? (await readdir(runsDir)).sort().reverse() : []
@@ -106,12 +102,6 @@ function prBody({ issue, body, review, reworks, implementationReport }) {
     ].join('\n\n')
 }
 
-/**
- * One factory run for one ticket: lock → worktree → /implement (+ /no-comments) → checks + /matt-code-review, reworked
- * up to maxReworks → push → /pr body → draft PR → relabel.
- * GitHub labels are the only state; any failure hands the ticket to a human with the reason as a comment.
- * With `options.from` (a RESUME_STEPS value) it skips everything before that step and carries on in the existing worktree.
- */
 export async function runTicket({ repo, issueNumber, config, options, log }) {
     const cwd = repo.root
     const issue = await viewIssue(issueNumber, { cwd })

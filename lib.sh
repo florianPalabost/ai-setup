@@ -21,7 +21,6 @@ require() {
   fi
 }
 
-# Whether $1 is one of the other arguments.
 in_list() {
   local needle="$1" item
   shift

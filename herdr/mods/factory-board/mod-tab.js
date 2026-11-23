@@ -1,6 +1,3 @@
-// Opens a tab whose only pane is one of this setup's mods (the Run graph, the
-// Factory board), from the Factory panel: one per space, reused if it's already
-// open. Takes the herdr module as `herdr`, so node can test it.
 export const MOD_TABS = Object.freeze({
   runGraph: { mod: "orch-graph", name: "Run graph" },
   factory: { mod: "factory-board", name: "Factory" },

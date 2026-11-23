@@ -12,7 +12,6 @@ const TOOL_INPUT_KEYS = ['command', 'file_path', 'path', 'pattern', 'skill', 'ur
 
 const fence = (text, language = '') => `\`\`\`${language}\n${text}\n\`\`\``
 
-/** Pushes the agent's own headings below the step's heading, so its "## Summary" doesn't sit beside the steps. */
 const demoteHeadings = (markdown) => markdown.replace(/^(#{1,4}) /gm, '$1## ')
 
 function clip(text, maxLines) {
@@ -45,7 +44,6 @@ function toolError(part) {
     return `- ✗ ${text.trim().split('\n')[0].slice(0, MAX_ERROR_LENGTH)}`
 }
 
-/** A structured result (a review's verdict and findings, a PR body) as prose: strings as Markdown, lists as bullets. */
 function structuredOutput(output) {
     return Object.entries(output).flatMap(([key, value]) => {
         if (typeof value === 'string') {
@@ -59,7 +57,6 @@ function structuredOutput(output) {
     })
 }
 
-/** One step's stream-json transcript as readable blocks: the agent's messages, its tool calls, failed tool results and its result. */
 function transcriptBlocks(events) {
     const blocks = []
     for (const event of events) {
@@ -114,8 +111,6 @@ async function readEvents(repo, step) {
 }
 
 /**
- * Writes the ticket's latest run as Markdown a person can read: every step with its timing, model and cost,
- * and each agent's transcript. With `stepName`, only that step, as `<step log>.md`.
  * @returns {Promise<{ path: string }>} the path relative to the repo root
  */
 export async function writeRunMarkdown({ repo, issueNumber, stepName }) {

@@ -1,5 +1,4 @@
 // A copy of viewer/code.js: herdr loads no module from outside a mod's folder.
-// A code view's state, colored from the theme: read-only unless asked.
 import { EditorState } from "gpui-base";
 import { theme, settings } from "herdr";
 import { languageFor } from "./text.js";

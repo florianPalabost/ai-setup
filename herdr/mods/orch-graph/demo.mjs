@@ -7,9 +7,6 @@ const DEMO_EPOCH = Date.now()
 const DEMO_OUTCOME = 'agent-done'
 
 /**
- * One factory run replayed step by step, in the shape `factory status --json --local` gives a run,
- * so a failing check, a rework and the finished state can be checked without a real run.
- *
  * @type {Array<{ name: string, end: number, status?: string, agent?: boolean }>}
  */
 const TIMELINE = [

@@ -5,7 +5,6 @@ import { SYSTEM_ERROR_CODES } from './constants.mjs'
 
 export const PROGRESS_FILE = 'progress.jsonl'
 
-/** The run's transcript as `factory watch` prints it, written beside progress.jsonl while the run goes. */
 export const WATCH_LOG_FILE = 'watch.log'
 
 export const STEP_STATUSES = Object.freeze({
@@ -18,10 +17,8 @@ export const STEP_STATUSES = Object.freeze({
 
 export const RUN_STEP = 'run'
 
-/** The outcome given to a run whose process died before it recorded one. */
 export const RUN_ABANDONED = 'abandoned'
 
-/** The names a run gives its steps, in the order it runs them. */
 export const STEP_NAMES = Object.freeze({
     baseline: 'baseline',
     setup: 'setup',
@@ -34,7 +31,6 @@ export const STEP_NAMES = Object.freeze({
     draftPr: 'draft PR',
 })
 
-/** Steps whose agent edits the code: the session to resume to carry on the work. */
 export const isCodingStep = (name) => name === STEP_NAMES.implement || name.startsWith('rework ')
 
 const TRANSCRIPT_TAIL_BYTES = 64 * 1024
@@ -44,7 +40,6 @@ const ACTIVITY_MAX_LENGTH = 120
 export const issueRunsDir = (gitDir, issueNumber) => join(gitDir, 'factory', `issue-${issueNumber}`)
 
 /**
- * Appends a run's step changes to progress.jsonl, the file `factory status` reads to show a run live.
  * @returns {{ record: (entry: { step: string, status: string, log?: string, detail?: string }) => Promise<void>, track: <T>(step: string, work: () => Promise<T>, options?: { log?: string, statusOf?: (result: T) => string }) => Promise<T> }}
  */
 export function progressRecorder(runDir) {
@@ -92,7 +87,6 @@ async function readSlice(path, position, length) {
     }
 }
 
-/** The Claude session behind a step, from the init event at the top of its stream-json transcript. */
 async function sessionIdOf(transcriptPath) {
     if (!existsSync(transcriptPath)) {
         return null
@@ -102,7 +96,6 @@ async function sessionIdOf(transcriptPath) {
     return head.split('\n').map(parseJsonLine).find((event) => event?.type === 'system' && event.subtype === 'init')?.session_id ?? null
 }
 
-/** What an agent step is doing now: its newest tool call or message, read from the end of its stream-json transcript. */
 async function latestActivity(transcriptPath) {
     const { size } = await stat(transcriptPath)
     const start = Math.max(0, size - TRANSCRIPT_TAIL_BYTES)
@@ -133,7 +126,6 @@ function isAlive(pid) {
     }
 }
 
-/** How a run ended: its recorded outcome, or abandoned when the process that started it is gone without recording one. */
 function runEnd(entries) {
     const runEntries = entries.filter((entry) => entry.step === RUN_STEP)
     const finish = runEntries.findLast((entry) => entry.status !== STEP_STATUSES.running)
@@ -148,7 +140,6 @@ function runEnd(entries) {
     return { finishedAt: null, outcome: null }
 }
 
-/** Replays progress.jsonl into one entry per step, in the order the steps started. */
 function foldSteps(entries) {
     const steps = new Map()
     for (const { step, status, log, detail, at } of entries) {
@@ -163,7 +154,6 @@ function foldSteps(entries) {
 }
 
 /**
- * The newest run on a ticket that recorded progress, with log paths relative to the repo root.
  * @returns {Promise<null | { dir: string, startedAt: string, finishedAt: string|null, outcome: string|null, steps: { name: string, status: string, log: string|null, sessionId: string|null, detail: string|null, startedAt: string, updatedAt: string }[], activity: string|null, updatedAt: string }>}
  */
 export async function latestRun({ root, gitDir, issueNumber }) {
@@ -198,7 +188,6 @@ export async function latestRun({ root, gitDir, issueNumber }) {
     }
 }
 
-/** Issue numbers that have a runs directory under .git/factory. */
 export async function issuesWithRuns(gitDir) {
     const factoryDir = join(gitDir, 'factory')
     if (!existsSync(factoryDir)) {

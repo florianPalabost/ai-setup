@@ -10,7 +10,6 @@ const CHECK_OUTPUT_TAIL_LINES = 40
 const tail = (text, lines) => text.trimEnd().split('\n').slice(-lines).join('\n')
 
 /**
- * Runs the repo's checks on the host, so the factory never takes an agent's word that they pass.
  * @returns {Promise<{ command: string, finding: string }[]>} one entry per failing check
  */
 export async function failingChecks({ checks, cwd, timeoutMs, runDir, attempt, log, progress, step }) {
@@ -30,7 +29,6 @@ export async function failingChecks({ checks, cwd, timeoutMs, runDir, attempt, l
 
 export const baselineCachePath = (gitDir, sha) => join(gitDir, 'factory', `baseline-${sha}.json`)
 
-/** The cached result for this base commit, unless the `checks` commands changed since. */
 async function cachedBaseline(path, checks) {
     if (!existsSync(path)) {
         return null
@@ -41,8 +39,6 @@ async function cachedBaseline(path, checks) {
 }
 
 /**
- * The checks' result on origin/<base>, run once per base commit in a throwaway detached worktree (after the
- * `setup` commands) and cached in .git/factory, so a run can tell failures it caused from ones it inherited.
  * @returns {Promise<{ sha: string, checks: string[], failing: string[], runDir: string, cached: boolean }>}
  */
 export async function baselineChecks({ repo, config, runDir, log, progress, step }) {

@@ -19,9 +19,6 @@ herdr_with_prototypes() {
   printf '{"layout":"main-proto"}' >"$HERDR/shared.json"
 }
 
-# Runs the install on a terminal, keeping the saved features and typing $1 at the
-# leftover prompt, and leaves its output in $OUT. The prompts only appear on a
-# terminal.
 install_answering() {
   OUT="$SANDBOX/out"
   in_sandbox python3 -c '

@@ -1,11 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { ERROR_CODES, FactoryError } from './constants.mjs'
 
-/**
- * Runs a program without a shell and resolves with its stdout.
- * Rejects with a FactoryError carrying stderr when it exits non-zero or times out.
- * `onStdout` sees each chunk as it arrives, for logs that must be readable while the program runs.
- */
 export function run(command, args, { cwd, input, timeoutMs, onStdout } = {}) {
     return new Promise((resolve, reject) => {
         const child = spawn(command, args, { cwd, stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'] })
@@ -89,10 +84,8 @@ export function runUntilInterrupted(commandLine, { cwd, key }) {
     })
 }
 
-/** How long a timed-out check gets to stop after SIGTERM before SIGKILL. */
 const CHECK_KILL_GRACE_MS = 5000
 
-/** Signals the check's whole process group; the group may already be gone. */
 function signalGroup(child, signal) {
     try {
         process.kill(-child.pid, signal)
@@ -100,9 +93,7 @@ function signalGroup(child, signal) {
 }
 
 /**
- * Runs a repo-configured check command through sh, in its own process group, and never rejects on a
- * non-zero exit. Past `timeoutMs` the group is killed and the check fails. Processes the check leaves
- * behind are killed when sh exits, since one holding the output pipe would keep it from ever closing.
+ * Processes the check leaves behind are killed when sh exits, since one holding the output pipe would keep it from ever closing.
  * @returns {Promise<{ passed: boolean, output: string }>}
  */
 export function runCheckCommand(commandLine, { cwd, timeoutMs }) {

@@ -1,7 +1,4 @@
-// Turns a run into positioned cards and edges, free of the herdr runtime so it
-// can run under `node --test`. herdr can't load dagre, so this is a small layered
-// layout of its own: ranks by longest path, top to bottom, ordered by the mean
-// position of each card's parents.
+// herdr can't load dagre, so this is a small layered layout of its own.
 
 export const CARD_WIDTH = 240;
 export const CARD_HEIGHT = 64;
@@ -11,7 +8,6 @@ export const RANK_GAP = 56;
 export const EDGE_KINDS = Object.freeze({ root: "root", dep: "dep" });
 export const NODE_KINDS = Object.freeze({ run: "run", step: "step" });
 
-// The run is the root; a step with no dependency hangs from it, every other step from the steps it follows.
 export function buildGraph({ run, steps }) {
   const runNodeId = `run:${run.id}`;
   const stepIds = new Set(steps.map((step) => step.id));
@@ -29,7 +25,6 @@ export function buildGraph({ run, steps }) {
   return { nodes, edges };
 }
 
-// Longest path from the sources. An edge that would close a cycle is ignored, so bad data still draws.
 function ranks(nodes, edges) {
   const incoming = new Map(nodes.map((node) => [node.id, []]));
   for (const edge of edges) incoming.get(edge.to)?.push(edge.from);
@@ -48,7 +43,6 @@ function ranks(nodes, edges) {
   return rank;
 }
 
-// Cards get { x, y } (top-left), edges get their two end points; size is the whole drawing's.
 export function layoutGraph({ nodes, edges }) {
   const rank = ranks(nodes, edges);
   const rows = [];

@@ -1,7 +1,4 @@
 # shellcheck shell=bash disable=SC1010  # `herdr-app do` is its subcommand, not the keyword
-# The herdr step of install.sh: the features herdr-features.sh lists. Sourced by
-# install.sh, whose run, link and backup it uses.
-#
 # Own mods are linked from herdr/mods/. What differs from herdr's shipped files
 # is kept as patches in herdr/patches/ and built into real files here, from
 # whatever the installed herdr ships (docs/adr/0002). A build checks its patch
@@ -29,7 +26,6 @@ HERDR_CHANGES_JS="$HERDR_SRC/mods/git/changes.js"
 HERDR_CHANGES_LINK="$HERDR_HOME/mods/git"
 HERDR_VERSION_MARK="herdr-version:"
 HERDR_PATCH_MARK="herdr-patch:"
-# Beside each clone: the hash of the patch or edit it was built from.
 HERDR_BUILT_FROM=".built-from"
 HERDR_INSTALLER_SH="https://releases.herdr.dev/app/install.sh"
 HERDR_INSTALLER_PS1="https://releases.herdr.dev/app/install.ps1"
@@ -38,14 +34,12 @@ HERDR_WINDOW_WAIT_SECS="${HERDR_WINDOW_WAIT_SECS:-60}"
 HERDR_STATUS_CALL_SECS="${HERDR_STATUS_CALL_SECS:-10}"
 # Same code as timeout(1).
 HERDR_STATUS_STUCK=124
-# Set when this machine gets the Git panel, the only part that needs gh.
 HERDR_PANEL_WANTED=0
 # What the leftover check offers to remove. These can't be read from the repo's
 # history: the prototypes were only ever on prototype/* branches. When a mod or
 # clone leaves the lists above, add it here.
 HERDR_DROPPED_MODS=(proto-git proto-graph-community proto-pr-pane proto-prs-panel tabs-proto)
 HERDR_DROPPED_LAYOUTS=(main-proto)
-# When a binding leaves HERDR_FEATURES, add it here: "<key> <command>".
 HERDR_DROPPED_KEYS=()
 
 # The version of the binary on disk, which an update can replace under an open window.
@@ -131,10 +125,6 @@ patch_applies() {
 }
 
 # The layout is edited as JSON because herdr may reorder its keys, which a text patch can't follow.
-# "blocks" points blocks at other mods, "add" appends children to a container, and
-# "wrap" puts a node in a new container, first, followed by the wrap's "after"
-# nodes; the container takes the node's size. An entry of the edit with a
-# "feature" applies only when $4, the chosen panel features separated by spaces, has it.
 edited_layout() {
   py3 - "$@" <<'PY'
 import json, sys
@@ -201,7 +191,6 @@ dst.write_text(json.dumps(layout, indent=2) + "\n")
 PY
 }
 
-# Whether the edit $2, for the chosen panel features $3, applies to the layout $1. Writes nothing.
 layout_edit_applies() {
   local out status=0
   out="$(mktemp)"
@@ -225,7 +214,6 @@ herdr_copied_mod() {
   in_list "$1" "${HERDR_COPIED_MODS[@]}"
 }
 
-# Linked as $HERDR_HOME/mods/<name>, or copied there if HERDR_COPIED_MODS has it.
 link_herdr_mods() {
   local name
   while IFS= read -r name; do
@@ -237,7 +225,6 @@ link_herdr_mods() {
   done < <(herdr_mods wanted)
 }
 
-# Copy herdr/mods/$1 over $HERDR_HOME/mods/$1 unless they already match.
 copy_herdr_mod() {
   local src="$HERDR_SRC/mods/$1" dst="$HERDR_HOME/mods/$1"
   if [[ -d "$dst" && ! -L "$dst" ]] && diff -r "$src" "$dst" >/dev/null 2>&1; then
@@ -249,9 +236,6 @@ copy_herdr_mod() {
   ((DRY_RUN)) || info "copied $dst"
 }
 
-# Bind the chosen features' keys in keys.json's global section, leaving a key
-# bound to something else alone. herdr
-# writes keys.json on first start, so before that there is nothing to edit.
 install_herdr_keys() {
   local keys="$HERDR_HOME/keys.json" line wanted=()
   while IFS= read -r line; do
@@ -296,7 +280,6 @@ PY
   )
 }
 
-# $1: "herdr-key\t<key> <command>" lines from herdr_stale_entries.
 remove_herdr_keys() {
   py3 - "$HERDR_HOME/keys.json" "$BACKUP_DIR" "$1" <<'PY'
 import json, shutil, sys
@@ -488,7 +471,6 @@ outdated() {
   info "$what came from herdr ${recorded:-of unknown version}, running $running"
 }
 
-# The hash of the patch or edit $1, plus the text $2 if given, which a build records.
 patch_hash() {
   py3 - "$1" "${2:-}" <<'PY'
 import hashlib, sys
@@ -501,9 +483,6 @@ layout_built_from() {
   printf '%s/layouts/.%s%s' "$HERDR_HOME" "$HERDR_LAYOUT" "$HERDR_BUILT_FROM"
 }
 
-# Whether $2, the hash the build $1 recorded, isn't that of the patch or edit $3
-# (plus the text $4) now. Says so, which is what a dry run reports. A build from
-# before hashes were recorded counts as changed, so it is rebuilt once.
 patch_changed() {
   local what="$1" recorded="$2" patch="$3" extra="${4:-}"
   [[ "$recorded" != "$(patch_hash "$patch" "$extra")" ]] || return 1
@@ -516,7 +495,6 @@ changes_outdated() {
     patch_changed "Changes code" "$(sed -n "s|^// $HERDR_PATCH_MARK ||p" "$HERDR_CHANGES_JS")" "$HERDR_CHANGES_PATCH"
 }
 
-# $1: the clone, $2: its patch in herdr/patches/.
 mod_clone_outdated() {
   local dir="$HERDR_HOME/mods/$1"
   [[ -d "$dir" ]] || return 1

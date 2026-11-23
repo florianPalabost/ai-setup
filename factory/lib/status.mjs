@@ -12,11 +12,6 @@ async function latestRuns(repo) {
     return Object.fromEntries(runs.filter(([, run]) => run !== null))
 }
 
-/**
- * The factory's state for `factory status`: tickets from GitHub with their worktree and latest run, and the checkout running the stack.
- * `local` skips GitHub and returns only the runs, cheap enough to poll every few seconds.
- * `cached` reuses gh's answer from the last STATUS_CACHE, so every board polling it shares one GitHub call.
- */
 export async function factoryStatus(repo, { local = false, cached = false } = {}) {
     const runs = await latestRuns(repo)
     const summary = { repo: basename(repo.root), root: repo.root, stack: await readStack(repo.gitDir) }

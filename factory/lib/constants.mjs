@@ -37,7 +37,6 @@ export const SYSTEM_ERROR_CODES = Object.freeze({
     notPermitted: 'EPERM',
 })
 
-/** The steps `factory run --from` can continue a ticket from. */
 export const RESUME_STEPS = Object.freeze({
     checks: 'checks',
     review: 'review',

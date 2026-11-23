@@ -1,5 +1,3 @@
-// The Viewer's top bar: the path (● while it has unsaved edits), a notice
-// when the edits are at risk, and the buttons that fit the moment.
 import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 

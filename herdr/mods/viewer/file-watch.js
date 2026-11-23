@@ -1,5 +1,3 @@
-// Calls onChange(cx) when a file changes: a watch on its folder, or a slow poll
-// when herdr refuses or reclaims the watch. Takes the herdr module as `herdr`.
 const POLL_MS = 5000;
 
 const folderOf = (file) => file.slice(0, Math.max(1, file.lastIndexOf("/")));

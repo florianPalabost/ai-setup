@@ -1,4 +1,3 @@
-// A code view's state, colored from the theme: read-only unless asked.
 import { EditorState } from "gpui-base";
 import { theme, settings } from "herdr";
 import { languageFor } from "./text.js";

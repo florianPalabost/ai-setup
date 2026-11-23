@@ -24,7 +24,6 @@ export async function viewIssue(issueNumber, { cwd }) {
     }
 }
 
-/** Swaps labels, skipping removals of labels the issue doesn't carry. */
 export async function swapLabels(issue, { add = [], remove = [] }, { cwd }) {
     const toRemove = remove.filter((label) => issue.labels.includes(label))
     const toAdd = add.filter((label) => !issue.labels.includes(label))
@@ -42,10 +41,6 @@ export async function swapLabels(issue, { add = [], remove = [] }, { cwd }) {
 export const commentOnIssue = (issueNumber, body, { cwd }) =>
     gh(['issue', 'comment', String(issueNumber), '--body-file', '-'], { cwd, input: body })
 
-/**
- * Open ready-for-agent issues, oldest first, with their count of open blockers
- * from GitHub's native issue dependencies. Asks GitHub afresh: `next` starts a run on the first one.
- */
 export async function listReadyIssues({ cwd }) {
     const { issues } = await labelledIssues({ labels: [LABELS.ready], withPrs: false, cache: null }, { cwd })
 
@@ -78,11 +73,9 @@ export async function ensureFactoryLabels({ cwd }) {
     }
 }
 
-/** How long `factory status` reuses gh's cached answer, so the boards polling it share one GitHub call a minute. */
 export const STATUS_CACHE = '60s'
 const PAGE_SIZE = 100
 
-/** Open issues with any of the labels, oldest first, and on the first page the open PRs: one GraphQL call per 100 issues, blockers included. */
 const LABELLED_ISSUES_QUERY = `query($owner: String!, $name: String!, $labels: [String!], $after: String, $withPrs: Boolean!) {
   repository(owner: $owner, name: $name) {
     issues(states: OPEN, labels: $labels, first: ${PAGE_SIZE}, after: $after, orderBy: { field: CREATED_AT, direction: ASC }) {
@@ -109,7 +102,6 @@ async function labelledIssuesPage({ labels, after, withPrs, cache }, { cwd }) {
     return (await ghJson(args, { cwd })).data.repository
 }
 
-/** Every page of LABELLED_ISSUES_QUERY: `{ issues, prs }`, prs empty unless `withPrs`. */
 async function labelledIssues({ labels, withPrs, cache }, { cwd }) {
     const issues = []
     let prs = []
@@ -127,9 +119,6 @@ async function labelledIssues({ labels, withPrs, cache }, { cwd }) {
 const openBlockerNumbers = (issue) => issue.blockedBy.nodes.filter((blocker) => blocker.state === 'OPEN').map((blocker) => blocker.number)
 
 /**
- * Every open issue carrying a factory label, joined with the open PR on its agent branch and the open issues blocking it.
- * This is the factory's whole state on GitHub; run progress lives in .git/factory.
- * `cache` is a gh duration ("60s") during which every caller gets the same answer without asking GitHub again.
  * @returns {Promise<{ number: number, title: string, url: string, state: string, pr: { number: number, url: string, isDraft: boolean } | null, blockedBy: number[] }[]>}
  */
 export async function factoryState({ cwd, cache = null }) {
@@ -154,8 +143,6 @@ export async function factoryState({ cwd, cache = null }) {
 }
 
 /**
- * The merged PR of each of these agent branches, keyed by branch, with the commit it was merged at.
- * One GraphQL call with a field per branch, instead of a search over every agent PR ever merged.
  * @param {string[]} branches
  * @returns {Promise<Map<string, { number: number, headRefOid: string }>>}
  */

@@ -1,5 +1,3 @@
-// The result rows: file name first, then its folder. Only the rows that fit
-// are drawn; `top` is the first one.
 import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 
@@ -22,7 +20,6 @@ export function resultList({ hits, at, top, visible, t, onPick }) {
   return v_flex().gap(0).children(shown.map((hit, offset) => row(hit, top + offset, top + offset === at, t, onPick)));
 }
 
-// The first row to draw so that row `at` stays in view.
 export function scrollTop(top, at, visible, count) {
   const last = Math.max(0, count - visible);
   if (at < top) return at;

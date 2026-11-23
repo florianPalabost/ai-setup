@@ -1,9 +1,3 @@
-// The Output tab of the Bottom panel: follows one Output source of the active
-// space (a factory run's watch.log, the Laravel log), remembering the pick per
-// space. The log is selectable text. It stays at the end of the file until
-// scrolled up or clicked, stays silent on new lines, and holds still while text
-// is selected. Another mod asks it to follow a factory ticket by setting the
-// shared FOLLOW_KEY to { issue, at }.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, Select, Popup, EditorState, Editor } from "gpui-base";
 import * as herdr from "herdr";
@@ -56,7 +50,6 @@ export default class Output extends View {
     this.stopWatch?.();
   }
 
-  // Looks for the active space's sources and keeps following the one it had, else the space's pick.
   findSources(cx) {
     const space = activeSpace();
     const generation = ++this.finding;
@@ -103,7 +96,6 @@ export default class Output extends View {
       : watchFile(herdr, cx, source.path, (cx) => this.load(cx));
   }
 
-  // Reads the source's tail again; a change during a read reads once more after it.
   load(cx) {
     if (this.loading) { this.reloadAgain = true; return; }
     this.loading = true;
@@ -125,7 +117,6 @@ export default class Output extends View {
     });
   }
 
-  // A space switch, or another mod asking for a factory ticket, looks for sources again.
   sync(cx) {
     const request = /** @type {{ issue: number, at: number } | null} */ (herdr.shared(FOLLOW_KEY));
     if (request?.at > this.handledAt) {
@@ -143,7 +134,6 @@ export default class Output extends View {
     }
   }
 
-  // Puts the matching lines in the log, unless text is selected there: the next read or filter change catches up.
   showLines() {
     const range = this.log.selected_range();
     if (range.start !== range.end) return;

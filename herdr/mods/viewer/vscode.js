@@ -1,5 +1,3 @@
-// Opens a project folder in VS Code, at a file and line in it. Takes herdr's
-// exec and notify.
 export const VSCODE_ERROR_CODES = Object.freeze({
   missing: "vscode_missing",
   failed: "vscode_failed",

@@ -20,7 +20,6 @@ async function requireRun(repo, issueNumber) {
     return run
 }
 
-/** One readable line per transcript event worth seeing: the agent's messages, its tool calls, failed tool results and the final result. */
 function formatEvent(event) {
     if (event?.type === 'assistant') {
         return (event.message?.content ?? [])
@@ -45,7 +44,6 @@ function formatEvent(event) {
     return []
 }
 
-/** Reads a transcript from `offset` on, keeping a trailing partial line for the next read. */
 async function readNewLines(path, cursor) {
     if (!existsSync(path)) {
         return []
@@ -64,10 +62,6 @@ async function readNewLines(path, cursor) {
     return lines
 }
 
-/**
- * Follows a ticket's latest run in the terminal: each step as it starts and ends, and the running agent's
- * transcript as readable lines. Returns once the run records its outcome, or after one last read once `stopped` says so.
- */
 export async function watchRun({ repo, issueNumber, write = (text) => process.stdout.write(`${text}\n`), stopped = () => false }) {
     const cursors = new Map()
     const announced = new Map()
@@ -105,8 +99,6 @@ export async function watchRun({ repo, issueNumber, write = (text) => process.st
 }
 
 /**
- * Writes what `factory watch` prints to watch.log in the run folder while the run goes, so a reader can follow it
- * as plain text. `stop` ends it after one last read; `done` settles once it has.
  * @returns {{ stop: () => void, done: Promise<void> }}
  */
 export function writeWatchLog({ repo, issueNumber, runDir }) {
@@ -117,10 +109,6 @@ export function writeWatchLog({ repo, issueNumber, runDir }) {
     return { stop: () => (stopping = true), done }
 }
 
-/**
- * Opens an interactive Claude on a step's session, in the ticket's worktree: by default the last coding step
- * (implement or a rework), so the human carries on with the agent's full context.
- */
 export async function resumeSession({ repo, issueNumber, stepName, force }) {
     const run = await requireRun(repo, issueNumber)
     const running = run.steps.findLast((step) => step.status === STEP_STATUSES.running)

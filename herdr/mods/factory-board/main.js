@@ -1,7 +1,3 @@
-// The Factory board: the factory's tickets as a kanban. Lanes: Needs you, Working,
-// Done · draft PR, Ready. A blocked ticket sits under the one blocking it, and
-// the ticket `factory next` would pick is marked "next up". With `panel` in its
-// props it is the Factory panel instead (panel.js).
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { exec, readTextFile, spaces, panes, theme, run, notify, window, checking, props, layout, setShared } from "herdr";
@@ -14,9 +10,7 @@ const POLL_INTERVAL_MS = 5000;
 const REPO_KEY = "factory-board.repo";
 const LANE_MIN_WIDTH = 180;
 const CHILD_INDENT = 14;
-// Opens a run's Markdown log in the person's pager, the path kept out of the script.
 const PAGER_SCRIPT = 'exec "${PAGER:-less}" "$1"';
-// The Bottom panel's Output tab follows the ticket this shared value names (bottom-output/main.js).
 const OUTPUT_FOLLOW_KEY = "bottom-output.follow";
 const BOTTOM_PANEL = "bottom";
 const CONTINUE_ARGS = ["--from", "checks", "--force"];
@@ -35,7 +29,6 @@ export default class FactoryBoard extends View {
     this.source = createFactorySource({ exec, readTextFile, spaces, panes });
     this.openUrl = createOpener({ platform: () => window().platform, readTextFile, exec, warn: (body) => this.warn("Link not opened", body) });
     this.data = null; this.error = null; this.loading = false; this.panel = Boolean(props()?.panel);
-    // Tickets whose Start or Continue was just clicked, by startKey: { root, number, state, at }.
     this.starting = new Map();
     this.root = localStorage.getItem(REPO_KEY);
     this.spaceId = null; this.refreshAgain = false;
@@ -70,7 +63,6 @@ export default class FactoryBoard extends View {
     this.refresh(cx);
   }
 
-  // On a space switch, shows the factory repo the new space works in, if it has one.
   followSpace(cx) {
     const space = activeSpace();
     const id = space?.id ?? null;
@@ -108,7 +100,6 @@ export default class FactoryBoard extends View {
     this.showRepo(repos[(index + by + repos.length) % repos.length].root, cx);
   }
 
-  // The space already working in the worktree, else a new one there.
   openWorktree(ticket) {
     const { on } = this.data.repo;
     const inside = (folder) => folder === ticket.worktree || folder?.startsWith(`${ticket.worktree}/`);
@@ -122,7 +113,6 @@ export default class FactoryBoard extends View {
     run("terminal.open", { argv: ["factory", command, String(ticket.number), "--repo", this.data.repo.root, ...extraArgs], folder, place: "tab" });
   }
 
-  // In the Bottom panel's Output tab when the layout has it, else in a terminal tab.
   watch(ticket) {
     if (!hasNode(layout(), BOTTOM_PANEL)) return this.openTerminal(ticket, ACTIONS.watch);
     setShared(OUTPUT_FOLLOW_KEY, { issue: ticket.number, at: Date.now() });

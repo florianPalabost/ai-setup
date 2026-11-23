@@ -1,5 +1,3 @@
-// The Factory panel: the board's lanes stacked in a narrow side panel, one row
-// per ticket, with links to the full board and the Run graph.
 import { div } from "gpui-kit";
 import * as herdr from "herdr";
 import { v_flex, h_flex } from "gpui-base";
