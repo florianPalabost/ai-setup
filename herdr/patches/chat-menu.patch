@@ -1,0 +1,5 @@
+--- a/menu-base.js
++++ b/menu-base.js
+@@ -154 +154 @@
+-            .hover((s) => s.bg(t.hover))
++            .hover((s) => s.bg(t.hover)).cursor_pointer()
