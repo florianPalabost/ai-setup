@@ -19,3 +19,6 @@
 @@ -142 +152 @@
 -            .when(i > 0 && (it[1].endsWith(".close") || it[1] === "app.help" || (it[1] === "app.theme" && list[i - 1][1] !== "app.theme")), el => el.child(div().mx(7).my(4).h(1).bg(t.border)))
 +            .when(i > 0 && ((closes(it[1]) && !closes(list[i - 1][1])) || it[1] === "app.help" || (it[1] === "app.theme" && list[i - 1][1] !== "app.theme")), el => el.child(div().mx(7).my(4).h(1).bg(t.border)))
+@@ -153 +163 @@
+-            .hover((s) => s.bg(t.hover))
++            .hover((s) => s.bg(t.hover)).cursor_pointer()
