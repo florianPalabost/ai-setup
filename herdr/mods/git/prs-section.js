@@ -11,6 +11,7 @@ import { SlotWatcher, refreshDue, sharedSlot, startRefresh } from "./shared-resu
 const SLOT = "prs";
 // Only decides whether something is due; the calls follow prsInterval.
 const TICK_MS = 15000;
+const SHARE_ANSWER_ACROSS_SPACES = { cache: true };
 
 class MyPrs {
   constructor(cx) {
@@ -30,7 +31,7 @@ class MyPrs {
   follow(cx) {
     const { slot } = this, key = placeKey(here(herdr));
     const due = refreshDue(slot, key, { active: herdr.window()?.active ?? true, now: Date.now(), interval: prsInterval(slot.value) });
-    if (due) startRefresh(slot, key, () => loadMyPrs(herdr.exec, { cache: true }));
+    if (due) startRefresh(slot, key, () => loadMyPrs(herdr.exec, SHARE_ANSWER_ACROSS_SPACES));
     this.watcher.watch(cx);
   }
 
