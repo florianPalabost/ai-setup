@@ -16,17 +16,17 @@ HERDR_CHOICE_OFF=off
 HERDR_CHOSEN=()
 HERDR_DEFAULT_OFF=off
 
-feature_field() {
+feature_part() {
   local id label mods keys default
   IFS='|' read -r id label mods keys default <<<"$1"
-  case "$2" in
-    1) printf '%s' "$id" ;;
-    2) printf '%s' "$label" ;;
-    3) printf '%s' "$mods" ;;
-    4) printf '%s' "$keys" ;;
-    5) printf '%s' "$default" ;;
-  esac
+  printf '%s' "${!2}"
 }
+
+feature_id() { feature_part "$1" id; }
+feature_label() { feature_part "$1" label; }
+feature_mods() { feature_part "$1" mods; }
+feature_keys() { feature_part "$1" keys; }
+feature_default() { feature_part "$1" default; }
 
 saved_as() {
   [[ -f "$HERDR_CHOICE_FILE" ]] && grep -qxF "$1 $2" "$HERDR_CHOICE_FILE"
@@ -34,10 +34,10 @@ saved_as() {
 
 feature_on() {
   local id
-  id="$(feature_field "$1" 1)"
+  id="$(feature_id "$1")"
   saved_as "$id" "$HERDR_CHOICE_ON" && return 0
   saved_as "$id" "$HERDR_CHOICE_OFF" && return 1
-  [[ "$(feature_field "$1" 5)" != "$HERDR_DEFAULT_OFF" ]]
+  [[ "$(feature_default "$1")" != "$HERDR_DEFAULT_OFF" ]]
 }
 
 load_herdr_choice() {
@@ -45,7 +45,7 @@ load_herdr_choice() {
   HERDR_CHOSEN=()
   for spec in "${HERDR_FEATURES[@]}"; do
     if feature_on "$spec"; then
-      HERDR_CHOSEN+=("$(feature_field "$spec" 1)")
+      HERDR_CHOSEN+=("$(feature_id "$spec")")
     fi
   done
 }
@@ -73,8 +73,8 @@ herdr_chosen_panels() {
 herdr_mods() {
   local spec mod
   for spec in "${HERDR_FEATURES[@]}"; do
-    [[ "$1" == all ]] || herdr_chosen "$(feature_field "$spec" 1)" || continue
-    for mod in $(feature_field "$spec" 3); do
+    [[ "$1" == all ]] || herdr_chosen "$(feature_id "$spec")" || continue
+    for mod in $(feature_mods "$spec"); do
       printf '%s\n' "$mod"
     done
   done | awk '!seen[$0]++'
@@ -83,8 +83,8 @@ herdr_mods() {
 herdr_keys() {
   local spec binding
   for spec in "${HERDR_FEATURES[@]}"; do
-    [[ "$1" == all ]] || herdr_chosen "$(feature_field "$spec" 1)" || continue
-    for binding in $(feature_field "$spec" 4); do
+    [[ "$1" == all ]] || herdr_chosen "$(feature_id "$spec")" || continue
+    for binding in $(feature_keys "$spec"); do
       printf '%s %s\n' "${binding%%=*}" "${binding#*=}"
     done
   done
@@ -95,7 +95,7 @@ save_herdr_choice() {
   ((DRY_RUN)) && return 0
   mkdir -p "$HERDR_HOME"
   for spec in "${HERDR_FEATURES[@]}"; do
-    id="$(feature_field "$spec" 1)"
+    id="$(feature_id "$spec")"
     if herdr_chosen "$id"; then
       printf '%s %s\n' "$id" "$HERDR_CHOICE_ON"
     else
@@ -120,8 +120,8 @@ print_herdr_checklist() {
   local spec index=1 mark
   for spec in "${HERDR_FEATURES[@]}"; do
     mark=" "
-    herdr_chosen "$(feature_field "$spec" 1)" && mark="x"
-    printf '    %d [%s] %s\n' "$index" "$mark" "$(feature_field "$spec" 2)"
+    herdr_chosen "$(feature_id "$spec")" && mark="x"
+    printf '    %d [%s] %s\n' "$index" "$mark" "$(feature_label "$spec")"
     index=$((index + 1))
   done
 }
@@ -139,7 +139,7 @@ choose_herdr_features() {
     [[ -n "$reply" ]] || break
     for number in $reply; do
       if [[ "$number" =~ ^[0-9]+$ ]] && ((number >= 1 && number <= ${#HERDR_FEATURES[@]})); then
-        toggle_herdr_feature "$(feature_field "${HERDR_FEATURES[number - 1]}" 1)"
+        toggle_herdr_feature "$(feature_id "${HERDR_FEATURES[number - 1]}")"
       else
         warn "no feature $number"
       fi
