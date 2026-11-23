@@ -9,7 +9,7 @@ import { commentOnIssue, createDraftPr, editPrBody, findOpenPrForBranch, swapLab
 import { CODING_DISALLOWED_TOOLS, PR_BODY_ALLOWED_TOOLS, PR_BODY_SCHEMA, REVIEW_ALLOWED_TOOLS, REVIEW_SCHEMA, implementPrompt, prBodyPrompt, reviewPrompt, reworkPrompt } from './prompts.mjs'
 import { writeWatchLog } from './session.mjs'
 import { runShellCommand } from './shell.mjs'
-import { canReachOrigin, commitsAhead, prepareWorktree, pushBranch, worktreePathFor } from './worktree.mjs'
+import { promptToReachOrigin, commitsAhead, prepareWorktree, pushBranch, worktreePathFor } from './worktree.mjs'
 
 const READ_ONLY_PERMISSION_MODE = 'dontAsk'
 
@@ -142,7 +142,7 @@ export async function runTicket({ repo, issueNumber, config, options, log }) {
     }
 
     log('checking that origin accepts this machine (ssh may ask for your key passphrase now, not at the push)')
-    if (!canReachOrigin({ root: cwd })) {
+    if (!promptToReachOrigin({ root: cwd })) {
         throw new FactoryError(ERROR_CODES.remoteUnreachable, "can't reach origin with git, so the branch couldn't be pushed: load your ssh key (ssh-add) or fix the remote's credentials, then run again")
     }
 

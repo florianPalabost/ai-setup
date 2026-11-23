@@ -61,6 +61,6 @@ export async function commitsAhead({ root, base, branch }) {
     return Number((await git(['rev-list', '--count', `origin/${base}..${branch}`], { cwd: root })).trim())
 }
 
-export const canReachOrigin = ({ root }) => spawnSync('git', ['ls-remote', '--exit-code', 'origin', 'HEAD'], { cwd: root, stdio: ['inherit', 'ignore', 'inherit'] }).status === 0
+export const promptToReachOrigin = ({ root }) => spawnSync('git', ['ls-remote', '--exit-code', 'origin', 'HEAD'], { cwd: root, stdio: ['inherit', 'ignore', 'inherit'] }).status === 0
 
 export const pushBranch = ({ root, branch }) => git(['push', '-u', 'origin', branch], { cwd: root })
