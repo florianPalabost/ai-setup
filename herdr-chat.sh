@@ -2,7 +2,6 @@
 
 HERDR_CHAT_INSTALLER_SH="https://raw.githubusercontent.com/ChmaraX/herdr-chat/main/install.sh"
 HERDR_CHAT_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/herdr-chat"
-HERDR_LAYOUT_REBUILT=0
 
 herdr_chat_installed() {
   [[ -f "$HERDR_CHAT_DIR/current/install/app.sh" ]]
@@ -31,7 +30,7 @@ install_herdr_chat() {
     info "Chat: install herdr-chat by hand on Windows (https://github.com/ChmaraX/herdr-chat)"
     return 0
   fi
-  if herdr_chat_installed && ((!UPDATE && !HERDR_LAYOUT_REBUILT)); then
+  if herdr_chat_installed && ((!UPDATE)) && ! herdr_layout_rebuilt; then
     info "herdr-chat is installed"
     return 0
   fi
