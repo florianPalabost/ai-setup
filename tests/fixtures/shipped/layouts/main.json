@@ -12,6 +12,7 @@
         { "id": "files", "type": "block", "content": { "mod": "files" } },
         { "id": "changes", "type": "block", "content": { "mod": "changes" } }
       ]
-    }
+    },
+    { "id": "status", "type": "block", "content": { "mod": "workspace-status" }, "size": { "px": 28 } }
   ]
 }

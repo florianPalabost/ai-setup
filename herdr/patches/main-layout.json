@@ -21,6 +21,10 @@
           "children": [{ "id": "output", "type": "block", "content": { "mod": "bottom-output" } }]
         }
       ]
+    },
+    "status": {
+      "feature": "usage", "id": "status-row", "type": "row",
+      "after": [{ "id": "usage", "type": "block", "content": { "mod": "claude-usage" }, "size": { "px": 210 } }]
     }
   }
 }
