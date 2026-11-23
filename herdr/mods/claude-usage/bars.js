@@ -1,6 +1,6 @@
 import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { SHOW_LEFT, SHOW_USED } from "./meter.js";
+import { SHOW_LEFT, SHOW_USED, toneColor } from "./meter.js";
 
 const WIDTH = 260;
 const BAR_HEIGHT = 6;
@@ -30,12 +30,11 @@ function bar(t, toneColor, limit) {
     .when(Boolean(limit.resets), (el) => el.child(div().text_size(11).text_color(t.dim).child(limit.resets)));
 }
 
-// bars: from limitBars; toneColors: a theme colour per tone; onShow(show, cx) flips used/left.
-export function barsPanel(t, bars, toneColors, show, onShow) {
+export function barsPanel(t, bars, show, onShow) {
   return v_flex().w(WIDTH + 28).p(14).gap(14).rounded(10).border_1().border_color(t.border).bg(t.popover).shadow_md()
     .text_size(12)
     .child(h_flex().items_center()
       .child(div().flex_1().text_color(t.muted).child("Claude usage"))
       .child(showSwitch(t, show, onShow)))
-    .children(bars.map((limit) => bar(t, t[toneColors[limit.tone]], limit)));
+    .children(bars.map((limit) => bar(t, toneColor(t, limit.tone), limit)));
 }

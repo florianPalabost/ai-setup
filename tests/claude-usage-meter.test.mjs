@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { limitBars, meterParts } from "../herdr/mods/claude-usage/meter.js";
+import { SHOW_LEFT, SHOW_USED, limitBars, meterParts } from "../herdr/mods/claude-usage/meter.js";
 
 const NOW = 1_800_000_000;
 const HOUR = 3600;
@@ -75,7 +75,7 @@ test("the bars show each limit's used share, named in full, with when it resets"
   };
 
   // Act
-  const bars = limitBars(saved, NOW, "used");
+  const bars = limitBars(saved, NOW, SHOW_USED);
 
   // Assert
   assert.deepEqual(bars, [
@@ -89,7 +89,7 @@ test("flipped to what is left, the bars show the share left but keep the used sh
   const saved = { five_hour: { used_percentage: 85, resets_at: NOW + HOUR } };
 
   // Act
-  const [bar] = limitBars(saved, NOW, "left");
+  const [bar] = limitBars(saved, NOW, SHOW_LEFT);
 
   // Assert
   assert.deepEqual(bar, { name: "5-hour", value: "15% left", fill: 0.15, tone: "high", resets: "Resets in 1h 0m" });
@@ -100,7 +100,7 @@ test("a bar past its reset is empty with nothing to wait for", () => {
   const saved = { five_hour: { used_percentage: 85, resets_at: NOW - 1 } };
 
   // Act
-  const [bar] = limitBars(saved, NOW, "used");
+  const [bar] = limitBars(saved, NOW, SHOW_USED);
 
   // Assert
   assert.deepEqual(bar, { name: "5-hour", value: "0% used", fill: 0, tone: "low", resets: null });

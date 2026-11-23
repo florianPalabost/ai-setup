@@ -7,6 +7,7 @@ const HIGH_FROM = 80;
 const MINUTE = 60;
 const HOUR = 3600;
 const DAY = 86400;
+const TONE_COLOR = { low: "ansi2", mid: "ansi3", high: "ansi1" };
 
 export const SHOW_USED = "used";
 export const SHOW_LEFT = "left";
@@ -23,7 +24,6 @@ function tone(used) {
   return "low";
 }
 
-// saved: the cache the status line writes, { five_hour, seven_day: { used_percentage, resets_at } }.
 function limits(saved, now) {
   return LIMITS.filter(({ key }) => saved?.[key]).map(({ key, label, name }) => {
     const { used_percentage, resets_at } = saved[key];
@@ -33,11 +33,14 @@ function limits(saved, now) {
   });
 }
 
+export function toneColor(t, tone) {
+  return t[TONE_COLOR[tone]];
+}
+
 export function meterParts(saved, now) {
   return limits(saved, now).map(({ label, used, resets }) => ({ label, percent: `${used}%`, tone: tone(used), resets }));
 }
 
-// show: SHOW_USED or SHOW_LEFT, what the bars fill with. The tone always follows the used share.
 export function limitBars(saved, now, show) {
   return limits(saved, now).map(({ name, used, resets }) => {
     const shown = show === SHOW_LEFT ? 100 - used : used;
