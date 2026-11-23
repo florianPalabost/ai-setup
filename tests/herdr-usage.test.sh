@@ -115,9 +115,28 @@ test_a_status_line_changed_since_is_left_alone_on_untick() {
   assert_eq "orca-statusline" "$(statusline_command)" "status line"
 }
 
+test_a_dry_run_leaves_their_status_line() {
+  # Arrange
+  new_repo_copy
+  herdr_with_window
+  their_statusline_set
+  usage_chosen on
+
+  # Act
+  install --dry-run
+  local code=$?
+
+  # Assert
+  assert_eq 0 "$code" "exit code"
+  assert_eq "orca-statusline" "$(statusline_command)" "status line"
+  assert_no_file "$HERDR/.ai-setup-statusline.json"
+  assert_contains "$OUT" "[dry-run] would set the Usage meter's status line"
+}
+
 test_case "ticking usage sets the meter's status line and places the meter" test_ticking_usage_sets_the_meters_status_line_and_places_the_meter
 test_case "unticking usage puts their status line back" test_unticking_usage_puts_their_status_line_back
 test_case "a rerun keeps their status line to put back" test_a_rerun_keeps_their_status_line_to_put_back
 test_case "unticking with no earlier status line removes the meter's" test_unticking_with_no_earlier_status_line_removes_the_meters
 test_case "a status line changed since is left alone on untick" test_a_status_line_changed_since_is_left_alone_on_untick
+test_case "a dry run leaves their status line" test_a_dry_run_leaves_their_status_line
 finish
