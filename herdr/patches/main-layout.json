@@ -2,6 +2,7 @@
   "blocks": {
     "tabs": { "from": "tabs", "to": "tabs-git" },
     "spaces": { "from": "spaces", "to": "spaces-git" },
+    "main": { "from": "pane", "to": "pane-git", "pane_header": true },
     "files": { "from": "files", "to": "files-git" },
     "changes": { "from": "changes", "to": "git", "feature": "git" }
   },

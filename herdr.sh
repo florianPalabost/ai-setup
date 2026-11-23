@@ -17,7 +17,7 @@ HERDR_MOD_ICONS=("git-graph/icons git-graph-icons")
 # files change. A re-run replaces a copy that differs.
 HERDR_COPIED_MODS=(automations)
 # "<shipped mod> <clone> <patch in herdr/patches/>"
-HERDR_MOD_CLONES=("tabs tabs-git tabs.patch" "menu menu-git menu.patch" "new-menu new-menu-git new-menu.patch" "spaces spaces-git spaces.patch" "files files-git files.patch")
+HERDR_MOD_CLONES=("tabs tabs-git tabs.patch" "menu menu-git menu.patch" "new-menu new-menu-git new-menu.patch" "spaces spaces-git spaces.patch" "pane pane-git pane.patch" "files files-git files.patch")
 HERDR_LAYOUT_SHIPPED=main
 HERDR_LAYOUT=main-git
 HERDR_LAYOUT_EDIT="$HERDR_SRC/patches/main-layout.json"
@@ -171,6 +171,8 @@ def swap_mod(node):
     if not change:
         return
     content = node.get("content", {})
+    if change.get("pane_header"):
+        content = content.get("pane", {}).get("header", {}).get("content", {})
     if content.get("mod") != change["from"]:
         sys.exit(EXIT_EDIT_DOES_NOT_APPLY)
     content["mod"] = change["to"]
