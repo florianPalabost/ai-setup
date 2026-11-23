@@ -1,0 +1,5 @@
+--- a/main.js
++++ b/main.js
+@@ -44 +44 @@
+-      .text_color(enabled ? t.foreground : t.dim).when(enabled, el => el.hover(s => s.bg(t.selected)))
++      .text_color(enabled ? t.foreground : t.dim).when(enabled, el => el.hover(s => s.bg(t.selected)).cursor_pointer())

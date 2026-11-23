@@ -70,9 +70,18 @@
 +    }
 +  }
 +
+@@ -102 +164 @@
+-    const button = (id, label, action) => div().id(id).size(26).flex_none().flex().items_center().justify_center().rounded(6).text_color(t.dim).hover(s => s.bg(t.hover).text_color(t.foreground))
++    const button = (id, label, action) => div().id(id).size(26).flex_none().flex().items_center().justify_center().rounded(6).text_color(t.muted).hover(s => s.bg(t.hover).text_color(t.foreground)).cursor_pointer()
+@@ -112 +174 @@
+-        .hover(s => s.bg(t.hover))
++        .hover(s => s.bg(t.hover)).cursor_pointer()
 @@ -119 +181 @@
 -        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openOverlay({ mod: "menu", kind: "popup", width: 200, props: { tab: "tab", target: { id: c.id, space: space.id } } }); })
 +        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openOverlay({ mod: "menu-git", kind: "popup", width: 200, props: { tab: "tab", target: { id: c.id, space: space.id } } }); })
+@@ -124 +186 @@
+-        .when(c.active, el => el.child(div().id(`close-${c.id}`).text_color(t.dim).on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); }).child(svg("mods/pane/close.svg").size(12))));
++        .when(c.active, el => el.child(div().id(`close-${c.id}`).p(2).rounded(4).text_color(t.dim).hover(s => s.bg(t.hover).text_color(t.foreground)).cursor_pointer().on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); }).child(svg("mods/pane/close.svg").size(12))));
 @@ -132 +194,3 @@
 -    const enabled = shared("workspace.panels") ?? ["files", "changes"];
 +    const added = PANELS.filter(p => body?.children?.some(child => child.id === p.id));
@@ -82,13 +91,16 @@
 +    const bottom = find(root, "bottom");
 +    const bottomButton = () => h_flex().id("panel-bottom").h(26).w(26).flex_none().items_center().justify_center().rounded(6)
 +      .text_size(12).bg(bottom.hidden ? t.chrome : t.selected).text_color(bottom.hidden ? t.muted : t.foreground)
-+      .hover(s => s.bg(t.hover)).on_mouse_down("left", stop)
++      .hover(s => (bottom.hidden ? s.bg(t.hover) : s).text_color(t.foreground)).cursor_pointer().on_mouse_down("left", stop)
 +      .on_click(() => run("layout.toggle", { id: "bottom" }))
 +      .tooltip("Output").accessibility_label("Output").child(svg("mods/workspace-chrome/terminal.svg").size(14));
 @@ -136 +206,2 @@
 -      return h_flex().id(`panel-${id}`).h(26).px(8).gap(5).flex_none().items_center().rounded(6)
 +      const badge = id === "automations" ? this.unread : 0;
 +      return h_flex().id(`panel-${id}`).h(26).min_w(26).px(6).gap(5).flex_none().items_center().justify_center().rounded(6)
+@@ -138 +209 @@
+-        .hover(s => s.bg(t.hover)).on_mouse_down("left", stop)
++        .hover(s => (on ? s : s.bg(t.hover)).text_color(t.foreground)).cursor_pointer().on_mouse_down("left", stop)
 @@ -141,2 +212,4 @@
 -          else { run("layout.select", { stack: "panel-body", child: id }); run("layout.show", { id: "panel" }); }
 -        }).child(svg(icon).size(14)).child(label);
@@ -96,6 +108,9 @@
 +        }).tooltip(label).accessibility_label(label).child(svg(icon).size(14))
 +        .when(badge > 0, el => el.child(div().h(15).min_w(15).px(4).rounded(8).flex().items_center().justify_center()
 +          .bg(t.accent).text_color(t.background).text_size(10).font_semibold().child(String(badge))));
+@@ -150 +223 @@
+-      .child(button("tab-new", "+", () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 })))
++      .child(button("tab-new", "+", () => openOverlay({ mod: "new-menu-git", kind: "popup", width: 250, height: 512 })))
 @@ -152 +225,2 @@
 -      .when(enabled.includes("changes"), el => el.child(panelButton("changes", "Changes", "mods/changes/changes.svg")))
 +      .children(added.map(p => panelButton(p.id, p.label, p.icon)))
