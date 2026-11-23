@@ -25,6 +25,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/herdr.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/herdr-features.sh"
 # shellcheck source=herdr-automations.sh
 source "$(dirname "${BASH_SOURCE[0]}")/herdr-automations.sh"
+# shellcheck source=herdr-chat.sh
+source "$(dirname "${BASH_SOURCE[0]}")/herdr-chat.sh"
 
 BACKUP_DIR="$CLAUDE_DIR/backups/ai-setup-$(date +%Y%m%d-%H%M%S)"
 DRY_RUN=0

@@ -7,6 +7,7 @@ HERDR_FEATURES=(
   "quick-open|Quick open (ctrl-p): a file by fuzzy name|quick-open viewer|ctrl-p=mod.open:quick-open"
   "search|Search (ctrl-alt-f): text in files|search viewer|ctrl-alt-f=mod.open:search"
   "bottom|Bottom panel (ctrl-j): Output follows a factory run or the Laravel log|bottom-output|ctrl-j=layout.toggle:bottom"
+  "chat|Chat: Pi, Claude Code and Codex as a GUI chat, and sub-agents you can open as one (installs herdr-chat)|||off"
   "automations|Automations panel (ctrl-alt-a): scheduled agent prompts (installs a binary and a scheduler service)|automations|ctrl-alt-a=tabs-git.show-automations|off"
 )
 HERDR_PANEL_FEATURES=(git factory find bottom automations)

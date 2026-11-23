@@ -466,6 +466,7 @@ build_layout() {
     show_layout_afresh "$HERDR_LAYOUT"
   fi
   patch_hash "$HERDR_LAYOUT_EDIT" "$(herdr_chosen_panels)" >"$(layout_built_from)"
+  HERDR_LAYOUT_REBUILT=1
   info "built $HERDR_LAYOUT from $HERDR_LAYOUT_SHIPPED"
 }
 
@@ -844,6 +845,7 @@ install_herdr() {
   install_herdr_keys
   sync_automations
   install_herdr_layout
+  sync_herdr_chat
 }
 
 install_herdr_layout() {
