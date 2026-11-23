@@ -12,6 +12,8 @@ HERDR_FEATURES=(
   "usage|Usage meter: Claude's 5-hour and weekly limits in the status bar (replaces Claude Code's status line)|claude-usage||off"
 )
 HERDR_PANEL_FEATURES=(git factory find bottom automations usage)
+# What the layout edit depends on: the panels, and chat, whose installer takes the agents block over.
+HERDR_LAYOUT_FEATURES=("${HERDR_PANEL_FEATURES[@]}" chat)
 HERDR_CHOICE_FILE="$HERDR_HOME/.ai-setup-features"
 HERDR_CHOICE_ON=on
 HERDR_CHOICE_OFF=off
@@ -64,9 +66,9 @@ herdr_wants_panel() {
   return 1
 }
 
-herdr_chosen_panels() {
+herdr_layout_features() {
   local id out=()
-  for id in "${HERDR_PANEL_FEATURES[@]}"; do
+  for id in "${HERDR_LAYOUT_FEATURES[@]}"; do
     herdr_chosen "$id" && out+=("$id")
   done
   printf '%s' "${out[*]+"${out[*]}"}"
