@@ -1,0 +1,5 @@
+--- a/main.js
++++ b/main.js
+@@ -29 +29 @@
+-      .child(div().id("palette").text_color(t.dim).on_click(() => run("app.palette")).child(this.hint(t)));
++      .child(div().id("palette").px(6).rounded(6).text_color(t.dim).hover(s => s.bg(t.hover).text_color(t.foreground)).cursor_pointer().on_click(() => run("app.palette")).child(this.hint(t)));
