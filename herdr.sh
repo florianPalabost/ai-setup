@@ -128,6 +128,11 @@ patch_applies() {
   return "$status"
 }
 
+# Whether the file $1 already has the patch $2. Writes nothing.
+patch_applied() {
+  patch -s -f -F0 -p1 -R --dry-run -d "$(dirname "$1")" -i "$2" >/dev/null 2>&1
+}
+
 # The layout is edited as JSON because herdr may reorder its keys, which a text patch can't follow.
 edited_layout() {
   py3 - "$@" <<'PY'

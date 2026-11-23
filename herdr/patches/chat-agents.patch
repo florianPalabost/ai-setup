@@ -1,0 +1,28 @@
+--- a/agents-base.js
++++ b/agents-base.js
+@@ -160 +160 @@
+-        .hover((el) => el.bg(t.hover))
++        .hover((el) => el.bg(t.hover)).cursor_pointer()
+@@ -202 +202 @@
+-      .hover((s) => s.bg(t.hover))
++      .hover((s) => s.bg(t.hover)).cursor_pointer()
+@@ -320 +320 @@
+-          .hover((s) => s.bg(t.hover))
++          .hover((s) => s.bg(t.hover)).cursor_pointer()
+@@ -367 +367 @@
+-          .when(subs.length > 0, el => el.on_click((_e, cx) => {
++          .when(subs.length > 0, el => el.cursor_pointer().on_click((_e, cx) => {
+@@ -444 +444 @@
+-                .text_size(11)
++                .text_size(11).p(2).rounded(4)
+@@ -446,2 +446,2 @@
+-                .hover((s) => s.text_color(t.foreground))
+-                .on_click(() => openOverlay({ mod: "agents", kind: "popup", width: 200, height: 140, props: { sortMenu: true } }))
++                .hover((s) => s.bg(t.hover).text_color(t.foreground)).cursor_pointer()
++                .on_click(() => openOverlay({ mod: "chat-agents", kind: "popup", width: 200, height: 140, props: { sortMenu: true } }))
+@@ -466 +466 @@
+-                .text_size(13)
++                .text_size(13).px(4).rounded(4)
+@@ -468 +468 @@
+-                .hover((s) => s.text_color(t.foreground))
++                .hover((s) => s.bg(t.hover).text_color(t.foreground)).cursor_pointer()
