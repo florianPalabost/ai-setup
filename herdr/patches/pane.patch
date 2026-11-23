@@ -1,0 +1,8 @@
+--- a/main.js
++++ b/main.js
+@@ -51 +51 @@
+-      .hover((s) => s.bg(t.hover).text_color(t.foreground))
++      .hover((s) => s.bg(t.hover).text_color(t.foreground)).cursor_pointer()
+@@ -78 +78 @@
+-      .text_size(12)
++      .text_size(12).cursor_pointer()
