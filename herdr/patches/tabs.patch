@@ -80,18 +80,20 @@
 +    const enabled = [...filesFromWelcome, ...added.map(p => p.id)];
 @@ -133,0 +198,6 @@
 +    const bottom = find(root, "bottom");
-+    const bottomButton = () => h_flex().id("panel-bottom").h(26).px(8).gap(5).flex_none().items_center().rounded(6)
++    const bottomButton = () => h_flex().id("panel-bottom").h(26).w(26).flex_none().items_center().justify_center().rounded(6)
 +      .text_size(12).bg(bottom.hidden ? t.chrome : t.selected).text_color(bottom.hidden ? t.muted : t.foreground)
 +      .hover(s => s.bg(t.hover)).on_mouse_down("left", stop)
 +      .on_click(() => run("layout.toggle", { id: "bottom" }))
-+      .child(svg("mods/workspace-chrome/terminal.svg").size(14)).child("Output");
-@@ -135,0 +206 @@
++      .tooltip("Output").accessibility_label("Output").child(svg("mods/workspace-chrome/terminal.svg").size(14));
+@@ -136 +206,2 @@
+-      return h_flex().id(`panel-${id}`).h(26).px(8).gap(5).flex_none().items_center().rounded(6)
 +      const badge = id === "automations" ? this.unread : 0;
++      return h_flex().id(`panel-${id}`).h(26).min_w(26).px(6).gap(5).flex_none().items_center().justify_center().rounded(6)
 @@ -141,2 +212,4 @@
 -          else { run("layout.select", { stack: "panel-body", child: id }); run("layout.show", { id: "panel" }); }
 -        }).child(svg(icon).size(14)).child(label);
 +          else showPanel(id);
-+        }).child(svg(icon).size(14)).child(label)
++        }).tooltip(label).accessibility_label(label).child(svg(icon).size(14))
 +        .when(badge > 0, el => el.child(div().h(15).min_w(15).px(4).rounded(8).flex().items_center().justify_center()
 +          .bg(t.accent).text_color(t.background).text_size(10).font_semibold().child(String(badge))));
 @@ -152 +225,2 @@
