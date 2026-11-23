@@ -851,6 +851,7 @@ install_herdr() {
   sync_automations
   install_herdr_layout
   sync_herdr_chat
+  sync_claude_usage
 }
 
 install_herdr_layout() {

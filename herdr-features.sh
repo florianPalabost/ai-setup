@@ -9,8 +9,9 @@ HERDR_FEATURES=(
   "bottom|Bottom panel (ctrl-j): Output follows a factory run or the Laravel log|bottom-output|ctrl-j=layout.toggle:bottom"
   "chat|Chat: Pi, Claude Code and Codex as a GUI chat, and sub-agents you can open as one (installs herdr-chat)|||off"
   "automations|Automations panel (ctrl-alt-a): scheduled agent prompts (installs a binary and a scheduler service)|automations|ctrl-alt-a=tabs-git.show-automations|off"
+  "usage|Usage meter: Claude's 5-hour and weekly limits in the status bar (replaces Claude Code's status line)|claude-usage||off"
 )
-HERDR_PANEL_FEATURES=(git factory find bottom automations)
+HERDR_PANEL_FEATURES=(git factory find bottom automations usage)
 HERDR_CHOICE_FILE="$HERDR_HOME/.ai-setup-features"
 HERDR_CHOICE_ON=on
 HERDR_CHOICE_OFF=off
