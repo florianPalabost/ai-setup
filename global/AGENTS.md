@@ -23,7 +23,6 @@
 
 ## Testing
 
-- In interactive sessions, skip tests unless I ask for them. `/implement` and factory runs write them.
 - Follow the AAA pattern (Arrange, Act, Assert) for tests.
 
 ## Git
