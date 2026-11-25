@@ -220,7 +220,7 @@ install_rtk() {
       ;;
   esac
   if ((status != 0)); then
-    warn "could not install or update rtk: Claude Code's Bash hook fails until rtk is on PATH"
+    warn "could not install or update rtk: the commands global/RTK.md prefixes with rtk fail until it is on PATH"
   elif command -v rtk >/dev/null 2>&1; then
     info "$(rtk --version)"
   fi

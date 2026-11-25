@@ -35,7 +35,7 @@ cd ~/dev/ai-setup
 
 1. Symlinks `global/AGENTS.md`, `global/CLAUDE.md` and `global/RTK.md` into `~/.claude/`
 2. Links the [`factory`](factory) CLI into `~/.local/bin` (not on native Windows) and installs what its srt sandbox runs on: `srt` with `npm install -g @anthropic-ai/sandbox-runtime`, then bubblewrap, socat and ripgrep (only ripgrep on macOS) with `brew` or passwordless `apt`. Where `apt` needs a password, the run ends by printing the `sudo apt install …` command to run yourself.
-3. Installs [rtk](https://github.com/rtk-ai/rtk) if it's missing (`brew`, `winget` on Windows, otherwise its install script), which condenses Bash output before Claude reads it. Its `PreToolUse` hook comes from `global/settings.json` and its instructions from `global/RTK.md`, so `rtk init` isn't needed
+3. Installs [rtk](https://github.com/rtk-ai/rtk) if it's missing (`brew`, `winget` on Windows, otherwise its install script), which condenses the output of the Bash commands Claude prefixes with it. Its instructions come from `global/RTK.md`, so `rtk init` isn't needed. Its `PreToolUse` hook isn't installed: it rewrites commands after auto mode has reviewed them, which gets them denied
 4. Merges `global/settings.json` into `~/.claude/settings.json` (merged, not symlinked, so machine-specific hooks never end up in the repo)
 5. Symlinks the skills/commands/agents from `plugins/*/` into `~/.claude/`
 6. Adds the marketplaces and installs the plugins listed in [`manifests/plugins.txt`](manifests/plugins.txt)
