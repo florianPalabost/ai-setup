@@ -110,6 +110,7 @@ patched_copy() {
   name="$(basename "$src")"
   cp "$src" "$dir/$name"
   # No fuzz: a patch fails exactly where an upstream change touches our edits.
+  # A hunk that only inserts needs context lines, or patch places it by line number.
   if patch -s -f -F0 -p1 -d "$dir" -i "$patch" >/dev/null 2>&1; then
     cp "$dir/$name" "$dst"
   else
@@ -394,7 +395,7 @@ restore_backup() {
 # Build the clone $2 of the shipped mod $1, patched with herdr/patches/$3. If
 # anything fails, a clone already there stays as it was.
 build_mod_clone() {
-  local shipped="$1" clone="$2" patch="$HERDR_SRC/patches/$3"
+  local shipped="$1" clone="$2" patch="$HERDR_SRC/patches/$3" check_output
   local source_js="$HERDR_HOME/mods/$shipped/main.js" dir="$HERDR_HOME/mods/$clone"
   if [[ ! -f "$source_js" ]]; then
     warn "$source_js not found: start herdr once, then re-run install"
@@ -418,6 +419,12 @@ build_mod_clone() {
   if ! patched_copy "$dir/main.js" "$patch" "$dir/main.js"; then
     restore_backup "$dir"
     warn_build_failed "$patch" "$clone" "$dir"
+    return 1
+  fi
+  if ! check_output="$(herdr-app check "$dir" 2>&1)"; then
+    restore_backup "$dir"
+    warn "$clone does not load in herdr $(herdr_shipped_version) with ${patch#"$REPO_DIR"/}: not built"
+    warn "$check_output"
     return 1
   fi
   patch_hash "$patch" >"$dir/$HERDR_BUILT_FROM"
