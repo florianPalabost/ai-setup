@@ -22,18 +22,5 @@
       "Read(./.env.backup)",
       "Read(~/.claude/.credentials.json)"
     ]
-  },
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "rtk hook claude"
-          }
-        ]
-      }
-    ]
   }
 }
