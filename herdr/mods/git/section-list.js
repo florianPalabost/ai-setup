@@ -26,7 +26,7 @@ const changes = {
     part.embedded = true;
     part.init(props, cx);
     return {
-      sync: (cx) => { if (key() !== part.context) part.refresh(cx); },
+      sync: (cx) => { if (key() !== part.context?.key) part.refresh(cx); },
       summary: () => changesSummary(part.files, part.error),
       render: (cx) => part.render(cx),
     };
