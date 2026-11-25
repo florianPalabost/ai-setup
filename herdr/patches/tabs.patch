@@ -27,7 +27,8 @@
 @@ -31 +52 @@
 -  init() {
 +  init(_props, cx) {
-@@ -36,0 +58,14 @@
+@@ -36,2 +57,16 @@
+     this.swipe = { acc: 0, steps: 0, at: 0, last: 0 };
 +    this.unread = 0;
 +    if (checking()) return;
 +    this.watchingAutomations = false;
@@ -42,7 +43,9 @@
 +        if (c.startsWith(SHOW_PANEL_PREFIX)) showPanel(c.slice(SHOW_PANEL_PREFIX.length));
 +      }
 +    });
-@@ -61,0 +97,27 @@
+   }
+@@ -61,2 +96,29 @@
+ 
 +  async watchAutomations(cx) {
 +    this.watchingAutomations = true;
 +    try {
@@ -70,6 +73,7 @@
 +    }
 +  }
 +
+   // The side panel is remembered per space: switching shows that space's choice
 @@ -102 +164 @@
 -    const button = (id, label, action) => div().id(id).size(26).flex_none().flex().items_center().justify_center().rounded(6).text_color(t.dim).hover(s => s.bg(t.hover).text_color(t.foreground))
 +    const button = (id, label, action) => div().id(id).size(26).flex_none().flex().items_center().justify_center().rounded(6).text_color(t.muted).hover(s => s.bg(t.hover).text_color(t.foreground)).cursor_pointer()
@@ -87,13 +91,15 @@
 +    const added = PANELS.filter(p => body?.children?.some(child => child.id === p.id));
 +    const filesFromWelcome = (shared("workspace.panels") ?? ["files"]).filter(id => id === "files");
 +    const enabled = [...filesFromWelcome, ...added.map(p => p.id)];
-@@ -133,0 +198,6 @@
+@@ -133,2 +197,8 @@
+     this.syncPanel(space, panel, body, enabled);
 +    const bottom = find(root, "bottom");
 +    const bottomButton = () => h_flex().id("panel-bottom").h(26).w(26).flex_none().items_center().justify_center().rounded(6)
 +      .text_size(12).bg(bottom.hidden ? t.chrome : t.selected).text_color(bottom.hidden ? t.muted : t.foreground)
 +      .hover(s => (bottom.hidden ? s.bg(t.hover) : s).text_color(t.foreground)).cursor_pointer().on_mouse_down("left", stop)
 +      .on_click(() => run("layout.toggle", { id: "bottom" }))
 +      .tooltip("Output").accessibility_label("Output").child(svg("mods/workspace-chrome/terminal.svg").size(14));
+     const panelButton = (id, label, icon) => {
 @@ -136 +206,2 @@
 -      return h_flex().id(`panel-${id}`).h(26).px(8).gap(5).flex_none().items_center().rounded(6)
 +      const badge = id === "automations" ? this.unread : 0;

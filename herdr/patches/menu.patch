@@ -1,6 +1,7 @@
 --- a/main.js
 +++ b/main.js
-@@ -23,0 +24,8 @@
+@@ -23,2 +23,10 @@
+ 
 +// Not a herdr command: the menu closes each other tab of the space itself.
 +const CLOSE_OTHERS = "tab.close_others";
 +const closes = (command) => command.endsWith(".close") || command === CLOSE_OTHERS;
@@ -9,13 +10,18 @@
 +  return (spaces().find((s) => s.id === space)?.tabs ?? []).filter((c) => c.id !== id);
 +}
 +
-@@ -61,0 +70 @@
+ function items(p, git) {
+@@ -61,2 +69,3 @@
+         ["New tab", "tab.new", { space: tg.space }],
 +        ...(otherTabs(tg).length ? [["Close others", CLOSE_OTHERS, { id: tg.id, space: tg.space }]] : []),
+         ["Close", "tab.close", { id: tg.id }],
 @@ -84 +93 @@
 -  const name = command.endsWith(".close") ? "x" : command.endsWith(".rename") ? "square-pen" : command.endsWith(".new") ? "plus" : command === "worktree" ? "git-branch" : command === "app.help" ? "terminal" : command === "app.theme" ? "settings" : command === "pane.split" ? (args?.direction === "down" ? "panel-bottom" : "panel-right") : command === "pane.zoom" ? "square" : "terminal";
 +  const name = closes(command) ? "x" : command.endsWith(".rename") ? "square-pen" : command.endsWith(".new") ? "plus" : command === "worktree" ? "git-branch" : command === "app.help" ? "terminal" : command === "app.theme" ? "settings" : command === "pane.split" ? (args?.direction === "down" ? "panel-bottom" : "panel-right") : command === "pane.zoom" ? "square" : "terminal";
-@@ -116,0 +126 @@
+@@ -116,2 +125,3 @@
+     if (it[1] === "worktree") openOverlay({ mod: "worktree", kind: "dialog", ...(it[2].action === "open" ? { width: 560, height: 480 } : { width: 440, height: 260 }), props: it[2] });
 +    else if (it[1] === CLOSE_OTHERS) otherTabs(it[2]).forEach((c) => run("tab.close", { id: c.id }));
+     else run(it[1], it[2]);
 @@ -142 +152 @@
 -            .when(i > 0 && (it[1].endsWith(".close") || it[1] === "app.help" || (it[1] === "app.theme" && list[i - 1][1] !== "app.theme")), el => el.child(div().mx(7).my(4).h(1).bg(t.border)))
 +            .when(i > 0 && ((closes(it[1]) && !closes(list[i - 1][1])) || it[1] === "app.help" || (it[1] === "app.theme" && list[i - 1][1] !== "app.theme")), el => el.child(div().mx(7).my(4).h(1).bg(t.border)))

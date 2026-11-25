@@ -111,6 +111,11 @@ def main(args):
     if not args:
         launch()
         return
+    if args[0] == "check":
+        # Needs no window, as the real one doesn't.
+        if (home / "fake-check-fails").exists():
+            sys.exit(f"check failed: {args[1]}")
+        return
     if args == ["status"] and (home / "fake-status-hangs").exists():
         time.sleep(HANG_SECONDS)
     if not (home / "fake-window").exists():
