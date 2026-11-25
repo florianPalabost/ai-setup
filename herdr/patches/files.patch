@@ -3,7 +3,7 @@
 @@ -4 +4 @@
 -import { spaces, panes, focused, exec, readTextFile, watchFolder, theme, settings, window } from "herdr";
 +import { spaces, panes, focused, exec, readTextFile, watchFolder, theme, settings, window, shared, setShared, run, notify, appHome } from "herdr";
-@@ -15,0 +16,35 @@
+@@ -49,0 +50,35 @@
 +// A copy of the Viewer's target.js and vscode.js: herdr loads no module from
 +// outside a mod's folder. Keep the keys in step with herdr/mods/viewer/target.js.
 +const VIEWER_MOD = "viewer", TARGETS_KEY = "viewer.targets", TABS_KEY = "viewer.tabs";
@@ -39,7 +39,7 @@
 +  }
 +}
 +
-@@ -46,0 +82,10 @@
+@@ -90,0 +126,10 @@
 +    this.viewer = false;
 +    cx.spawn(async () => { this.viewer = Boolean(await readTextFile(`${appHome()}/mods/${VIEWER_MOD}/mod.json`).catch(() => null)); });
 +  }
@@ -50,6 +50,6 @@
 +    const previewHere = remote || !this.viewer;
 +    if (previewHere) return this.show(path, cx);
 +    openViewer({ root: this.root, path, line: 1 }, { newTab: Boolean(e?.modifiers?.shift) });
-@@ -156 +201 @@
+@@ -258 +303 @@
 -        .on_click((_e, cx) => entry.dir ? this.toggle(path, cx) : this.show(path, cx))
 +        .on_click((e, cx) => entry.dir ? this.toggle(path, cx) : this.open(path, e, cx))
