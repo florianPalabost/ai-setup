@@ -1,11 +1,12 @@
 // The graph itself: Git Graph's table (graph, description, date, author,
 // commit) for the focused pane's repository, or `props.folder` when opened as
-// a pane. Read-only: rows take clicks (details) and right-clicks (copy menus).
+// a pane. Rows take clicks (details) and right-clicks (copy menus); the only
+// write is a fetch of the remotes.
 import { div, svg, PathBuilder } from "gpui-kit";
 import { v_flex, h_flex, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { spaces, panes, focused, exec, watchFolder, readTextFile, theme, settings, props, shared, setShared, openOverlay, home } from "herdr";
 import { layoutLanes } from "./lanes.js";
-import { READ, STATUS, UNCOMMITTED, LABEL, logArgs, parseLog, parseStatus, withUncommitted, labelsOf, hitLabel,
+import { READ, FETCH, STATUS, UNCOMMITTED, LABEL, logArgs, parseLog, parseStatus, withUncommitted, labelsOf, hitLabel,
   menuFor, menuHeight, fileArgs, joinFiles, diffArgs, diffRows, objectId } from "./git.js";
 import { icon, showChanges } from "./menu.js";
 
@@ -30,6 +31,8 @@ const DRAW_CUT_OFF_WAIT = 300;
 const DRAW_CUT_OFFS = 3;
 const MEASURED_ROWS = 1;
 const GRAPH_MOD = "git-graph";
+// How often an open graph fetches, and how long a fetch may take.
+const FETCH_EVERY = 5 * 60 * 1000, FETCH_TIMEOUT = 60000;
 // The graph column's default keeps room for its "Graph" heading (and a lane or two) in narrow repos.
 const GRAPH_MIN = 56;
 // side: which way a drag widens it. Graph's handle is on its right edge, the others' on their left.
@@ -108,7 +111,7 @@ export class Graph {
     this.listId = `graph-rows-${Math.random().toString(36).slice(2)}`;
     this.diffId = `${this.listId}-diff`;
     this.all = true; this.remotes = true; this.firstParent = false; this.wide = false; this.graphMax = 160; this.scale = null;
-    this.watchToken = 0;
+    this.watchToken = 0; this.fetched = new Set(); this.fetching = null;
     this.cols = withDefaults(); this.drag = null;
     this.seen = new Map(); this.commitDetails = new Map();
     this.handle = cx.focus_handle();
@@ -117,6 +120,7 @@ export class Graph {
     cx.timer.after(1500, (cx) => this.warm(cx));
     // Remote spaces can't be watched: poll them gently. New folders get read ahead.
     cx.timer.every(15000, (cx) => { if (!this.watching) this.refresh(cx); this.warm(cx); });
+    cx.timer.every(FETCH_EVERY, (cx) => this.fetchRemotes(cx));
   }
 
   key() { return JSON.stringify(location(this.folder)); }
@@ -196,6 +200,7 @@ export class Graph {
           this.files = files;
         }
         this.build();
+        if (full && !this.fetched.has(context)) this.fetchRemotes(cx);
         if (this.selected === UNCOMMITTED && this.details) this.loadDetails(this.commits[0], cx);
       } catch (e) {
         if (!stale()) { this.state = "error"; this.error = String(e?.message ?? e); }
@@ -243,6 +248,25 @@ export class Graph {
       const common = (await exec("git", [...READ, "rev-parse", "--git-common-dir"], { cwd: root })).stdout.trim();
       const dir = /^([a-zA-Z]:)?[\\/]/.test(common) ? common : `${root}/${common}`;
       if (token === this.watchToken && this.key() === context && !dir.startsWith(`${root}/`)) loop(dir, true);
+    });
+  }
+
+  // A fetch moves refs under .git, which the watch turns into a refresh; remote
+  // spaces aren't watched, so the graph reads itself again after it either way.
+  fetchRemotes(cx, { loud = false } = {}) {
+    const { root, on, context } = this;
+    if (!root || !this.remoteNames.length || this.fetching === context) return;
+    this.fetched.add(context); this.fetching = context;
+    cx.spawn(async (cx) => {
+      let failed = null;
+      try {
+        const r = await exec("git", [...READ, ...FETCH], { cwd: root, on, timeout: FETCH_TIMEOUT });
+        if (r.code !== 0) failed = r.stderr.trim().split("\n")[0] || `git fetch exited with ${r.code}`;
+      } catch (e) { failed = String(e?.message ?? e); }
+      if (this.fetching === context) this.fetching = null;
+      if (this.key() !== context) return;
+      if (failed && loud) { this.notice = `Couldn't fetch: ${failed}`; cx.notify(); }
+      this.refresh(cx);
     });
   }
 
@@ -487,7 +511,7 @@ export class Graph {
       .when(ready && Boolean(where), (e) => e.child(h_flex().h(22).px(7).gap(5).min_w(0).items_center().rounded(6).bg(t.accent + "26").text_color(t.accent)
         .child(svg(icon(this.current ? "branch" : "commit")).size(12).flex_none()).child(div().min_w(0).truncate().text_size(11.5).font_semibold().child(where))))
       .child(div().flex_1())
-      .when(this.state !== "nofolder", (e) => e.child(this.iconButton("graph-refresh", "refresh", null, false, (_e, cx) => { this.clearDrawError(); this.refresh(cx); }, t)));
+      .when(this.state !== "nofolder", (e) => e.child(this.iconButton("graph-refresh", "refresh", null, false, (_e, cx) => { this.clearDrawError(); this.refresh(cx); this.fetchRemotes(cx, { loud: true }); }, t)));
   }
 
   toolbar(t) {
