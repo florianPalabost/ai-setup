@@ -14,6 +14,8 @@ const { Graph } = await import("../herdr/mods/git-graph/graph.js");
 const { Menu } = await import("../herdr/mods/git-graph/menu.js");
 
 const FORK = new URL("../herdr/mods/git-graph/", import.meta.url);
+// How often an open graph fetches, as graph.js sets it.
+const FETCH_EVERY = 5 * 60 * 1000;
 const READ_ONLY_GIT = new Set(["rev-parse", "log", "symbolic-ref", "for-each-ref", "remote", "status", "show", "diff", "diff-tree"]);
 const GIT_ENV = { ...process.env, GIT_AUTHOR_NAME: "T", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "T", GIT_COMMITTER_EMAIL: "t@t", GIT_CONFIG_GLOBAL: "/dev/null" };
 
@@ -76,18 +78,90 @@ test("the graph only reads: a double-click on a branch label checks nothing out"
   assert.deepEqual(world.overlays, []);
 });
 
-test("the header offers no Fetch, even with a remote", async () => {
-  // Arrange
+// A clone of a bare origin, and a second clone that pushes to it.
+function clonePair() {
   const { repo } = repoWithMerge();
-  git(repo, "remote", "add", "origin", join(base, "nowhere.git"));
+  const origin = join(base, `origin-${repos}.git`), mine = join(base, `mine-${repos}`), theirs = join(base, `theirs-${repos}`);
+  git(base, "clone", "-q", "--bare", repo, origin);
+  git(base, "clone", "-q", origin, mine);
+  git(base, "clone", "-q", origin, theirs);
+  return { mine, theirs };
+}
+
+const pushed = (theirs, name) => { const hash = commit(theirs, name); git(theirs, "push", "-q", "origin", "main"); return hash; };
+const fetchTimer = (cx) => cx.timers.find((t) => t.repeats && t.ms === FETCH_EVERY);
+
+test("opening the graph fetches, so a push made before shows", async () => {
+  // Arrange
+  const { mine, theirs } = clonePair();
+  const hash = pushed(theirs, "before");
 
   // Act
-  const { draw } = await openGraph(repo);
+  const { view } = await openGraph(mine);
 
   // Assert
+  assert.ok(view.part.labels.get(hash)?.some((l) => l.parts.some((p) => p.name === "origin/main")));
+});
+
+test("Refresh fetches, so a push made since shows", async () => {
+  // Arrange
+  const { mine, theirs } = clonePair();
+  const { view, cx, draw } = await openGraph(mine);
+  const hash = pushed(theirs, "since");
+
+  // Act
+  findById(draw(), "graph-refresh").handlers.on_click({}, cx);
+  await cx.settle();
+
+  // Assert
+  assert.ok(view.part.labels.get(hash)?.some((l) => l.parts.some((p) => p.name === "origin/main")));
+});
+
+test("an open graph fetches every few minutes", async () => {
+  // Arrange
+  const { mine, theirs } = clonePair();
+  const { view, cx } = await openGraph(mine);
+  const hash = pushed(theirs, "later");
+
+  // Act
+  fetchTimer(cx).fn(cx);
+  await cx.settle();
+
+  // Assert
+  assert.ok(view.part.labels.get(hash)?.some((l) => l.parts.some((p) => p.name === "origin/main")));
+});
+
+test("a repository without remotes never fetches", async () => {
+  // Arrange
+  const { repo } = repoWithMerge();
+  const { cx, draw } = await openGraph(repo);
+
+  // Act
+  findById(draw(), "graph-refresh").handlers.on_click({}, cx);
+  fetchTimer(cx).fn(cx);
+  await cx.settle();
+
+  // Assert
+  assert.deepEqual(gitWrites(), []);
+});
+
+test("a fetch that fails keeps the graph and says why on Refresh", async () => {
+  // Arrange
+  const { repo, merge } = repoWithMerge();
+  git(repo, "remote", "add", "origin", join(base, "nowhere.git"));
+  const { view, cx, draw } = await openGraph(repo);
+  const quiet = textOf(draw());
+
+  // Act
+  findById(draw(), "graph-refresh").handlers.on_click({}, cx);
+  await cx.settle();
   const root = draw();
-  assert.equal(findById(root, "graph-fetch"), null);
-  assert.ok(findById(root, "graph-refresh"), "refresh is still there");
+
+  // Assert
+  assert.doesNotMatch(quiet, /Couldn't fetch/);
+  assert.equal(view.part.state, "ready");
+  assert.ok(view.part.index.has(merge));
+  assert.match(textOf(root), /Couldn't fetch/);
 });
 
 for (const target of [

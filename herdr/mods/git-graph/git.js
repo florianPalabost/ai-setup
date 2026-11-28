@@ -1,10 +1,13 @@
 // Git for the graph, with no herdr imports so node can test it: reading the
 // history, the labels on each row and where they sit, and the right-click menus.
-// Commands are argv arrays, never a shell line, and none of them writes.
+// Commands are argv arrays, never a shell line, and only FETCH writes.
 
 // Reads write nothing under .git (no index refresh or lock, no fsmonitor
 // cookie), so the folder watch never wakes for the panel's own reads.
 export const READ = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "diff.autoRefreshIndex=false"];
+// Updates the remote branches, so a push or merge made elsewhere shows. It never
+// asks for credentials: a remote that needs them fails instead.
+export const FETCH = ["-c", "credential.interactive=never", "fetch", "--all", "--prune", "--quiet"];
 export const STATUS = ["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all"];
 export const UNCOMMITTED = "*";
 // Git's pretty fields are NUL-free strings; -z terminates each seven-field record.
