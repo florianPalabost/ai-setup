@@ -6,7 +6,7 @@ HERDR_CHAT_DATA="$HERDR_HOME/data/herdr-chat"
 HERDR_CHAT_KEYS="$HERDR_SRC/chat/keys.json"
 # herdr-chat's own mods, which herdr doesn't restore, patched in place after its
 # installer copies herdr's agents and menu into them. "<mod> <file> <patch in herdr/patches/>"
-HERDR_CHAT_PATCHES=("chat-agents agents-base.js chat-agents.patch" "chat-menu menu-base.js chat-menu.patch")
+HERDR_CHAT_PATCHES=("chat-agents agents-base.js chat-agents.patch" "chat-menu menu-base.js chat-menu.patch" "chat-menu menu-base.js chat-menu-clipboard.patch")
 
 herdr_chat_installed() {
   [[ -f "$HERDR_CHAT_DIR/current/install/app.sh" ]]

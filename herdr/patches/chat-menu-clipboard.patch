@@ -1,0 +1,22 @@
+--- a/menu-base.js
++++ b/menu-base.js
+@@ -24,2 +24,6 @@
+ 
++// These act on the focused terminal, so the menu focuses the clicked pane first.
++// A peek can't be focused that way: a paste would land in the pane behind it.
++const CLIPBOARD = ["terminal.copy", "terminal.paste"];
++
+ function items(p, git) {
+@@ -41,2 +45,4 @@
+           ? [
++              ...(term?.selection ? [["Copy", "terminal.copy", { pane: tg.pane }]] : []),
++              ...(term ? [["Paste", "terminal.paste", { pane: tg.pane }]] : []),
+               ["Rename", "pane.rename", { pane: tg.pane }],
+@@ -117,3 +123,6 @@
+     if (it[1] === "worktree") openOverlay({ mod: "worktree", kind: "dialog", ...(it[2].action === "open" ? { width: 560, height: 480 } : { width: 440, height: 260 }), props: it[2] });
+-    else run(it[1], it[2]);
++    else if (CLIPBOARD.includes(it[1])) {
++      run("pane.focus", it[2]);
++      run(it[1]);
++    } else run(it[1], it[2]);
+   }
